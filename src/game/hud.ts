@@ -5,9 +5,10 @@
 
 export type HudAction =
   | "play" | "play2" | "continue" | "resume" | "retry" | "next" | "title" | "again" | "jump" | "mute"
-  | "online" | "host" | "join" | "back" | "reroll" | "easy" | "drive" | "car" | "honk";
+  | "online" | "host" | "join" | "back" | "reroll" | "easy" | "drive" | "car" | "honk"
+  | "dress" | "island" | "talk";
 
-type OverlayName = "title" | "pause" | "gameover" | "clear" | "win" | "online";
+type OverlayName = "title" | "pause" | "gameover" | "clear" | "win" | "online" | "dress";
 
 const OVERLAY_IDS: Record<OverlayName, string> = {
   title: "ov-title",
@@ -16,6 +17,7 @@ const OVERLAY_IDS: Record<OverlayName, string> = {
   clear: "ov-clear",
   win: "ov-win",
   online: "ov-online",
+  dress: "ov-dress",
 };
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -49,7 +51,11 @@ export class Hud {
   private room = el("hud-room");
   private carBtn = el("btn-car");
   private honkBtn = el("btn-honk");
-  private carMode: "in" | "out" | null = null;
+  private carMode: string | null = null;
+  private talkBtn = el("btn-talk");
+  private talkShown = false;
+  private dialog = el("dialog");
+  private dialogTimer: number | null = null;
   private stickerBar = el("sticker-bar");
   private onStickerCb: ((i: number) => void) | null = null;
 
@@ -70,12 +76,14 @@ export class Hud {
     bind(this.jumpBtn, "jump");
     bind(this.carBtn, "car");
     bind(this.honkBtn, "honk");
+    bind(this.talkBtn, "talk");
   }
 
   dispose(): void {
     for (const off of this.unsub) off();
     this.unsub = [];
     if (this.toastTimer !== null) clearTimeout(this.toastTimer);
+    if (this.dialogTimer !== null) clearTimeout(this.dialogTimer);
   }
 
   onAction(cb: (a: HudAction) => void): void {
@@ -127,16 +135,37 @@ export class Hud {
     this.topbar.style.display = playing ? "" : "none";
     this.jumpBtn.style.display = playing ? "" : "none";
     this.stickerBar.style.display = playing ? "" : "none";
-    if (!playing) this.setCarUi(null);
+    if (!playing) {
+      this.setCarUi(null);
+      this.setTalk(false);
+      this.dialog.classList.remove("show");
+    }
   }
 
-  /** Car buttons: "in" = a kid is next to the car, "out" = riding, null = hidden. */
-  setCarUi(mode: "in" | "out" | null): void {
-    if (mode === this.carMode) return;
-    this.carMode = mode;
+  /** Ride buttons: "in" = a kid is next to the car / boat, "out" = riding, null = hidden. */
+  setCarUi(mode: "in" | "out" | null, icon = "🚗"): void {
+    const key = mode ? mode + icon : null;
+    if (key === this.carMode) return;
+    this.carMode = key;
     this.carBtn.style.display = mode ? "" : "none";
     this.honkBtn.style.display = mode === "out" ? "" : "none";
-    if (mode) this.carBtn.textContent = mode === "in" ? "🚗 Hop in" : "🚪 Hop out";
+    if (mode) this.carBtn.textContent = mode === "in" ? `${icon} Hop in` : "🚪 Hop out";
+  }
+
+  /** Talk button: shown while a villager is within reach. */
+  setTalk(show: boolean): void {
+    if (show === this.talkShown) return;
+    this.talkShown = show;
+    this.talkBtn.style.display = show ? "" : "none";
+  }
+
+  /** A villager's speech box (hides itself after a few seconds). */
+  showDialog(name: string, text: string): void {
+    el("dialog-name").textContent = name;
+    el("dialog-text").textContent = text;
+    this.dialog.classList.add("show");
+    if (this.dialogTimer !== null) clearTimeout(this.dialogTimer);
+    this.dialogTimer = window.setTimeout(() => this.dialog.classList.remove("show"), 5200);
   }
 
   /** Sticker buttons (built once from the preset list). */
@@ -172,7 +201,24 @@ export class Hud {
     });
   }
 
-  /** Highlight the chosen swatch in a choice row ("outfits" / "hats"). */
+  /** Skin-tone swatches on the dress-up screen. */
+  buildSkins(colors: number[], selected: number, cb: (i: number) => void): void {
+    this.buildChoices("skins", colors.length, selected, cb, (b, i) => {
+      b.style.background = `#${colors[i].toString(16).padStart(6, "0")}`;
+      b.setAttribute("aria-label", `Skin tone ${i + 1}`);
+    });
+  }
+
+  /** Pet buttons on the dress-up screen. */
+  buildPets(labels: string[], selected: number, cb: (i: number) => void): void {
+    this.buildChoices("pets", labels.length, selected, cb, (b, i) => {
+      b.textContent = labels[i];
+      b.classList.add("hat");
+      b.setAttribute("aria-label", i === 0 ? "No pet" : `Pet ${i}`);
+    });
+  }
+
+  /** Highlight the chosen swatch in a choice row ("outfits" / "skins" / "hats" / "pets"). */
   setChoice(boxId: string, selected: number): void {
     el(boxId).querySelectorAll(".swatch").forEach((b, i) => b.classList.toggle("on", i === selected));
   }

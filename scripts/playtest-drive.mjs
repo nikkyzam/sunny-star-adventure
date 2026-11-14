@@ -98,18 +98,19 @@ try {
   await page.waitForTimeout(1500);
   await page.evaluate(() => window.__gameDebug().placeCar(-20, 6, Math.PI / 2));
   const before = (await dbg()).props.cones;
-  const run = await hold("KeyD", (d) => d.car.x > 5, 5000);
+  await page.waitForTimeout(300);
+  const run = await hold("KeyW", (d) => d.car.x > 5, 5000); // the camera sits behind the car: W = go
   check("D6 boost pad speeds the car up", run.maxSpeed > 15, `peak speed ${run.maxSpeed.toFixed(1)}`);
   check("D7 ramp launches the car", run.maxY > 1.2, `peak height ${run.maxY.toFixed(2)}`);
   await page.waitForTimeout(600);
   check("D7b more cones knocked on landing", (await dbg()).props.cones > before, `cones=${(await dbg()).props.cones}`);
 
-  // from a standstill facing east, pushing "up" (-z) must turn the car and drive it
+  // from a standstill facing east, pushing left must turn the car (toward -z) and drive it
   await page.waitForTimeout(1500);
   await page.evaluate(() => window.__gameDebug().placeCar(-6, 16, Math.PI / 2));
   await page.waitForTimeout(300);
   const z0 = (await dbg()).car.z;
-  await hold("KeyW", () => false, 1500);
+  await hold("KeyA", () => false, 1300);
   const z1 = (await dbg()).car.z;
   check("D8 pushing sideways turns and drives", z0 - z1 > 3, `moved ${(z0 - z1).toFixed(1)} toward -z`);
   await page.screenshot({ path: join(ROOT, "verification-shots/22-driving.png") });

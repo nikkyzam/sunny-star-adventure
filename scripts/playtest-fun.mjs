@@ -47,7 +47,9 @@ try {
   await page.goto(`http://127.0.0.1:${port}/?level=6`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
 
+  await page.click("[data-action=dress]");
   await page.click("#hats .swatch:nth-child(2)");
+  await page.click("#ov-dress [data-action=back]");
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("game.profile") ?? "{}").hat);
   check("F1 crown chosen and saved", saved === 1, `hat=${saved}`);
 
@@ -74,7 +76,7 @@ try {
     }
     await page.keyboard.up(key);
   };
-  await holdUntil("KeyW", (d) => d.pz < 2.3);
+  await holdUntil("KeyW", (d) => d.pz < 2.9);
   await holdUntil("KeyD", (d) => d.px > 4.2 || d.py > 1);
   const t = Date.now();
   while (Date.now() - t < 2500) {

@@ -100,6 +100,7 @@ export interface KidPalette {
   jacket: number;
   cap: number;
   pants: number;
+  skin?: number;
 }
 
 export class Player {
@@ -137,7 +138,7 @@ export class Player {
   private wasAirborne = false;
 
   constructor(palette: KidPalette = { jacket: 0xff8c42, cap: 0xff4757, pants: 0x4a69bd }) {
-    const skin = new THREE.MeshStandardMaterial({ color: 0xffd9b3, flatShading: true, roughness: 0.8 });
+    const skin = new THREE.MeshStandardMaterial({ color: palette.skin ?? 0xffd9b3, flatShading: true, roughness: 0.8 });
     const jacket = new THREE.MeshStandardMaterial({ color: palette.jacket, flatShading: true, roughness: 0.8 });
     const pants = new THREE.MeshStandardMaterial({ color: palette.pants, flatShading: true, roughness: 0.85 });
     const capMat = new THREE.MeshStandardMaterial({ color: palette.cap, flatShading: true, roughness: 0.7 });

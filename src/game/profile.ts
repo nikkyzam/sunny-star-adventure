@@ -20,6 +20,11 @@ export const OUTFITS: KidPalette[] = [
 /** Hat choices shown on the title screen; index matches makeHat() in player.ts. */
 export const HATS = ["🧢", "👑", "🐰", "🧙", "🌸"];
 
+export const SKINS = [0xffd9b3, 0xf2c39a, 0xd9a273, 0xb07a50, 0x7d5236];
+
+/** Pets that follow you everywhere; index matches makePet() in pets.ts (0 = no pet). */
+export const PETS = ["🚫", "🐶", "🐱", "🐥", "🐲"];
+
 export const NAME_ADJ = [
   "Bouncy", "Happy", "Sunny", "Zippy", "Giggly", "Sparkly", "Brave", "Fluffy",
   "Speedy", "Jolly", "Cosmic", "Silly", "Wiggly", "Snuggly", "Super", "Twinkly",
@@ -32,6 +37,8 @@ export const NAME_ANIMAL = [
 export interface Profile {
   outfit: number;
   hat: number;
+  skin: number;
+  pet: number;
   name: [number, number];
   easy: boolean;
 }
@@ -58,6 +65,19 @@ export function safeHat(v: unknown): number {
   return Number.isInteger(v) ? Math.abs(v as number) % HATS.length : 0;
 }
 
+export function safeSkin(v: unknown): number {
+  return Number.isInteger(v) ? Math.abs(v as number) % SKINS.length : 0;
+}
+
+export function safePet(v: unknown): number {
+  return Number.isInteger(v) ? Math.abs(v as number) % PETS.length : 0;
+}
+
+/** The full look of a kid: outfit colors plus skin tone. */
+export function lookOf(outfit: number, skin: number): KidPalette {
+  return { ...OUTFITS[outfit], skin: SKINS[skin] };
+}
+
 export function nameText(n: [number, number]): string {
   return `${NAME_ADJ[n[0]]} ${NAME_ANIMAL[n[1]]}`;
 }
@@ -67,6 +87,8 @@ export function loadProfile(): Profile {
   return {
     outfit: safeOutfit(raw?.outfit),
     hat: safeHat(raw?.hat),
+    skin: safeSkin(raw?.skin),
+    pet: raw?.pet === undefined ? 1 : safePet(raw.pet), // everyone starts with a puppy
     name: raw?.name ? safeName(raw.name) : randomName(),
     easy: raw?.easy ?? true, // the youngest players shouldn't meet a game-over screen by default
   };

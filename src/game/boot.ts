@@ -35,7 +35,12 @@ import { Props } from "./props";
 import { Particles } from "./particles";
 import { Hud } from "./hud";
 import { storage, highScore } from "./storage";
-import { OUTFITS, HATS, loadProfile, saveProfile, rerollName, nameText, safeName, safeOutfit, safeHat } from "./profile";
+import {
+  OUTFITS, HATS, SKINS, PETS, loadProfile, saveProfile, rerollName, nameText, lookOf,
+  safeName, safeOutfit, safeHat, safeSkin, safePet,
+} from "./profile";
+import { Pet } from "./pets";
+import { Npcs } from "./npcs";
 import { STICKERS, Bubble, makeTextSprite, disposeSprite } from "./social";
 import { Net, MAX_KIDS, type NetMsg } from "./net";
 
@@ -62,6 +67,9 @@ declare global {
       buddies: string[];
       chestsOpened: number;
       car: { x: number; y: number; z: number; occupied: boolean } | null;
+      boat: { x: number; y: number; z: number; occupied: boolean } | null;
+      npcsMet: number;
+      pet: { x: number; y: number; z: number } | null;
       onGround: boolean;
       slimes: { x: number; z: number }[];
       remotes: number;
@@ -94,8 +102,11 @@ interface Remote {
   x: number; y: number; z: number;
   vx: number; vy: number; vz: number;
   g: boolean; gl: boolean; r: boolean; f: number; fl: boolean;
-  /** Shown under a friend who is driving (their car lives in their own game). */
+  /** Shown under a friend who is driving / sailing (their ride lives in their own game). */
   car: Car | null;
+  /** True when their ride is the boat. */
+  bk: boolean;
+  pet: Pet;
 }
 
 /** Untrusted number from the network: finite and inside the play space, else 0. */
@@ -145,7 +156,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const chests = new Chests();
   const buddies = new Buddies();
   const car = new Car();
+  const boat = new Car("boat");
+  const rides = [car, boat];
   const props = new Props();
+  const npcs = new Npcs();
+  const pet = new Pet();
   const particles = new Particles();
   const hud = new Hud();
   const audio = new AudioSystem();
@@ -158,7 +173,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const blobGeo = new THREE.CircleGeometry(0.5, 20);
   const blobMat = new THREE.MeshBasicMaterial({ color: 0x1a2a1a, transparent: true, opacity: 0.28, depthWrite: false });
 
-  scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, props.group, particles.points);
+  scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, boat.group, props.group, npcs.group, pet.group, particles.points);
 
   // ── Run state ────────────────────────────────────────────────────────────
   let levelIdx = 0;
@@ -185,6 +200,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   let net: Net | null = null;
   let connecting = false;
   let onlineMenuOpen = false;
+  let dressOpen = false;
   let sendTick = 0;
   const remotes = new Map<string, Remote>();
   const respawn = new THREE.Vector3();
@@ -210,15 +226,59 @@ export function startGame(canvas: HTMLCanvasElement): void {
     previewKid();
     audio.sfx("ui");
   });
+  hud.buildSkins(SKINS, profile.skin, (i) => {
+    profile.skin = i;
+    saveProfile(profile);
+    hud.setChoice("skins", i);
+    previewKid();
+    audio.sfx("ui");
+  });
+  hud.buildPets(PETS, profile.pet, (i) => {
+    profile.pet = i;
+    saveProfile(profile);
+    hud.setChoice("pets", i);
+    pet.setKind(i);
+    pet.snapTo(players[0].pos.x, players[0].pos.y, players[0].pos.z);
+    pet.cheer();
+    audio.sfx(i === 0 ? "ui" : "buddy");
+  });
   // the last button in the sticker bar is the dance move
   hud.buildStickers([...STICKERS.map((st) => st.emoji), "💃"], (i) => (i < STICKERS.length ? sendSticker(i) : danceNow()));
 
-  /** Live preview of a new outfit / hat on the title island. */
+  /** Live preview of a new outfit / skin / hat on the dress-up screen. */
   function previewKid(): void {
     if (!sm.is("title")) return;
     makePlayers(false);
     players[0].respawn(world.spawn.x, world.spawn.y, world.spawn.z);
     players[0].invuln = 0;
+    players[0].dance();
+  }
+
+  /** The ride a kid is sitting in, or null. */
+  function rideOf(p: Player): Car | null {
+    return rides.find((v) => v.group.visible && v.has(p)) ?? null;
+  }
+
+  /** The closest ride a walking kid can reach (the boat is boarded from the dock, so it reaches further). */
+  function rideInReach(): { ride: Car; kid: Player } | null {
+    let best: { ride: Car; kid: Player } | null = null;
+    let bestD = Infinity;
+    for (const v of rides) {
+      if (!v.group.visible) continue;
+      const reach = v.kind === "boat" ? 3.6 : 2.4;
+      for (const p of players) {
+        if (p.riding) continue;
+        const d2 = v.pos.distanceToSquared(p.pos);
+        if (d2 < reach * reach && d2 < bestD) { bestD = d2; best = { ride: v, kid: p }; }
+      }
+    }
+    return best;
+  }
+
+  /** Where a pet should stand near (x, z): on the ground, or paddling at the water's surface. */
+  function petGroundY(x: number, z: number, kidY: number): number {
+    const g = world.groundAt(x, z, kidY + 0.4)?.y ?? kidY;
+    return world.def.sea !== undefined ? Math.max(g, world.def.sea - 0.2) : g;
   }
 
   /** Easy mode and online play refill hearts instead of ending the game. */
@@ -233,6 +293,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
   function unlockedLevel(): number {
     const v = storage.get<number>(UNLOCKED_KEY, 0);
     return Math.min(Math.max(0, v), LEVELS.length - 1);
+  }
+
+  /** The big open-world level (the one with a sea). */
+  function islandLevel(): number {
+    return LEVELS.findIndex((l) => l.sea !== undefined);
   }
 
   function requestedStartLevel(): number {
@@ -252,8 +317,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
     blobs.length = 0;
     bubbles.length = 0;
     const palettes = coop
-      ? [OUTFITS[profile.outfit], OUTFITS[(profile.outfit + 1) % OUTFITS.length]]
-      : [OUTFITS[profile.outfit]];
+      ? [lookOf(profile.outfit, profile.skin), lookOf((profile.outfit + 1) % OUTFITS.length, (profile.skin + 2) % SKINS.length)]
+      : [lookOf(profile.outfit, profile.skin)];
     for (const pal of palettes) {
       const p = new Player(pal);
       if (players.length === 0) p.setHat(profile.hat);
@@ -296,18 +361,24 @@ export function startGame(canvas: HTMLCanvasElement): void {
     camYaw = 0;
     camPitch = 0.42;
 
+    // rides: nobody stays seated across a level load
+    for (const v of rides) v.clearRiders();
+    audio.engineStop();
+    car.group.visible = world.def.carSpawn !== undefined;
+    car.shoreY = world.def.sea !== undefined ? world.def.sea - 0.3 : null;
     if (world.def.carSpawn) {
       const [cx, cy, cz, ch] = world.def.carSpawn;
-      car.group.visible = true;
       car.place(cx, cy, cz, ch);
-    } else {
-      car.group.visible = false;
-      if (car.driver) car.driver.riding = false;
-      if (car.passenger) car.passenger.riding = false;
-      car.driver = null;
-      car.passenger = null;
-      audio.engineStop();
     }
+    boat.group.visible = world.def.boatSpawn !== undefined && world.def.sea !== undefined;
+    if (world.def.boatSpawn && world.def.sea !== undefined) {
+      const [bx, bz, bh] = world.def.boatSpawn;
+      boat.placeBoat(bx, bz, bh, world.def.sea);
+    }
+
+    npcs.build(world.def.npcs ?? []);
+    pet.setKind(profile.pet);
+    pet.snapTo(world.spawn.x, world.spawn.y, world.spawn.z);
 
     hud.setHearts(hearts, maxHearts);
     hud.setStars(0, stars.total);
@@ -327,6 +398,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     makePlayers(coop);
     loadLevel(level);
     onlineMenuOpen = false;
+    dressOpen = false;
     sm.transition("playing");
     hud.showOverlay(null);
     hud.setPlayingUi(true);
@@ -468,6 +540,19 @@ export function startGame(canvas: HTMLCanvasElement): void {
       case "play": startRun(requestedStartLevel(), false); break;
       case "play2": startRun(requestedStartLevel(), true); break;
       case "continue": if (sm.is("title")) startRun(unlockedLevel(), false); break;
+      case "island":
+        if (!sm.is("title")) break;
+        startRun(islandLevel(), false);
+        hud.showToast("🏝️ Explore! Talk to the villagers, sail the boat, drive the car");
+        break;
+      case "dress":
+        if (!sm.is("title")) break;
+        dressOpen = true;
+        hud.showOverlay("dress");
+        previewKid();
+        audio.sfx("ui");
+        break;
+      case "talk": talk(); break;
       case "drive":
         if (!sm.is("title")) break;
         startRun(LEVELS.findIndex((l) => l.carSpawn), false);
@@ -503,6 +588,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
         break;
       case "back":
         onlineMenuOpen = false;
+        dressOpen = false;
         hud.showOverlay("title");
         break;
       case "host": hostRoom(); break;
@@ -513,7 +599,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   /** Space / Enter context action, by state. */
   function primaryAction(): void {
     if (sm.is("title")) {
-      if (onlineMenuOpen) return; // the online menu is waiting on a button, not Space
+      if (onlineMenuOpen || dressOpen) return; // those screens are waiting on a button, not Space
       const u = unlockedLevel();
       startRun(u > 0 ? u : requestedStartLevel(), false);
     } else if (sm.is("playing")) {
@@ -542,43 +628,68 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   // ── Car: hop in / out, honk ──────────────────────────────────────────────
   function toggleCar(): void {
-    if (!sm.is("playing") || !car.group.visible) return;
-    const rider = players.find((p) => car.has(p));
-    if (rider) {
-      car.exit(rider);
-      if (!car.driver) audio.engineStop();
-      audio.sfx("ui");
-      return;
+    if (!sm.is("playing")) return;
+    for (const v of rides) {
+      const rider = v.group.visible ? players.find((p) => v.has(p)) : undefined;
+      if (rider) {
+        v.exit(rider);
+        if (!car.driver) audio.engineStop();
+        audio.sfx("ui");
+        return;
+      }
     }
-    let nearest: Player | null = null;
-    let nearestD = 2.4 * 2.4;
-    for (const p of players) {
-      const d2 = car.pos.distanceToSquared(p.pos);
-      if (d2 < nearestD) { nearestD = d2; nearest = p; }
-    }
-    if (!nearest) return;
-    const seat = car.board(nearest);
-    if (seat === "driver") {
+    const near = rideInReach();
+    if (!near) return;
+    const seat = near.ride.board(near.kid);
+    if (seat === "driver" && near.ride.kind === "boat") {
+      audio.sfx("powerup");
+      hud.showToast("⛵ Move keys to sail · E hops out. Look for far-away islands!");
+    } else if (seat === "driver") {
       audio.sfx("honk");
       audio.engineStart();
       hud.showToast("🚗 Move keys to drive · Space hops · H honks · E hops out");
     } else if (seat === "passenger") {
       audio.sfx("ui");
-      hud.showToast("Enjoy the ride! 🚗");
+      hud.showToast("Enjoy the ride!");
     }
   }
 
   function honk(): void {
-    if (!sm.is("playing") || !car.group.visible || !car.driver) return;
+    const v = rides.find((r) => r.group.visible && r.driver);
+    if (!sm.is("playing") || !v) return;
     audio.sfx("honk");
-    particles.burst(car.pos.x, car.pos.y + 1.4, car.pos.z, 0xffe27a, 8, 2.5, 0.5, 3);
+    particles.burst(v.pos.x, v.pos.y + 1.4, v.pos.z, 0xffe27a, 8, 2.5, 0.5, 3);
     net?.send({ t: "hk", L: levelIdx });
+  }
+
+  // ── Villagers ────────────────────────────────────────────────────────────
+  function talk(): void {
+    if (!sm.is("playing") || players[0].riding) return;
+    const npc = npcs.nearest(players[0].pos);
+    if (!npc) return;
+    const said = npcs.talk(npc);
+    hud.showDialog(said.name, said.text);
+    audio.sfx("ui");
+    if (!said.firstTime) return;
+    // meeting someone new: a little welcome gift
+    coinCount += 3;
+    score += 30;
+    hud.setCoins(coinCount);
+    hud.setScore(score);
+    audio.sfx("buddy");
+    particles.burst(npc.p.pos.x, npc.p.pos.y + 1.6, npc.p.pos.z, 0xffc93c, 14, 3, 0.8, 4);
+    if (npcs.metCount === npcs.items.length) {
+      score += 200;
+      hud.setScore(score);
+      hud.showToast("You met everyone on the islands! 🎉 +200");
+    }
   }
 
   // ── Stickers & dancing ───────────────────────────────────────────────────
   function danceNow(): void {
     if (!sm.is("playing") || players[0].riding) return;
     players[0].dance();
+    pet.cheer();
     audio.sfx("buddy");
     net?.send({ t: "d" });
   }
@@ -586,6 +697,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   function sendSticker(i: number): void {
     if (!sm.is("playing") || !STICKERS[i]) return;
     bubbles[0]?.show(i);
+    if (STICKERS[i].emoji === "❤️") pet.cheer();
     audio.sfx("ui");
     net?.send({ t: "e", k: i });
   }
@@ -602,6 +714,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     disposeSprite(r.tag);
     r.bubble.clear();
     if (r.car) scene.remove(r.car.group);
+    scene.remove(r.pet.group);
     scene.remove(r.p.group);
     remotes.delete(id);
     roomPill();
@@ -625,14 +738,15 @@ export function startGame(canvas: HTMLCanvasElement): void {
         let r = remotes.get(from);
         if (!r) {
           if (remotes.size >= MAX_KIDS - 1 || !from) return;
-          const p = new Player(OUTFITS[safeOutfit(m.o)]);
+          const p = new Player(lookOf(safeOutfit(m.o), safeSkin(m.sk)));
           p.setHat(safeHat(m.h));
           const tag = makeTextSprite(nameText(safeName(m.n)), { bg: "rgba(108,92,231,0.88)", fg: "#ffffff", size: 44, height: 0.4 });
           tag.position.y = 2.25;
           p.group.add(tag);
           p.pos.set(num(m.x), num(m.y), num(m.z));
           scene.add(p.group);
-          r = { p, tag, bubble: new Bubble(p.group, 2.75), seen: elapsed, level: -1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, g: true, gl: false, r: false, f: 0, fl: false, car: null };
+          r = { p, tag, bubble: new Bubble(p.group, 2.75), seen: elapsed, level: -1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, g: true, gl: false, r: false, f: 0, fl: false, car: null, bk: false, pet: new Pet() };
+          scene.add(r.pet.group);
           remotes.set(from, r);
           roomPill();
           hud.showToast(`${nameText(safeName(m.n))} is here! 👋`);
@@ -641,13 +755,17 @@ export function startGame(canvas: HTMLCanvasElement): void {
         r.level = num(m.L);
         r.x = num(m.x); r.y = num(m.y); r.z = num(m.z);
         r.vx = num(m.vx, 40); r.vy = num(m.vy, 40); r.vz = num(m.vz, 40);
-        r.g = m.g === true; r.gl = m.gl === true; r.r = m.r === true; r.f = num(m.f, 100); r.fl = m.fl === true;
+        r.g = m.g === true; r.gl = m.gl === true; r.r = m.r === true; r.f = num(m.f, 100); r.fl = m.fl === true; r.bk = m.bk === true;
         r.p.setHat(safeHat(m.h));
+        r.pet.setKind(safePet(m.pt));
         break;
       }
-      case "d":
-        remotes.get(from)?.p.dance();
+      case "d": {
+        const r = remotes.get(from);
+        r?.p.dance();
+        r?.pet.cheer();
         break;
+      }
       case "hk":
         if (num(m.L) === levelIdx && sm.is("playing") && remotes.has(from)) audio.sfx("honk");
         break;
@@ -717,7 +835,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
       if (disposed || !onlineMenuOpen) { n.dispose(); return; }
       net = n;
       wireNet(n);
-      startRun(requestedStartLevel(), false);
+      // friends meet on the big island unless the link asks for a level
+      startRun(new URLSearchParams(location.search).has("level") ? requestedStartLevel() : islandLevel(), false);
       roomPill();
       hud.showToast(`Your room code is ${n.code} — tell your friends!`);
     }, (err: Error) => {
@@ -746,7 +865,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (!net) return;
     const p = players[0];
     net.send({
-      t: "s", L: levelIdx, n: profile.name, o: profile.outfit,
+      t: "s", L: levelIdx, n: profile.name, o: profile.outfit, sk: profile.skin, pt: profile.pet, bk: boat.has(p),
       x: p.pos.x, y: p.pos.y, z: p.pos.z, vx: p.vel.x, vy: p.vel.y, vz: p.vel.z,
       g: p.onGround, gl: p.glideActive, r: p.riding, f: p.facing, fl: p.floatT > 0, h: profile.hat,
     });
@@ -759,19 +878,26 @@ export function startGame(canvas: HTMLCanvasElement): void {
         continue;
       }
       r.p.group.visible = r.level === levelIdx && sm.is("playing", "paused");
-      // a driving friend gets a car under them
+      // a driving / sailing friend gets a car or boat under them
       const driving = r.p.group.visible && r.r;
-      if (driving && !r.car) {
-        r.car = new Car();
+      const kind = r.bk ? "boat" : "car";
+      if (driving && r.car?.kind !== kind) {
+        if (r.car) scene.remove(r.car.group);
+        r.car = new Car(kind);
         scene.add(r.car.group);
       }
       if (r.car) {
         r.car.group.visible = driving;
         if (driving) {
-          // inverse of Car.seat(): the driver sits 0.35 ahead of and 0.62 above the car's origin
-          r.car.pos.set(r.p.pos.x - Math.sin(r.f) * 0.35, r.p.pos.y - 0.62, r.p.pos.z - Math.cos(r.f) * 0.35);
+          // inverse of Car.seat(): the driver sits seatZ ahead of and seatY above the ride's origin
+          r.car.pos.set(
+            r.p.pos.x - Math.sin(r.f) * r.car.seatZ, r.p.pos.y - r.car.seatY, r.p.pos.z - Math.cos(r.f) * r.car.seatZ);
           r.car.group.rotation.y = r.f;
         }
+      }
+      r.pet.group.visible = r.p.group.visible;
+      if (r.pet.group.visible) {
+        r.pet.update(dt, elapsed, r.p.pos.x, petGroundY(r.pet.group.position.x, r.pet.group.position.z, r.p.pos.y), r.p.pos.z);
       }
       if (r.p.group.visible) r.p.applyRemote(dt, r.x, r.y, r.z, r.vx, r.vy, r.vz, r.g, r.gl, r.r, r.f, r.fl);
       r.bubble.update(dt);
@@ -818,6 +944,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (input.consumeAction(DANCE_KEY)) danceNow();
     if (input.consumeAction("KeyE")) toggleCar();
     if (input.consumeAction("KeyH")) honk();
+    if (input.consumeAction("KeyF")) talk();
 
     if (sm.is("paused")) return;
 
@@ -834,7 +961,23 @@ export function startGame(canvas: HTMLCanvasElement): void {
     buddies.update(dt, elapsed, players[0].pos, players[0].facing);
     for (const b of bubbles) b.update(dt);
     updateRemotes(dt);
+    npcs.update(dt, players[0].pos);
+    {
+      const k = players[0];
+      pet.update(dt, elapsed, k.pos.x, petGroundY(pet.group.position.x, pet.group.position.z, k.pos.y), k.pos.z);
+    }
 
+    if (sm.is("title") && dressOpen) {
+      // dress-up: a close look at the kid, who stands in the top half above the panel
+      const k = players[0];
+      k.applyRemote(dt, k.pos.x, k.pos.y, k.pos.z, 0, 0, 0, true, false, false, k.facing, false);
+      const a = Math.PI + Math.sin(elapsed * 0.6) * 0.45; // the kid faces -Z: look from that side
+      camDesired.set(k.pos.x + Math.sin(a) * 4.6, k.pos.y + 1.5, k.pos.z + Math.cos(a) * 4.6);
+      camera.position.lerp(camDesired, Math.min(1, dt * 4));
+      camTarget.set(k.pos.x, k.pos.y - 0.1, k.pos.z);
+      camera.lookAt(camTarget);
+      return;
+    }
     if (!sm.is("playing")) {
       // gentle title-screen camera orbit around the first island
       titleOrbit += dt * 0.12;
@@ -850,6 +993,15 @@ export function startGame(canvas: HTMLCanvasElement): void {
     // ── playing ──
     camYaw += look.yaw;
     camPitch = THREE.MathUtils.clamp(camPitch + look.pitch, -0.1, 1.05);
+
+    // while driving or sailing the camera swings in behind the ride, so "up" is always "go"
+    const myRide = players.length === 1 ? rideOf(players[0]) : null;
+    if (myRide && myRide.driver === players[0]) {
+      let d = myRide.heading + Math.PI - camYaw;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      camYaw += d * Math.min(1, dt * 3);
+    }
 
     const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw);
     const rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
@@ -879,23 +1031,26 @@ export function startGame(canvas: HTMLCanvasElement): void {
     pendingJump = false;
     pendingJump2 = false;
 
-    // car: driver input, riders skip their own controller
-    const driverIdx = car.driver ? players.indexOf(car.driver) : -1;
-    if (car.group.visible && car.driver) {
+    // rides: driver input, riders skip their own controller
+    for (const v of rides) {
+      if (!v.group.visible) continue;
+      if (!v.driver) {
+        v.update(dt, 0, 0, world);
+        continue;
+      }
+      const driverIdx = Math.max(0, players.indexOf(v.driver));
       // the driver's jump key makes the car hop
-      if ((driverIdx === 1 ? jump2Now : jumpNow) && car.jump(7.5)) audio.sfx("jump");
-      const a = axesOf(Math.max(0, driverIdx));
-      // camera-relative wish → car-local: forward component accelerates, lateral steers
-      const cfX = Math.sin(car.heading), cfZ = Math.cos(car.heading);
-      const crX = Math.cos(car.heading), crZ = -Math.sin(car.heading);
+      if ((driverIdx === 1 ? jump2Now : jumpNow) && v.jump(7.5)) audio.sfx("jump");
+      const a = axesOf(driverIdx);
+      // camera-relative wish → ride-local: forward component accelerates, lateral steers
+      const cfX = Math.sin(v.heading), cfZ = Math.cos(v.heading);
+      const crX = Math.cos(v.heading), crZ = -Math.sin(v.heading);
       const fwd = a.wishX * cfX + a.wishZ * cfZ;
       const lat = a.wishX * crX + a.wishZ * crZ;
-      // pushing sideways also drives forward, so the car turns toward where the kid points
+      // pushing sideways also drives forward, so the ride turns toward where the kid points
       // instead of sitting still; only pushing backwards reverses
       const mag = Math.hypot(a.wishX, a.wishZ);
-      car.update(dt, -lat, fwd >= -0.5 * mag ? mag : fwd, world);
-    } else if (car.group.visible) {
-      car.update(dt, 0, 0, world);
+      v.update(dt, -lat, fwd >= -0.5 * mag ? mag : fwd, world);
     }
 
     for (let i = 0; i < players.length; i++) {
@@ -904,7 +1059,14 @@ export function startGame(canvas: HTMLCanvasElement): void {
       const a = axesOf(i);
       const wantJump = i === 0 ? jumpNow : jump2Now;
       const glideHeld = i === 0 ? input.isHeld("Space") : input.isHeld(P2_JUMP);
-      const ev = p.update(dt, a.wishX, a.wishZ, wantJump, glideHeld, world);
+      // wading through the sea is slow (the boat is the fast way across)
+      const wading = world.def.sea !== undefined && p.onGround && p.pos.y < world.def.sea - 0.2;
+      const pace = wading ? 0.55 : 1;
+      const ev = p.update(dt, a.wishX * pace, a.wishZ * pace, wantJump, glideHeld, world);
+      npcs.pushOut(p.pos);
+      if (wading && Math.random() < dt * 5 && Math.hypot(p.vel.x, p.vel.z) > 1) {
+        particles.burst(p.pos.x, world.def.sea! + 0.05, p.pos.z, 0xdff6ff, 3, 1.5, 0.4, 3);
+      }
       if (ev.jumped) audio.sfx("jump");
       if (ev.doubleJumped) {
         audio.sfx("doublejump");
@@ -991,15 +1153,16 @@ export function startGame(canvas: HTMLCanvasElement): void {
       if (buddies.has("bunny")) handlePickupAt(p.pos, 3.2, "coin");
       handlePickupAt(p.pos, 1.3, "balloon", p);
     }
-    if (car.group.visible && car.occupied) {
-      handlePickupAt(car.pos, 2.0, "coin");
-      handlePickupAt(car.pos, 2.0, "coin");
+    for (const v of rides) {
+      if (!v.group.visible || !v.occupied) continue;
+      handlePickupAt(v.pos, 2.0, "coin");
+      handlePickupAt(v.pos, 2.0, "coin");
     }
 
     // stars
     for (const p of players) {
       const got = p.riding
-        ? stars.tryCollect(car.pos)
+        ? stars.tryCollect((rideOf(p) ?? car).pos)
         : (magnetTimer > 0 ? stars.tryCollectFar(p.pos, 5) : stars.tryCollect(p.pos));
       if (got) {
         score += 100;
@@ -1145,9 +1308,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
 
     // car: buttons, engine sound, falling off the world
-    const inCar = car.group.visible && players.some((p) => car.has(p));
-    const byCar = car.group.visible && !inCar && players.some((p) => car.pos.distanceToSquared(p.pos) < 2.4 * 2.4);
-    hud.setCarUi(inCar ? "out" : byCar ? "in" : null);
+    const inRide = rides.find((v) => v.group.visible && v.occupied);
+    const byRide = inRide ? undefined : rideInReach()?.ride;
+    hud.setCarUi(inRide ? "out" : byRide ? "in" : null, (inRide ?? byRide)?.kind === "boat" ? "⛵" : "🚗");
+    hud.setTalk(!players[0].riding && npcs.nearest(players[0].pos) !== null);
     if (car.group.visible) {
       if (car.driver) audio.engineSet(Math.abs(car.speed) / 13);
       if (car.fellOff) {
@@ -1331,11 +1495,17 @@ export function startGame(canvas: HTMLCanvasElement): void {
     slimes: slimes.items.filter((s) => s.alive).map((s) => ({ x: s.group.position.x, z: s.group.position.z })),
     remotes: remotes.size,
     props: { cones: props.conesKnocked, boxes: props.boxesSmashed },
+    boat: boat.group.visible
+      ? { x: boat.pos.x, y: boat.pos.y, z: boat.pos.z, occupied: boat.occupied }
+      : null,
+    npcsMet: npcs.metCount,
+    pet: pet.active ? { x: pet.group.position.x, y: pet.group.position.y, z: pet.group.position.z } : null,
     carSpeed: car.speed,
     placeCar: (x: number, z: number, heading: number) => {
       car.pos.set(x, world.groundAt(x, z, 50)?.y ?? 0, z);
       car.heading = heading;
       car.speed = 0;
+      camYaw = heading + Math.PI;
     },
     groundAt: (x: number, z: number) => {
       const g = world.groundAt(x, z, players[0].pos.y + 0.4);

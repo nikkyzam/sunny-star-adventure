@@ -1,7 +1,7 @@
 /**
  * world.ts — floating-island level construction + collision queries + ambient animation.
  *
- * Seven hand-designed worlds (geometry is parametric, placed from level data):
+ * Eight hand-designed worlds (geometry is parametric, placed from level data):
  *   1. Sunny Meadow        — gentle gaps, teaches jump / stars / stomp (+ bunny buddy)
  *   2. Candy Canyon        — bridges, a moving platform (+ birdie buddy, circling bird)
  *   3. Rainbow Peak        — vertical climb, springs (+ hedgehogs, turtle buddy)
@@ -10,6 +10,8 @@
  *                            and a parachute tower (free glide in this world)
  *   6. Frosty Mountain     — falling snow, a sliding ice bridge, a spring-launch climb
  *   7. Bubbly Beach        — sandy islands over the sea; party balloons float you to secret islands
+ *   8. Adventure Island    — one big open island to explore: village, forest, lookout hill, a beach
+ *                            loop for the car, a sailboat to reach far islets, villagers to talk to
  *
  * Colliders are analytic (disc / box footprints with a top surface height) plus solid
  * wall boxes for buildings. Ground queries and wall pushes stay allocation-free.
@@ -38,12 +40,19 @@ export interface GroundHit {
   plat: Platform;
 }
 
-interface DiscDef { x: number; z: number; r: number; y: number; trees?: number; flowers?: number; rocks?: number }
+interface DiscDef { x: number; z: number; r: number; y: number; trees?: number; flowers?: number; rocks?: number; color?: number }
 interface BridgeDef { x: number; z: number; w: number; d: number; y: number; move?: { axis: "x" | "z"; amp: number; speed: number; phase?: number } }
 interface SpringDef { x: number; z: number; y: number; power: number }
 interface SlimeDef { ax: number; az: number; bx: number; bz: number; y: number; speed: number }
 export interface BirdDef { cx: number; cy: number; cz: number; r: number; speed: number }
 export interface BuddyDef { type: "bunny" | "birdie" | "turtle"; x: number; y: number; z: number }
+export interface NpcDef {
+  name: string;
+  x: number; y: number; z: number;
+  outfit: number; hat: number; skin: number;
+  /** Said one after another each time the kid talks to them. */
+  lines: string[];
+}
 export interface BuildingDef { x: number; z: number; w: number; d: number; h: number; color: number }
 interface RoadDef { x: number; z: number; w: number; d: number }
 
@@ -81,6 +90,13 @@ export interface LevelDef {
   snow?: boolean;
   /** Sparkly sea far below the islands (decorative — falling in still costs a heart). */
   ocean?: boolean;
+  /**
+   * Water level of a real sea. Kids wade in it (a sandy seabed lies 0.5 below the surface, so
+   * nobody drowns or loses a heart), the boat floats on it, and the car stays on dry land.
+   */
+  sea?: number;
+  boatSpawn?: [number, number, number]; // x, z, heading
+  npcs?: NpcDef[];
   /** Bumpable things: cones, gift boxes, balls, and car boost pads / ramps (props.ts). */
   props?: PropDefs;
   /** Party balloons: touch one to float up for a few seconds. */
@@ -494,6 +510,145 @@ export const LEVELS: LevelDef[] = [
   },
 ];
 
+/** `n` points on a circle (for coin trails around the big island's beach). */
+function ring(n: number, r: number, cx: number, cz: number, y: number, phase = 0): [number, number, number][] {
+  return Array.from({ length: n }, (_, i) => {
+    const a = phase + (i / n) * Math.PI * 2;
+    return [cx + Math.sin(a) * r, y, cz + Math.cos(a) * r] as [number, number, number];
+  });
+}
+
+const SAND = 0xffe6a7;
+
+/** Adventure Island: the middle of the island is (0, -20); the beach ring is 28–36 from it. */
+const ADVENTURE_ISLAND: LevelDef = {
+  name: "Adventure Island",
+  sky: 0x8fd8ff, fog: 0xc4ecff,
+  grass: 0x7ed957, dirt: 0xc9a26b, foliage: 0x3fa34d,
+  flowerColors: [0xff6b9d, 0xffd93d, 0xffffff, 0xb197fc, 0xff9f43],
+  spawn: [0, 0, 12],
+  sea: -0.5,
+  boatSpawn: [9.4, 21, 0],
+  carSpawn: [-6, 0, 11, Math.PI / 2],
+  rainbow: true,
+  discs: [
+    { x: 0, z: -20, r: 36, y: 0, color: SAND },                      // the beach
+    { x: 0, z: -20, r: 28, y: 0.3, flowers: 26, rocks: 5 },           // the meadow
+    // forest patches
+    { x: -16, z: -8, r: 6, y: 0.34, trees: 6, flowers: 4 },
+    { x: -24, z: -18, r: 5, y: 0.34, trees: 5, flowers: 3 },
+    { x: 4, z: -40, r: 6, y: 0.34, trees: 6, flowers: 4 },
+    { x: 23, z: -37, r: 4.5, y: 0.34, trees: 4, flowers: 3 },
+    { x: -5, z: -3, r: 4, y: 0.34, trees: 3, flowers: 3 },
+    // Lookout Hill (terraces you can walk up)
+    { x: -12, z: -32, r: 11, y: 0.6, flowers: 6 },
+    { x: -12, z: -32, r: 9, y: 0.9, flowers: 4 },
+    { x: -12, z: -32, r: 7, y: 1.2, rocks: 2 },
+    { x: -12, z: -32, r: 5.2, y: 1.5, flowers: 3 },
+    { x: -12, z: -32, r: 3.6, y: 1.8, flowers: 2 },
+    // far islets: sail there!
+    { x: -56, z: -14, r: 5, y: 0.2, rocks: 2, trees: 1, color: SAND },   // Treasure Rock
+    { x: 54, z: -30, r: 6, y: 0.2, trees: 3, flowers: 4, color: SAND },  // Palm Cay
+    { x: 6, z: -78, r: 5.5, y: 0.2, rocks: 2, color: SAND },             // Lighthouse Rock
+    { x: 30, z: 15, r: 3, y: 0.1, color: SAND },                         // the sandbar
+  ],
+  bridges: [{ x: 6, z: 19, w: 2.4, d: 8, y: 0.1 }], // the dock
+  buildings: [
+    { x: 17, z: -12, w: 4, d: 4, h: 3.5, color: 0xff9ecf },
+    { x: 23, z: -18, w: 4, d: 4, h: 4.2, color: 0x5cb8ff },
+    { x: 16, z: -27, w: 5, d: 4, h: 3.2, color: 0xffd93d },
+    { x: 23, z: -27, w: 3.5, d: 3.5, h: 5, color: 0xb197fc },
+    { x: 6, z: -78, w: 2.6, d: 2.6, h: 9, color: 0xfdf6ec }, // the lighthouse
+  ],
+  springs: [
+    { x: 20, z: -18, y: 0.3, power: 18 },   // → the blue house roof
+    { x: 8.6, z: -78, y: 0.2, power: 25 },  // → the top of the lighthouse
+  ],
+  balloons: [[-12, 3.0, -32], [52, 1.6, -32]],
+  stars: [
+    [0, 1.2, 9], [20, 1.2, 6], [33, 1.2, -20], [-33, 1.2, -20], [0, 1.2, -54],   // around the beach
+    [14, 1.5, -21], [23, 5.7, -18], [27, 1.5, -23],                               // the village
+    [-16, 1.6, -8], [4, 1.6, -40],                                               // the forest
+    [-12, 3.0, -30.5], [-12, 9.5, -32],                                           // Lookout Hill and the sky above it
+    [6, 1.3, 22],                                                                // the end of the dock
+    [-56, 1.4, -14], [54, 1.4, -30], [56, 1.4, -27], [6, 10.6, -78], [30, 1.3, 15], // by boat
+  ],
+  coins: [
+    ...ring(16, 32, 0, -20, 1.0, 0.2),
+    [0, 1.3, 4], [0, 1.3, 0], [0, 1.3, -4], [0, 1.3, -8],
+    [10, 1.3, -18], [19, 1.3, -22], [20, 1.3, -14],
+    [-8, 1.6, -28], [-10, 2.2, -30],
+    [-55, 1.4, -16], [-57.5, 1.4, -12.5], [52.5, 1.4, -28], [4, 1.4, -75.5], [8, 1.4, -80.5],
+  ],
+  chests: [[-57.5, 0.2, -15.5], [-54.5, 0.2, -11.5], [6, 0.34, -42], [3.5, 0.2, -80]],
+  hearts: [[55, 1.4, -32.5]],
+  magnets: [[-24, 1.6, -18]],
+  buddies: [],
+  slimes: [
+    { ax: -6, az: -14, bx: 6, bz: -14, y: 0.3, speed: 1.1 },
+    { ax: -2, az: -47, bx: 9, bz: -47, y: 0.3, speed: 1.2 },
+  ],
+  checkpoints: [[2.5, 0, 10.5], [12, 0.3, -15], [-6, 0.3, -24]],
+  portal: [0, 0.3, -20],
+  props: {
+    // the beach loop is the car's race track
+    cones: [[20.6, 0, 4.5], [22.6, 0, 2.6], [24.5, 0, 0.6], [-22, 0, 3], [-24, 0, 1]],
+    boxes: [[10, 0.3, -24], [-18, 0.3, -14], [30, 0, -34], [-30, 0, -34], [0, 0, -53], [-56, 0.2, -17]],
+    balls: [[3.5, 0, 9], [12, 0.3, -17]],
+    boosts: [[30.1, 0, -9.1, 2.79]],          // on the east beach, pointing north along the shore
+    ramps: [[0, 0, -52, -Math.PI / 2]],       // on the north beach
+  },
+  npcs: [
+    {
+      name: "Captain Coral", x: 3.6, y: 0, z: 15, outfit: 1, hat: 0, skin: 1,
+      lines: [
+        "Ahoy! That's my sailboat by the dock. Hop in and sail away!",
+        "Sail west to Treasure Rock. I hear there are chests full of treasure!",
+        "The lighthouse is far to the north. Just follow the coast!",
+      ],
+    },
+    {
+      name: "Mayor Maple", x: 12.5, y: 0.3, z: -19, outfit: 4, hat: 3, skin: 3,
+      lines: [
+        "Welcome to Adventure Island! Find every star to open the portal in the meadow.",
+        "The red car on the beach is for everyone. Drive all the way around the island!",
+        "Six friends live on these islands. Can you say hello to all of us?",
+      ],
+    },
+    {
+      name: "Farmer Fern", x: -13, y: 0.3, z: -13, outfit: 3, hat: 4, skin: 2,
+      lines: [
+        "Hello there! Your pet loves this forest. Listen to it hop!",
+        "Try dancing with the 7 key. Pets love to dance too!",
+        "Smash the gift boxes you find. There are coins inside!",
+      ],
+    },
+    {
+      name: "Ranger Rio", x: -3.5, y: 0.3, z: -27, outfit: 5, hat: 0, skin: 4,
+      lines: [
+        "Climb Lookout Hill and grab the balloon. You can see the whole island from up there!",
+        "There's a star way up in the sky above the hill. Only a balloon can reach it.",
+        "The water is shallow, so you can wade. A boat is much faster, though!",
+      ],
+    },
+    {
+      name: "Pirate Pip", x: -53.6, y: 0.2, z: -15.6, outfit: 0, hat: 2, skin: 0,
+      lines: [
+        "Arr! You found Treasure Rock! Open my chests, they're for you!",
+        "Palm Cay is far to the east, past the big island. Bring the boat!",
+      ],
+    },
+    {
+      name: "Keeper Kai", x: 8.2, y: 0.2, z: -75.4, outfit: 2, hat: 1, skin: 1,
+      lines: [
+        "You sailed all this way! Bounce on the spring to reach the top of my lighthouse.",
+        "From the top you can see every island. There's a star up there too!",
+      ],
+    },
+  ],
+};
+LEVELS.push(ADVENTURE_ISLAND);
+
 const RAINBOW_COLORS = [0xff5f6d, 0xffa94d, 0xffe066, 0x7ed957, 0x5cb8ff, 0xb197fc];
 
 interface Solid {
@@ -517,6 +672,7 @@ export class World {
   private clouds: THREE.Group[] = [];
   private snow: THREE.Points | null = null;
   private ocean: THREE.Mesh | null = null;
+  private oceanY = -7;
   private time = 0;
 
   /** Highest platform top under (x,z) that is not above refY + step allowance. */
@@ -579,7 +735,8 @@ export class World {
     this.portalUnlocked = false;
 
     scene.background = new THREE.Color(def.sky);
-    scene.fog = new THREE.Fog(def.fog, 38, 110);
+    // open-sea levels need to see far islets
+    scene.fog = def.sea !== undefined ? new THREE.Fog(def.fog, 70, 190) : new THREE.Fog(def.fog, 38, 110);
 
     const grassMat = new THREE.MeshStandardMaterial({ color: def.grass, flatShading: true, roughness: 0.9 });
     const dirtMat = new THREE.MeshStandardMaterial({ color: def.dirt, flatShading: true, roughness: 1 });
@@ -592,7 +749,8 @@ export class World {
     for (const d of def.discs) {
       const island = new THREE.Group();
       const topGeo = new THREE.CylinderGeometry(d.r, d.r * 0.96, 0.4, 28);
-      const top = new THREE.Mesh(topGeo, grassMat);
+      const top = new THREE.Mesh(topGeo, d.color === undefined ? grassMat
+        : new THREE.MeshStandardMaterial({ color: d.color, flatShading: true, roughness: 0.95 }));
       top.position.y = -0.2;
       top.receiveShadow = true;
       top.castShadow = true;
@@ -861,15 +1019,23 @@ export class World {
 
     // ── Ocean (decorative sea far below) ──
     this.ocean = null;
-    if (def.ocean) {
+    if (def.ocean || def.sea !== undefined) {
+      this.oceanY = def.sea ?? -7;
       this.ocean = new THREE.Mesh(
         new THREE.CircleGeometry(160, 48),
         new THREE.MeshStandardMaterial({ color: 0x3fa7e0, emissive: 0x0a3a5a, roughness: 0.25, metalness: 0.1, transparent: true, opacity: 0.92 }),
       );
       this.ocean.rotation.x = -Math.PI / 2;
-      this.ocean.position.set(0, -7, -25);
+      this.ocean.position.set(0, this.oceanY, -25);
       this.ocean.receiveShadow = true;
       this.group.add(this.ocean);
+    }
+    if (def.sea !== undefined) {
+      // the sandy seabed: an invisible floor so kids wade instead of falling out of the world
+      this.platforms.push({
+        kind: "box", x: 0, z: -25, r: 0, hw: 400, hd: 400, topY: def.sea - 0.5, spring: 0,
+        baseX: 0, baseZ: -25, dx: 0, dz: 0, mesh: new THREE.Object3D(), squashT: 0,
+      });
     }
 
     // ── Rainbow (big, far, decorative) ──
@@ -936,7 +1102,7 @@ export class World {
     for (const cp of this.checkpoints) {
       cp.flag.rotation.y = Math.sin(t * 3 + cp.pos.x) * 0.25;
     }
-    if (this.ocean) this.ocean.position.y = -7 + Math.sin(t * 0.8) * 0.15;
+    if (this.ocean) this.ocean.position.y = this.oceanY + Math.sin(t * 0.8) * (this.def.sea !== undefined ? 0.04 : 0.15);
     if (this.snow) {
       const attr = this.snow.geometry.getAttribute("position") as THREE.BufferAttribute;
       const a = attr.array as Float32Array;

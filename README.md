@@ -19,9 +19,39 @@ keys `1`–`6` or the sticker buttons). Names are made-up fun names like "Bouncy
 new one), never real names. Online play uses WebRTC through the free public PeerJS service. Game
 data goes directly between the players' browsers, and nothing is stored on a server.
 
+## Adventure Island 🏝️
+
+The eighth world is one big open island you can reach straight from the title screen. It's also
+where friends meet when someone makes a room.
+
+- **Explore**: a village, a forest, Lookout Hill, a beach all the way around, and four small
+  islands far out at sea (Treasure Rock, Palm Cay, Lighthouse Rock and a sandbar).
+- **Sail the boat** ⛵: walk onto the dock and press `E` (or the Hop in button). The boat can't
+  run aground, and the water is shallow everywhere, so nobody can drown or lose a heart at sea.
+  Wading works too, it's just slow.
+- **Drive the car** 🚗 around the beach loop: cones to knock over, a boost pad and a ramp.
+- **Talk to the villagers** 💬: walk up to one and press `F` (or the Talk button). Six friends
+  live on the islands; each has a few things to say and a small gift the first time you meet.
+  Villagers only say fixed, friendly lines. There is no typed chat anywhere in the game.
+- 18 stars to find, including one on top of the lighthouse and one high in the sky.
+
+## Driving 🚗
+
+- **Drive in Toy City** on the title screen goes straight to the car level.
+- Walk up to the car and press `E`, or tap **Hop in**. Tap **Hop out** to leave.
+- Your move keys drive. The camera stays behind you, so up is always "go".
+- `Space` makes the car hop. `H` (or the 📣 button) honks.
+- Things to hit: cones, gift boxes (coins inside), big balls to push around, a boost pad and
+  ramps. Balls and gift boxes can be bumped on foot too.
+- Friends online see your car or boat and hear your honk.
+
 ## Make it yours
 
-- **Outfit colors**: tap a color dot on the title screen.
+- **Dress up** 🎨 on the title screen: outfit colors, skin tone, hats, and a pet.
+- **Pets**: puppy 🐶, kitten 🐱, duckling 🐥 or baby dragon 🐲. Your pet follows you everywhere,
+  paddles behind the boat, and does a happy spin when you dance or send a ❤️. Friends online
+  see your pet.
+
 - **Hats**: cap 🧢, crown 👑, bunny ears 🐰, wizard hat 🧙 or flower 🌸. Friends online see your hat.
 - **Dance** 💃: press `7` or the dance button. Friends online see it too.
 - **Easy mode** (on by default): running out of hearts refills them instead of ending the game,
@@ -31,9 +61,10 @@ data goes directly between the players' browsers, and nothing is stored on a ser
 ## How to play
 
 - **Objective**: collect all ★ in each world to unlock the golden portal, then jump into it.
-  6 worlds: Sunny Meadow → Candy Canyon → Rainbow Peak → Castle in the Clouds → **Toy City** →
+  8 worlds: Sunny Meadow → Candy Canyon → Rainbow Peak → Castle in the Clouds → **Toy City** →
   **Frosty Mountain** (falling snow, a sliding ice floe and a spring-launch climb) →
-  **Bubbly Beach** (sandy islands over a sparkly sea, with secret sky islands).
+  **Bubbly Beach** (sandy islands over a sparkly sea, with secret sky islands) →
+  **Adventure Island** (the big open world, see above).
 - **Party balloons** 🎈 (Bubbly Beach, and one on Frosty Mountain): touch one to float up for a
   few seconds, then steer to a secret island. Balloons grow back, so you can ride again.
 - **Hearts**: you have 3 ♥ per level. Falling off an island or bumping an enemy from the side
@@ -60,12 +91,14 @@ data goes directly between the players' browsers, and nothing is stored on a ser
 | `Space` | P1 jump — again mid-air to **double jump**, hold while falling to **glide** (once unlocked) |
 | Arrow keys + `Enter` | Player 2 (same-keyboard co-op: pick **👥 2 Players** on the title screen) |
 | `T` | Teleport to your friend (co-op) |
-| `E` | Board / exit the car (Toy City) |
+| `E` / Hop in button | Board / exit the car or the boat |
 | Mouse drag | Orbit camera |
 | `Esc` / `P` | Pause |
 | `M` / 🔊 button | Mute |
 | `1`–`6` / sticker buttons | Show a sticker above your kid (seen by friends online) |
 | `7` / 💃 button | Dance |
+| `F` / 💬 Talk button | Talk to a villager |
+| `H` / 📣 button | Honk (while driving) |
 | Big ⬆ JUMP button | Jump (touch friendly) |
 
 In co-op both kids share hearts and must gather at the portal together — wander too far apart
@@ -107,4 +140,5 @@ Every push to `main` deploys to **GitHub Pages** through `.github/workflows/depl
 `window.__gameDebug()` (state, stars, slimes, ground sampler) exist for the automated smoke test
 (`npm run verify`, Playwright). `?level=N` in the URL starts directly on level N+1.
 `node scripts/playtest-online.mjs` plays two browsers together through a real room code
-(needs internet). `node scripts/playtest-fun.mjs` checks hats, dancing, balloons and Bubbly Beach.
+(needs internet). `node scripts/playtest-fun.mjs` checks hats, dancing, balloons and Bubbly Beach;
+`playtest-drive.mjs` checks the car; `playtest-island.mjs` checks dress-up, pets, villagers and the boat.

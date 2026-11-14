@@ -297,6 +297,67 @@ html, body, #root {
 }
 .car-btn:active { transform: scale(0.92); }
 
+.car-btn.talk {
+  bottom: 160px;
+  background: linear-gradient(180deg, #7ee0a1, #3fbf6b);
+}
+
+/* ── villager speech box ────────────────────────────────────────── */
+.dialog {
+  position: absolute;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%) scale(0.9);
+  width: max-content;
+  max-width: min(86vw, 560px);
+  padding: 12px 20px;
+  border-radius: 22px;
+  border: 4px solid #ffa94d;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 22px rgba(60, 30, 120, 0.3);
+  font-size: 18px;
+  font-weight: 700;
+  color: #4a3b6b;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.dialog.show { opacity: 1; transform: translateX(-50%) scale(1); }
+.dialog-name { display: block; color: #e8760a; font-weight: 900; font-size: 15px; margin-bottom: 2px; }
+
+/* ── dress-up screen ────────────────────────────────────────────── */
+.overlay.clear {
+  background: none;
+  backdrop-filter: none;
+  align-items: flex-end;
+  padding-bottom: 14px;
+}
+.dress-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 26px;
+}
+.choice-row { display: flex; align-items: center; gap: 12px; }
+.choice-row > span { width: 54px; text-align: right; font-weight: 800; color: #6b6390; font-size: 15px; }
+.big-btn.island {
+  background: linear-gradient(180deg, #9af0c0, #3fbf6b);
+  border-color: #fff;
+  color: #0c5a2e;
+}
+
+/* ── title screen: compact so every button fits without scrolling ── */
+.title-panel { padding: 18px 36px; }
+.title-panel .game-title { font-size: clamp(24px, 4.6vw, 40px); margin-bottom: 2px; }
+.title-panel .tagline { font-size: 14px; margin: 2px 0 8px; }
+.title-panel .btn-col { gap: 8px; margin: 8px 0 6px; }
+.title-panel .big-btn { font-size: 18px; padding: 7px 24px; min-width: 300px; border-width: 3px; }
+.title-panel .big-btn.primary { font-size: 22px; padding: 9px 24px; }
+.title-panel .kid-setup { gap: 6px; }
+.title-panel .controls-help { font-size: 12px; gap: 2px 14px; margin-top: 4px; }
+
 /* ── kid setup (title) ───────────────────────────────────────────── */
 .kid-setup {
   display: flex;
@@ -373,6 +434,8 @@ html, body, #root {
 
 @media (max-width: 640px) {
   .sticker-btn { width: 42px; height: 42px; font-size: 20px; }
+  .swatch { width: 32px; height: 32px; }
+  .dialog { bottom: 12px; font-size: 15px; max-width: 58vw; }
   /* phones: stack stickers in a 2-wide block above the jump button so they never overlap it */
   .sticker-bar {
     left: auto;

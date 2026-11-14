@@ -45,6 +45,12 @@ export default function Home() {
         {/* car controls: shown next to the car / while riding (touch-friendly E and H) */}
         <button id="btn-car" className="car-btn" style={{ display: 'none' }} />
         <button id="btn-honk" className="car-btn honk" aria-label="Honk" style={{ display: 'none' }}>📣</button>
+        {/* villagers: shown when one is close (touch-friendly F) */}
+        <button id="btn-talk" className="car-btn talk" style={{ display: 'none' }}>💬 Talk</button>
+        <div id="dialog" className="dialog">
+          <span id="dialog-name" className="dialog-name" />
+          <span id="dialog-text" />
+        </div>
 
         {/* preset stickers (no free-text chat): keys 1–6 or tap */}
         <div id="sticker-bar" className="sticker-bar" style={{ display: 'none' }} />
@@ -56,19 +62,19 @@ export default function Home() {
         <div id="ov-title" className="overlay">
           <div className="panel title-panel">
             <h1 className="game-title">Sunny Star Adventure</h1>
-            <p className="tagline">Explore floating islands, Toy City, Frosty Mountain and Bubbly Beach — collect every ★, ride balloons, find treasure and animal buddies, drive the car, parachute off the tower!</p>
+            <p className="tagline">Explore sky islands, Toy City and the big Adventure Island — collect every ★, bring your pet, sail the boat, drive the car, meet the villagers and play with friends!</p>
             <div className="kid-setup">
               <div className="name-row">
                 <span id="kid-name" className="kid-name" />
                 <button className="mini-btn" data-action="reroll" aria-label="Pick a new name">🎲</button>
               </div>
-              <div id="outfits" className="outfits" />
-              <div id="hats" className="outfits" />
+              <button className="mini-btn wide" data-action="dress">🎨 Dress up &amp; pick a pet</button>
               <button id="btn-easy" className="mini-btn wide" data-action="easy" />
             </div>
             <div className="btn-col">
               <button className="big-btn primary" data-action="play">▶ Play</button>
               <button className="big-btn primary2" data-action="online">🌐 Play with friends</button>
+              <button className="big-btn island" data-action="island">🏝️ Adventure Island</button>
               <button className="big-btn" data-action="drive">🚗 Drive in Toy City</button>
               <button className="big-btn" data-action="play2">👥 2 Players (same keyboard)</button>
               <button id="btn-continue" className="big-btn" data-action="continue" style={{ display: 'none' }}>▶ Continue</button>
@@ -77,9 +83,21 @@ export default function Home() {
             <div className="controls-help">
               <span>🕹️ P1: WASD + Space (jump ×2, hold = glide)</span>
               <span>👥 P2: Arrows + Enter</span>
-              <span>🖱️ Drag — camera · E — car (Space hop, H honk) · T — teleport to friend</span>
+              <span>🖱️ Drag — camera · E — car / boat (Space hop, H honk) · F — talk</span>
+              <span>T — teleport to friend</span>
               <span>1–6 — stickers · 7 — dance 💃 · Esc — pause · M — mute</span>
             </div>
+          </div>
+        </div>
+
+        {/* dress-up: the kid stands above this panel while you choose */}
+        <div id="ov-dress" className="overlay clear" style={{ display: 'none' }}>
+          <div className="panel dress-panel">
+            <div className="choice-row"><span>Outfit</span><div id="outfits" className="outfits" /></div>
+            <div className="choice-row"><span>Skin</span><div id="skins" className="outfits" /></div>
+            <div className="choice-row"><span>Hat</span><div id="hats" className="outfits" /></div>
+            <div className="choice-row"><span>Pet</span><div id="pets" className="outfits" /></div>
+            <button className="big-btn primary" data-action="back">✔ Done</button>
           </div>
         </div>
 
