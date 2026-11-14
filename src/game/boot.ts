@@ -74,6 +74,10 @@ declare global {
       heli: { x: number; y: number; z: number; occupied: boolean } | null;
       rings: number;
       food: number;
+      bank: number;
+      owned: string[];
+      jobTarget: { name: string; x: number; z: number } | null;
+      setBank: (n: number) => void;
       shipsSunk: number;
       shipsAfloat: number;
       placeBoat: (x: number, z: number, heading: number) => void;
@@ -203,6 +207,22 @@ export function startGame(canvas: HTMLCanvasElement): void {
   let levelIdx = 0;
   let score = 0;
   let coinCount = 0;
+  // the piggy bank: every coin ever earned, saved in this browser, spent on things like the mansion
+  let bank = Math.max(0, Math.floor(storage.get<number>("bank", 0)) || 0);
+  const owned = new Set<string>(storage.get<string[]>("owned", []));
+  let job: { target: (typeof npcs.items)[number] } | null = null;
+  const beacon = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.7, 0.7, 40, 14, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xffd93d, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false, fog: false }),
+  );
+  beacon.visible = false;
+  scene.add(beacon);
+
+  function earn(n: number): void {
+    coinCount += n;
+    bank += n;
+    storage.set("bank", bank);
+  }
   let levelStartScore = 0;
   let hearts = 3;
   let maxHearts = 3;
@@ -358,6 +378,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   function loadLevel(i: number): void {
     levelIdx = i;
+    world.owned = owned;
     world.buildLevel(i, scene);
     {
       const d = world.def;
@@ -420,12 +441,15 @@ export function startGame(canvas: HTMLCanvasElement): void {
     fleet.build(world.def.pirates ?? [], world.def.sea ?? 0);
 
     npcs.build(world.def.npcs ?? []);
+    job = null;
+    beacon.visible = false;
+    hud.setJob(null);
     pet.setKind(profile.pet);
     pet.snapTo(world.spawn.x, world.spawn.y, world.spawn.z);
 
     hud.setHearts(hearts, maxHearts);
     hud.setStars(0, stars.total);
-    hud.setCoins(coinCount);
+    hud.setCoins(bank);
     hud.setMagnet(null);
     hud.setScore(score);
     hud.setLevel(`${i + 1}. ${world.def.name}`);
@@ -748,13 +772,54 @@ export function startGame(canvas: HTMLCanvasElement): void {
     const npc = npcs.nearest(players[0].pos);
     if (!npc) return;
     const said = npcs.talk(npc);
-    hud.showDialog(said.name, said.text);
+    let text = said.text;
+    const sells = npc.def.sells;
+    if (job && job.target === npc) {
+      // pizza delivered!
+      job = null;
+      beacon.visible = false;
+      hud.setJob(null);
+      earn(10);
+      score += 50;
+      hud.setCoins(bank);
+      hud.setScore(score);
+      audio.sfx("chest");
+      particles.burst(npc.p.pos.x, npc.p.pos.y + 1.6, npc.p.pos.z, 0xffc93c, 20, 4, 0.9, 4);
+      text = "Mmm, pizza! Thank you! Here are 10 coins. 🍕";
+    } else if (npc.def.job === "pizza") {
+      if (!job) {
+        const others = npcs.items.filter((n) => n !== npc);
+        job = { target: others[Math.floor(Math.random() * others.length)] };
+        beacon.position.set(job.target.p.pos.x, job.target.p.pos.y + 20, job.target.p.pos.z);
+        beacon.visible = true;
+        hud.setJob(`🍕 Pizza for ${job.target.def.name}`);
+        audio.sfx("powerup");
+        text = `Order up! Please take this pizza to ${job.target.def.name}. Look for the yellow beam of light. Drive, sail or fly!`;
+      } else {
+        text = `${job.target.def.name} is still waiting for that pizza. Follow the yellow beam of light!`;
+      }
+    } else if (sells && !owned.has(sells.id)) {
+      if (bank >= sells.price) {
+        bank -= sells.price;
+        storage.set("bank", bank);
+        owned.add(sells.id);
+        storage.set("owned", [...owned]);
+        world.unlock(sells.id);
+        hud.setCoins(bank);
+        audio.sfx("win");
+        particles.burst(npc.p.pos.x, npc.p.pos.y + 2, npc.p.pos.z, 0xffd93d, 40, 6, 1.2, 4);
+        text = `Sold! The ${sells.what} is all yours. The door is open, go on in! 🏠`;
+      } else {
+        text = `This ${sells.what} is for sale: ${sells.price} coins. You have ${bank}. Collect coins, deliver pizzas and sink pirate ships to save up!`;
+      }
+    }
+    hud.showDialog(said.name, text);
     audio.sfx("talk");
     if (!said.firstTime) return;
     // meeting someone new: a little welcome gift
-    coinCount += 3;
+    earn(3);
     score += 30;
-    hud.setCoins(coinCount);
+    hud.setCoins(bank);
     hud.setScore(score);
     audio.sfx("buddy");
     particles.burst(npc.p.pos.x, npc.p.pos.y + 1.6, npc.p.pos.z, 0xffc93c, 14, 3, 0.8, 4);
@@ -1215,9 +1280,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
       const got = pickups.collectNear(scratch, radius, type);
       if (!got) return false;
       if (got.type === "coin") {
-        coinCount++;
+        earn(1);
         score += 10;
-        hud.setCoins(coinCount);
+        hud.setCoins(bank);
         hud.setScore(score);
         audio.sfx("coin");
         particles.burst(got.base.x, got.base.y, got.base.z, 0xffc93c, 8, 2.5, 0.5, 5);
@@ -1384,9 +1449,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
         particles.burst(e.x, e.y, e.z, 0xff7a1a, 8, 3, 0.5, 6);
       } else if (e.type === "box") {
         score += 20;
-        coinCount++;
+        earn(1);
         hud.setScore(score);
-        hud.setCoins(coinCount);
+        hud.setCoins(bank);
         audio.sfx("chest");
         particles.burst(e.x, e.y, e.z, 0xff9ecf, 24, 5, 0.9, 6);
       } else if (e.type === "ball") {
@@ -1428,9 +1493,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
         particles.burst(e.x, e.y, e.z, 0xffa94d, 18, 5, 0.7, 6);
       } else {
         score += 100;
-        coinCount += 5;
+        earn(5);
         hud.setScore(score);
-        hud.setCoins(coinCount);
+        hud.setCoins(bank);
         audio.sfx("chest");
         shake = Math.max(shake, 0.5);
         hud.showToast("🏴‍☠️ You sank a pirate ship! +100 and 5 coins");
@@ -1694,6 +1759,14 @@ export function startGame(canvas: HTMLCanvasElement): void {
     heli: heli.group.visible ? { x: heli.pos.x, y: heli.pos.y, z: heli.pos.z, occupied: heli.occupied } : null,
     rings: rings.passed,
     food: foods.items.filter((f) => !f.taken).length,
+    bank,
+    owned: [...owned],
+    jobTarget: job ? { name: job.target.def.name, x: job.target.p.pos.x, z: job.target.p.pos.z } : null,
+    setBank: (n: number) => {
+      bank = n;
+      storage.set("bank", bank);
+      hud.setCoins(bank);
+    },
     shipsSunk: fleet.sunk,
     shipsAfloat: fleet.afloat,
     placeBoat: (x: number, z: number, heading: number) => {

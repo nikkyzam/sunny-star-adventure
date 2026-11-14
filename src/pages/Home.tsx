@@ -34,6 +34,7 @@ export default function Home() {
           <span id="hud-coins" className="hud-pill coins">◉ 0</span>
           <span id="hud-buddies" className="hud-pill buddies" style={{ display: 'none' }} />
           <span id="hud-magnet" className="hud-pill magnet" style={{ display: 'none' }} />
+          <span id="hud-job" className="hud-pill job" style={{ display: 'none' }} />
           <span id="hud-level" className="hud-pill level">1</span>
           <span id="hud-time" className="hud-pill">0:00</span>
           <span id="hud-score" className="hud-pill score">0</span>

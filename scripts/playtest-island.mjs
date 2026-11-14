@@ -5,6 +5,7 @@
  *   A5 Hop in appears on the dock, E boards      A6 sailing moves the boat out to sea
  *   A7 the boat stops at land instead of driving onto it
  *   A10 the kid walks into a village house; it opens up, and the star inside can be collected
+ *   A12 the mansion is boarded up until bought with coins   A13 pizza delivery pays coins
  *   A11 the sailboat's cannon sinks a pirate ship
  *   A9 the car drives over the causeway to Pine Island
  *   A8 the causeways, Coconut Cove, Pine Island, Sunset Island and Shell Islet are land
@@ -52,7 +53,7 @@ try {
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
-  const dbg = () => page.evaluate(() => { const d = window.__gameDebug(); return { ...d, placeCar: undefined, placeHeli: undefined, placeBoat: undefined, warp: undefined, groundAt: undefined }; });
+  const dbg = () => page.evaluate(() => { const d = window.__gameDebug(); return { ...d, placeCar: undefined, placeHeli: undefined, placeBoat: undefined, warp: undefined, setBank: undefined, groundAt: undefined }; });
   const visible = (sel) => page.evaluate((s) => document.querySelector(s)?.style.display !== "none", sel);
   const hold = async (key, pred, ms = 8000) => {
     await page.keyboard.down(key);
@@ -182,6 +183,44 @@ try {
   check("A10c jumping indoors stays under the ceiling", (await dbg()).inside === true);
   await walkTo(17, -8.4, 0.6);
   await walkTo(9, 6, 1.2);
+
+  // A12: the mansion at (-14, 2) is for sale; Agent Goldie stands at (-9, 7)
+  await page.evaluate(() => window.__gameDebug().warp(-14, 6.6));
+  await walkTo(-14, 3.5, 0.5, 4000);
+  check("A12a the mansion door is boarded up until bought", (await dbg()).inside === false);
+  await page.evaluate(() => window.__gameDebug().setBank(5));
+  await page.evaluate(() => window.__gameDebug().warp(-9, 8.6));
+  await page.waitForTimeout(400);
+  await page.keyboard.press("KeyF");
+  await page.waitForTimeout(300);
+  const poor = await dbg();
+  check("A12b not enough coins: no sale", !poor.owned.includes("mansion"), await page.textContent("#dialog-text"));
+  await page.evaluate(() => window.__gameDebug().setBank(100));
+  await page.keyboard.press("KeyF");
+  await page.waitForTimeout(300);
+  const rich = await dbg();
+  check("A12 buying the mansion with coins", rich.owned.includes("mansion") && rich.bank === 40, `bank=${rich.bank} owned=${rich.owned}`);
+  await page.evaluate(() => window.__gameDebug().warp(-14, 6.6));
+  await walkTo(-14, 3.2, 0.6, 8000);
+  await page.waitForTimeout(400);
+  check("A12c the owner can walk into the mansion", (await dbg()).inside === true);
+  await page.screenshot({ path: join(ROOT, "verification-shots/37-mansion.png") });
+
+  // A13: pizza delivery from Chef Chili at (45.5, -61)
+  await page.evaluate(() => window.__gameDebug().warp(46.6, -60));
+  await page.waitForTimeout(400);
+  await page.keyboard.press("KeyF");
+  await page.waitForTimeout(300);
+  const order = await dbg();
+  check("A13a Chef Chili gives a pizza delivery job", order.jobTarget !== null, JSON.stringify(order.jobTarget));
+  const bank0 = order.bank;
+  await page.evaluate((t) => window.__gameDebug().warp(t.x + 1.2, t.z + 0.6), order.jobTarget);
+  await page.waitForTimeout(400);
+  await page.keyboard.press("KeyF");
+  await page.waitForTimeout(300);
+  const paid = await dbg();
+  check("A13 delivering the pizza pays coins", paid.jobTarget === null && paid.bank >= bank0 + 10, `bank ${bank0} → ${paid.bank}`);
+  await page.evaluate(() => window.__gameDebug().warp(9, 6));
 
   // A9: drive the car over the west causeway to Pine Island
   await walkTo(-4.3, 11.5, 0.8); // the car is parked at (-6, 11)

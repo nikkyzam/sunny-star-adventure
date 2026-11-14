@@ -102,6 +102,7 @@ body.touch.playing .stick-base { display: flex; }
 .hud-pill.coins { color: #c98a00; }
 .hud-pill.buddies { font-size: 20px; }
 .hud-pill.magnet { color: #e0564b; }
+.hud-pill.job { color: #c2410c; background: #fff3d6; }
 .hud-pill.level { color: #6c5ce7; }
 .hud-pill.score { color: #0984e3; min-width: 60px; text-align: center; }
 

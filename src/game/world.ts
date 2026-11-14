@@ -24,6 +24,7 @@ import { mulberry32, pick } from "./rng";
 import type { PropDefs } from "./props";
 import type { FoodDef } from "./food";
 import type { ShipDef } from "./ships";
+import { makeTextSprite, disposeSprite } from "./social";
 
 export interface Platform {
   kind: "disc" | "box";
@@ -56,11 +57,17 @@ export interface NpcDef {
   outfit: number; hat: number; skin: number;
   /** Said one after another each time the kid talks to them. */
   lines: string[];
+  /** Sells something for coins (until it has been bought). */
+  sells?: { id: string; price: number; what: string };
+  /** Hands out a delivery job. */
+  job?: "pizza";
 }
 export interface BuildingDef {
   x: number; z: number; w: number; d: number; h: number; color: number;
   /** A house with an open doorway on its +Z side: kids can walk in and look around. */
   enter?: boolean;
+  /** For sale: the door stays boarded up until the kid owns this id (bought from a villager). */
+  lock?: string;
 }
 interface RoadDef { x: number; z: number; w: number; d: number }
 
@@ -585,6 +592,7 @@ const ADVENTURE_ISLAND: LevelDef = {
     { x: 4, z: -40, r: 6, y: 0.34, trees: 6, flowers: 4 },
     { x: 23, z: -37, r: 4.5, y: 0.34, trees: 4, flowers: 3 },
     { x: -5, z: -3, r: 4, y: 0.34, trees: 3, flowers: 3 },
+    { x: -14, z: 2, r: 8, y: 0.34 },                                   // the mansion's lawn
     // Lookout Hill (terraces you can walk up)
     { x: -12, z: -32, r: 11, y: 0.6, flowers: 6 },
     { x: -12, z: -32, r: 9, y: 0.9, flowers: 4 },
@@ -641,6 +649,7 @@ const ADVENTURE_ISLAND: LevelDef = {
     { x: 16, z: -27, w: 5, d: 4, h: 3.2, color: 0xffd93d, enter: true },
     { x: 23, z: -27, w: 3.5, d: 3.5, h: 5, color: 0xb197fc, enter: true },
     { x: 6, z: -78, w: 2.6, d: 2.6, h: 9, color: 0xfdf6ec }, // the lighthouse
+    { x: -14, z: 2, w: 9, d: 7, h: 5, color: 0xfff1c9, enter: true, lock: "mansion" }, // the mansion (for sale)
     { x: 42, z: -62, w: 4, d: 3.5, h: 3.2, color: 0xffa94d, enter: true },  // the Coconut Cove snack hut
     { x: -76, z: -63, w: 4, d: 4, h: 3.2, color: 0xc98a5b, enter: true },   // the Pine Island cabin
     { x: 64, z: 16, w: 3.5, d: 3.5, h: 6, color: 0xff9ecf }, // the Sunset Island tower
@@ -720,7 +729,7 @@ const ADVENTURE_ISLAND: LevelDef = {
         "Welcome to Adventure Island! Find every star to open the portal in the meadow.",
         "Every house in the village is open. Walk in through the door and look around!",
         "The red car is for everyone. Drive around the island, then over the causeways to Coconut Cove and Pine Island!",
-        "Sixteen friends live on these islands. Can you say hello to all of us?",
+        "Seventeen friends live on these islands. Can you say hello to all of us?",
       ],
     },
     {
@@ -769,7 +778,7 @@ const ADVENTURE_ISLAND: LevelDef = {
       ],
     },
     {
-      name: "Chef Chili", x: 45.5, y: 0.3, z: -61, outfit: 0, hat: 1, skin: 4,
+      name: "Chef Chili", x: 45.5, y: 0.3, z: -61, outfit: 0, hat: 1, skin: 4, job: "pizza",
       lines: [
         "Hi! This is my snack hut. Grab a snack out front. Pizza makes you GIANT!",
         "Ice cream makes you super fast, and cupcakes give you mega jumps. Snacks grow back!",
@@ -803,6 +812,14 @@ const ADVENTURE_ISLAND: LevelDef = {
       lines: [
         "Isn't the pink tower pretty? Bounce on the spring to get to the very top.",
         "I love your outfit! You can change it any time from the title screen.",
+      ],
+    },
+    {
+      name: "Agent Goldie", x: -9, y: 0.34, z: 7, outfit: 5, hat: 1, skin: 0,
+      sells: { id: "mansion", price: 60, what: "mansion" },
+      lines: [
+        "Enjoy your mansion! It has a sofa, a big TV and a golden trophy.",
+        "Coins you earn are saved, even when you stop playing.",
       ],
     },
     {
@@ -930,6 +947,9 @@ export class World {
   def: LevelDef = LEVELS[0];
   solids: Solid[] = [];
   private houses: House[] = [];
+  /** Ids of things the kid has bought (set by boot.ts before a level is built). */
+  owned = new Set<string>();
+  private locks = new Map<string, { gate: THREE.Group; sign: THREE.Sprite; solid: Solid }>();
 
   private portalTorus: THREE.Mesh | null = null;
   private portalDisc: THREE.Mesh | null = null;
@@ -972,6 +992,16 @@ export class World {
       if (pos.x > h.minX && pos.x < h.maxX && pos.z > h.minZ && pos.z < h.maxZ && pos.y < h.topY) return h;
     }
     return null;
+  }
+
+  /** The kid bought it: take the boards off the door. */
+  unlock(id: string): void {
+    const l = this.locks.get(id);
+    if (!l) return;
+    l.gate.removeFromParent();
+    disposeSprite(l.sign);
+    this.solids = this.solids.filter((s) => s !== l.solid);
+    this.locks.delete(id);
   }
 
   isInside(pos: THREE.Vector3): boolean {
@@ -1073,6 +1103,26 @@ export class World {
       }
       furniture(sx - 0.65, sx + 0.65, sz - 0.2, sz + 0.2, floorY + 1.5);
     }
+    // big houses get a living room: sofa and TV on the right, dining table on the left
+    if (iw >= 6) {
+      const sofaX = hw - WALL - 0.6;
+      box(room, flat(0x5cb8ff), 0.9, 0.45, 2.4, sofaX, floorY + 0.25, 0.4);
+      box(room, flat(0x4a9be0), 0.3, 0.9, 2.4, sofaX + 0.3, floorY + 0.5, 0.4);
+      furniture(sofaX - 0.45, sofaX + 0.45, -0.8, 1.6, floorY + 0.9);
+      box(room, flat(0x33323e), 1.8, 1.0, 0.1, 0.6, floorY + 1.7, -hd + WALL + 0.08, false);
+      const screen = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.85), new THREE.MeshBasicMaterial({ color: 0x9df2ff }));
+      screen.position.set(0.6, floorY + 1.7, -hd + WALL + 0.14);
+      room.add(screen);
+      const tx = -hw + WALL + 2.4, tz = 1.2;
+      box(room, flat(0xc98a5b), 1.8, 0.1, 1.1, tx, floorY + 0.75, tz);
+      for (const [ox, oz] of [[-0.75, -0.4], [0.75, -0.4], [-0.75, 0.4], [0.75, 0.4]]) box(room, flat(0x8a5a33), 0.1, 0.75, 0.1, tx + ox, floorY + 0.38, tz + oz);
+      furniture(tx - 0.9, tx + 0.9, tz - 0.55, tz + 0.55, floorY + 0.8);
+      for (const ox of [-0.5, 0.5]) box(room, flat(0xff9ecf), 0.45, 0.45, 0.45, tx + ox, floorY + 0.25, tz + 1.0);
+      // a golden trophy for the owner
+      const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.1, 0.4, 10), new THREE.MeshStandardMaterial({ color: 0xffc93c, emissive: 0x6a4a00, metalness: 0.6, roughness: 0.3 }));
+      cup.position.set(tx, floorY + 1.0, tz);
+      room.add(cup);
+    }
     // potted plant by the door
     {
       const px = hw - WALL - 0.4, pz = hd - WALL - 0.4;
@@ -1101,6 +1151,18 @@ export class World {
     solid(hw - WALL, hw, -hd, hd);
     solid(-hw, -DOORWAY / 2, hd - WALL, hd);
     solid(DOORWAY / 2, hw, hd - WALL, hd);
+    if (b.lock && !this.owned.has(b.lock)) {
+      // for sale: boards across the doorway and a sign above it
+      const gate = new THREE.Group();
+      for (const y of [0.5, 1.1, 1.7]) box(gate, doorMat, DOORWAY + 0.2, 0.22, 0.1, 0, floorY + y, hd + 0.02);
+      shell.add(gate);
+      const sign = makeTextSprite("FOR SALE", { bg: "rgba(255,71,87,0.95)", fg: "#ffffff", size: 48, height: 0.7 });
+      sign.position.set(0, doorTop + 0.7, hd + 0.3);
+      g.add(sign);
+      const blocked: Solid = { minX: b.x - DOORWAY / 2, maxX: b.x + DOORWAY / 2, minZ: b.z + hd - WALL, maxZ: b.z + hd, topY: b.h };
+      this.solids.push(blocked);
+      this.locks.set(b.lock, { gate, sign, solid: blocked });
+    }
     this.houses.push({
       shell,
       minX: b.x - hw + WALL - 0.05, maxX: b.x + hw - WALL + 0.05,
@@ -1146,6 +1208,8 @@ export class World {
     this.checkpoints = [];
     this.solids = [];
     this.houses = [];
+    for (const l of this.locks.values()) disposeSprite(l.sign);
+    this.locks.clear();
     this.starSpots = def.stars.map((s) => [...s] as [number, number, number]);
     this.slimeSpecs = def.slimes;
     this.spawn.set(def.spawn[0], def.spawn[1], def.spawn[2]);
@@ -1603,7 +1667,10 @@ export class World {
   private disposeLevel(scene: THREE.Scene): void {
     scene.remove(this.group);
     this.group.traverse((o) => {
-      if (o instanceof THREE.Mesh || o instanceof THREE.Points) {
+      if (o instanceof THREE.Sprite) {
+        o.material.map?.dispose();
+        o.material.dispose();
+      } else if (o instanceof THREE.Mesh || o instanceof THREE.Points) {
         o.geometry.dispose();
         const m = o.material;
         if (Array.isArray(m)) m.forEach((mm) => mm.dispose());

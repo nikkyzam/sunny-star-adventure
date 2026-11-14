@@ -36,7 +36,7 @@ where friends meet when someone makes a room.
 - **Go inside the houses** 🏠: the four village houses, the Pine Island cabin and the snack hut
   have open doors. Walk in and the house opens up like a dollhouse so you can see the room:
   a bed, a bookshelf, a rug, and sometimes a star, coins or someone to talk to.
-- **Talk to the villagers** 💬: walk up to one and press `F` (or the Talk button). Sixteen friends
+- **Talk to the villagers** 💬: walk up to one and press `F` (or the Talk button). Seventeen friends
   live on the islands; each has a few things to say and a small gift the first time you meet.
   Villagers only say fixed, friendly lines. There is no typed chat anywhere in the game.
 - 40 stars to find, including one on top of the lighthouse and one high in the sky.
@@ -52,6 +52,17 @@ where friends meet when someone makes a room.
   so every jump is huge: floating rocks to climb, a moon buggy with a ramp, a moon base to walk
   into, and two aliens to talk to. The Moon's rocket flies you home.
 - Friends online see your helicopter or jet, and come along when someone takes the rocket.
+
+## Coins, a job and a mansion 💰
+
+- **Coins are saved** in this browser between play sessions (the ◉ number at the top is your
+  piggy bank).
+- **Pizza delivery**: talk to Chef Chili at the snack hut on Coconut Cove. He hands you a pizza
+  for one of the villagers; a yellow beam of light marks where to go. Drive, sail or fly there
+  and talk to them: 10 coins per delivery, as often as you like.
+- Other ways to earn: coins lying around, gift boxes, meeting villagers, sinking pirate ships.
+- **The mansion** on Adventure Island is for sale. Talk to Agent Goldie outside it: 60 coins and
+  it's yours forever, with a sofa, a big TV, a dining table and a golden trophy inside.
 
 ## Ship battles 🏴‍☠️
 

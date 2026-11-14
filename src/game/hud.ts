@@ -44,6 +44,7 @@ export class Hud {
   private coins = el("hud-coins");
   private buddies = el("hud-buddies");
   private magnet = el("hud-magnet");
+  private job = el("hud-job");
   private toast = el("toast");
   private topbar = el("hud-top");
   private jumpBtn = el("btn-jump");
@@ -136,6 +137,11 @@ export class Hud {
   setMagnet(secondsLeft: number | null): void {
     this.magnet.style.display = secondsLeft !== null ? "" : "none";
     if (secondsLeft !== null) this.magnet.textContent = `🧲 ${secondsLeft}s`;
+  }
+  /** The delivery job in progress (null hides it). */
+  setJob(text: string | null): void {
+    this.job.style.display = text ? "" : "none";
+    if (text) this.job.textContent = text;
   }
   setScore(n: number): void {
     this.score.textContent = `${n}`;
