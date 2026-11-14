@@ -171,6 +171,9 @@ export class Player {
     this.jumpsLeft = 0;
     this.invuln = 2;
     this.riding = false;
+    this.glideActive = false;
+    this.coyote = 0;
+    this.jumpBuffer = 0;
     this.facing = Math.PI;
     this.group.rotation.y = this.facing;
     this.group.visible = true;
@@ -223,9 +226,12 @@ export class Player {
         this.jumpsLeft = 2;
         this.coyote = COYOTE;
         this.groundPlat = ground.plat;
-        // ride moving platforms
-        this.pos.x += ground.plat.dx;
-        this.pos.z += ground.plat.dz;
+        // ride moving platforms (re-check walls: the carry must not push the kid into a building)
+        if (ground.plat.dx !== 0 || ground.plat.dz !== 0) {
+          this.pos.x += ground.plat.dx;
+          this.pos.z += ground.plat.dz;
+          world.resolveSolids(this.pos, 0.38);
+        }
       }
     } else {
       this.onGround = false;
@@ -256,6 +262,29 @@ export class Player {
 
     this.animate(dt);
     return e;
+  }
+
+  /**
+   * Online friends: no physics, just follow the state their game sent us and animate to match.
+   * The position eases toward the target so 15 Hz updates still look smooth.
+   */
+  applyRemote(dt: number, x: number, y: number, z: number, vx: number, vy: number, vz: number,
+    onGround: boolean, glide: boolean, riding: boolean, facing: number): void {
+    const dx = x - this.pos.x, dy = y - this.pos.y, dz = z - this.pos.z;
+    if (dx * dx + dy * dy + dz * dz > 36) this.pos.set(x, y, z); // teleport / respawn: snap
+    else {
+      const k = Math.min(1, dt * 12);
+      this.pos.set(this.pos.x + dx * k, this.pos.y + dy * k, this.pos.z + dz * k);
+    }
+    this.vel.set(vx, vy, vz);
+    this.onGround = onGround;
+    this.glideActive = glide;
+    this.riding = riding;
+    if (riding) {
+      this.facing = facing;
+      this.group.rotation.y = facing;
+    }
+    this.animate(dt);
   }
 
   private animate(dt: number): void {

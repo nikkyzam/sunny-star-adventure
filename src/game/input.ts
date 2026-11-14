@@ -59,6 +59,7 @@ export class Input {
 
     on<KeyboardEvent>(window, "keydown", (e) => {
       if (e.repeat) return;
+      if (e.target instanceof HTMLInputElement) return; // typing a room code is not gameplay
       this.held.add(e.code); // all codes held (Space/Enter too — glide checks isHeld)
       this.actions.add(e.code); // e.g. "KeyE" / "Escape" / "Space" are consumed directly by code
       this.recomputeAxes();
@@ -152,8 +153,11 @@ export class Input {
         if (m2[0] === "moveX") x2 += m2[1]; else z2 += m2[1];
       }
     }
-    this.moveX = clamp(x, -1, 1);
-    this.moveZ = clamp(z, -1, 1);
+    // while the touch stick is held it owns P1's axes; a key event must not zero it
+    if (this.touchMoveId === null) {
+      this.moveX = clamp(x, -1, 1);
+      this.moveZ = clamp(z, -1, 1);
+    }
     this.move2X = clamp(x2, -1, 1);
     this.move2Z = clamp(z2, -1, 1);
   }
@@ -169,6 +173,11 @@ export class Input {
     this.yawDelta = 0;
     this.pitchDelta = 0;
     return r;
+  }
+
+  /** Drop presses nobody consumed this step, so they can't fire later in another context. */
+  clearActions(): void {
+    this.actions.clear();
   }
 
   /** Consume an instantaneous action: was this key pressed during the current frame. */

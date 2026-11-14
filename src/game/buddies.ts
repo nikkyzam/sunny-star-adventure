@@ -101,7 +101,8 @@ export class Buddies {
   active: Follower[] = [];
 
   build(defs: { type: BuddyType; x: number; y: number; z: number }[]): void {
-    // keep followers between levels, but rebuild their meshes' parent
+    // drop the previous level's sleeping buddies; keep followers between levels
+    this.group.clear();
     for (const f of this.active) this.group.add(f.group);
     this.spots = defs
       .filter((d) => !this.has(d.type)) // already-adopted buddies don't reappear

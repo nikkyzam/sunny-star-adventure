@@ -4,9 +4,10 @@
  */
 
 export type HudAction =
-  | "play" | "play2" | "continue" | "resume" | "retry" | "next" | "title" | "again" | "jump" | "mute";
+  | "play" | "play2" | "continue" | "resume" | "retry" | "next" | "title" | "again" | "jump" | "mute"
+  | "online" | "host" | "join" | "back" | "reroll" | "easy";
 
-type OverlayName = "title" | "pause" | "gameover" | "clear" | "win";
+type OverlayName = "title" | "pause" | "gameover" | "clear" | "win" | "online";
 
 const OVERLAY_IDS: Record<OverlayName, string> = {
   title: "ov-title",
@@ -14,6 +15,7 @@ const OVERLAY_IDS: Record<OverlayName, string> = {
   gameover: "ov-gameover",
   clear: "ov-clear",
   win: "ov-win",
+  online: "ov-online",
 };
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -39,6 +41,10 @@ export class Hud {
   private topbar = el("hud-top");
   private jumpBtn = el("btn-jump");
   private muteBtn = el("btn-mute");
+  private room = el("hud-room");
+  private stickerBar = el("sticker-bar");
+  private onStickerCb: ((i: number) => void) | null = null;
+  private onOutfitCb: ((i: number) => void) | null = null;
 
   constructor() {
     const bind = (elm: HTMLElement, action: HudAction) => {
@@ -110,6 +116,61 @@ export class Hud {
   setPlayingUi(playing: boolean): void {
     this.topbar.style.display = playing ? "" : "none";
     this.jumpBtn.style.display = playing ? "" : "none";
+    this.stickerBar.style.display = playing ? "" : "none";
+  }
+
+  /** Sticker buttons (built once from the preset list). */
+  buildStickers(labels: string[], cb: (i: number) => void): void {
+    this.onStickerCb = cb;
+    this.stickerBar.textContent = "";
+    labels.forEach((label, i) => {
+      const b = document.createElement("button");
+      b.className = "sticker-btn";
+      b.textContent = label;
+      b.setAttribute("aria-label", `Sticker ${i + 1}`);
+      const fn = (e: Event) => { e.preventDefault(); this.onStickerCb?.(i); };
+      b.addEventListener("click", fn);
+      this.unsub.push(() => b.removeEventListener("click", fn));
+      this.stickerBar.appendChild(b);
+    });
+  }
+
+  /** Outfit swatches on the title screen. */
+  buildOutfits(colors: number[], selected: number, cb: (i: number) => void): void {
+    this.onOutfitCb = cb;
+    const box = el("outfits");
+    box.textContent = "";
+    colors.forEach((c, i) => {
+      const b = document.createElement("button");
+      b.className = "swatch" + (i === selected ? " on" : "");
+      b.style.background = `#${c.toString(16).padStart(6, "0")}`;
+      b.setAttribute("aria-label", `Outfit ${i + 1}`);
+      const fn = (e: Event) => { e.preventDefault(); this.onOutfitCb?.(i); };
+      b.addEventListener("click", fn);
+      this.unsub.push(() => b.removeEventListener("click", fn));
+      box.appendChild(b);
+    });
+  }
+
+  setOutfit(selected: number): void {
+    el("outfits").querySelectorAll(".swatch").forEach((b, i) => b.classList.toggle("on", i === selected));
+  }
+  setKidName(name: string): void {
+    el("kid-name").textContent = `Hi, ${name}!`;
+  }
+  setEasy(on: boolean): void {
+    el("btn-easy").textContent = on ? "🧸 Easy mode: ON (hearts refill)" : "🔥 Easy mode: OFF";
+  }
+  setOnlineStatus(text: string): void {
+    el("online-status").textContent = text;
+  }
+  joinCode(): string {
+    return el<HTMLInputElement>("join-code").value;
+  }
+  /** Room code pill during online play (null hides it). */
+  setRoom(text: string | null): void {
+    this.room.style.display = text ? "" : "none";
+    if (text) this.room.textContent = text;
   }
 
   showOverlay(name: OverlayName | null): void {

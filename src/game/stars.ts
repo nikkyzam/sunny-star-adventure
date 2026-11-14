@@ -91,6 +91,20 @@ export class Stars {
     return null;
   }
 
+  /** A friend online picked up star #i. Returns its position, or null if it was already gone. */
+  takeIndex(i: number): THREE.Vector3 | null {
+    const s = this.items[i];
+    if (!s || s.taken) return null;
+    s.taken = true;
+    s.mesh.visible = false;
+    this.takenCount++;
+    return s.base;
+  }
+
+  indexOf(base: THREE.Vector3): number {
+    return this.items.findIndex((s) => s.base === base);
+  }
+
   get allCollected(): boolean {
     return this.takenCount >= this.total;
   }

@@ -1,13 +1,14 @@
 /**
  * world.ts — floating-island level construction + collision queries + ambient animation.
  *
- * Five hand-designed worlds (geometry is parametric, placed from level data):
+ * Six hand-designed worlds (geometry is parametric, placed from level data):
  *   1. Sunny Meadow        — gentle gaps, teaches jump / stars / stomp (+ bunny buddy)
  *   2. Candy Canyon        — bridges, a moving platform (+ birdie buddy, circling bird)
  *   3. Rainbow Peak        — vertical climb, springs (+ hedgehogs, turtle buddy)
  *   4. Castle in the Clouds — cloud towers, trampolines, every creature
  *   5. Toy City            — big explorable city: solid buildings, roads, a drivable car,
  *                            and a parachute tower (free glide in this world)
+ *   6. Frosty Mountain     — snowy finale: falling snow, a sliding ice bridge, a spring-launch climb
  *
  * Colliders are analytic (disc / box footprints with a top surface height) plus solid
  * wall boxes for buildings. Ground queries and wall pushes stay allocation-free.
@@ -74,6 +75,8 @@ export interface LevelDef {
   roads?: RoadDef[];
   carSpawn?: [number, number, number, number]; // x, y, z, heading
   freeGlide?: boolean;
+  /** Falling snowflakes (decorative). */
+  snow?: boolean;
 }
 
 export const LEVELS: LevelDef[] = [
@@ -359,6 +362,60 @@ export const LEVELS: LevelDef[] = [
     checkpoints: [[0, 0, 12], [0, 0.5, -34]],
     portal: [0, 0.5, -42],
   },
+  {
+    name: "Frosty Mountain",
+    sky: 0xcfe8ff, fog: 0xe6f3ff,
+    grass: 0xf7fbff, dirt: 0x9fb8d6, foliage: 0x2f7d5b,
+    flowerColors: [0x9df2ff, 0xffffff, 0xb197fc, 0xff9ecf],
+    spawn: [0, 0, 5],
+    snow: true,
+    discs: [
+      { x: 0, z: 0, r: 6, y: 0, trees: 3, flowers: 6 },
+      { x: 0, z: -12, r: 3.5, y: 0.6, flowers: 3 },
+      { x: 0, z: -27, r: 4.5, y: 1.8, trees: 2, flowers: 4, rocks: 1 },
+      { x: 8, z: -34, r: 3.5, y: 5.6, flowers: 3 },
+      { x: 0, z: -41, r: 3.5, y: 6.2, trees: 1, flowers: 3 },
+      { x: 0, z: -56, r: 6, y: 7.4, trees: 3, flowers: 7 },
+      // exploration side islands
+      { x: -8, z: -27, r: 2.5, y: 1.6, flowers: 2 },  // treasure island
+      { x: 9, z: -12, r: 2.5, y: 0.2, flowers: 2 },   // heart island
+    ],
+    bridges: [
+      { x: 0, z: -19, w: 3, d: 3, y: 1.2, move: { axis: "x", amp: 3, speed: 0.9 } },  // sliding ice floe
+      { x: 0, z: -47.5, w: 2.6, d: 6, y: 6.5 },  // walk straight on from the island before it
+    ],
+    springs: [{ x: 3, z: -29, y: 1.8, power: 18 }],
+    stars: [
+      [0, 1.2, -1], [0, 1.2, -4],
+      [0, 1.8, -12],
+      [0, 2.4, -19],
+      [0, 3.0, -26],
+      [-8, 2.8, -27],
+      [3, 6.5, -29],
+      [8, 6.8, -34],
+      [0, 7.4, -41],
+      [0, 7.7, -47.5],
+      [-2, 8.6, -55], [2, 8.6, -57],
+    ],
+    coins: [
+      [0, 1.2, -6], [0, 1.8, -10], [0, 1.8, -14],
+      [9, 1.4, -11], [9.8, 1.4, -12.8],          // heart island
+      [-1.5, 3.0, -28], [1.5, 3.0, -25],
+      [-8.8, 2.8, -26.2], [-7.2, 2.8, -27.8],    // treasure island
+      [7, 6.8, -33], [9, 6.8, -35],
+      [0, 7.4, -43], [0, 7.7, -50],
+      [3, 8.6, -54],
+    ],
+    chests: [[-8, 1.6, -27.5]],
+    hearts: [[9, 1.4, -12]],
+    magnets: [[8, 6.8, -35.5]],
+    buddies: [],
+    slimes: [{ ax: -3, az: -27, bx: 3, bz: -27, y: 1.8, speed: 1.3 }],
+    hedgehogs: [{ ax: -3, az: -56, bx: 3, bz: -56, y: 7.4, speed: 1.1 }],
+    birds: [{ cx: 4, cy: 7.6, cz: -38, r: 3, speed: 1.3 }],
+    checkpoints: [[-2, 1.8, -24.5], [-1.5, 6.2, -39.5]],
+    portal: [0, 7.4, -59.5],
+  },
 ];
 
 const RAINBOW_COLORS = [0xff5f6d, 0xffa94d, 0xffe066, 0x7ed957, 0x5cb8ff, 0xb197fc];
@@ -382,6 +439,7 @@ export class World {
   private portalTorus: THREE.Mesh | null = null;
   private portalDisc: THREE.Mesh | null = null;
   private clouds: THREE.Group[] = [];
+  private snow: THREE.Points | null = null;
   private time = 0;
 
   /** Highest platform top under (x,z) that is not above refY + step allowance. */
@@ -708,6 +766,22 @@ export class World {
       this.clouds.push(cloud);
     }
 
+    // ── Snow (decorative points that drift down and wrap around) ──
+    this.snow = null;
+    if (def.snow) {
+      const count = 900;
+      const pos = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        pos[i * 3] = (rng() - 0.5) * 70;
+        pos[i * 3 + 1] = rng() * 26 - 4;
+        pos[i * 3 + 2] = 10 - rng() * 80;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      this.snow = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.16, transparent: true, opacity: 0.9 }));
+      this.group.add(this.snow);
+    }
+
     // ── Rainbow (big, far, decorative) ──
     if (def.rainbow) {
       const rainbow = new THREE.Group();
@@ -772,12 +846,22 @@ export class World {
     for (const cp of this.checkpoints) {
       cp.flag.rotation.y = Math.sin(t * 3 + cp.pos.x) * 0.25;
     }
+    if (this.snow) {
+      const attr = this.snow.geometry.getAttribute("position") as THREE.BufferAttribute;
+      const a = attr.array as Float32Array;
+      for (let i = 0; i < a.length; i += 3) {
+        a[i + 1] -= dt * 1.4;
+        a[i] += Math.sin(t + i) * dt * 0.3;
+        if (a[i + 1] < -4) a[i + 1] = 22;
+      }
+      attr.needsUpdate = true;
+    }
   }
 
   private disposeLevel(scene: THREE.Scene): void {
     scene.remove(this.group);
     this.group.traverse((o) => {
-      if (o instanceof THREE.Mesh) {
+      if (o instanceof THREE.Mesh || o instanceof THREE.Points) {
         o.geometry.dispose();
         const m = o.material;
         if (Array.isArray(m)) m.forEach((mm) => mm.dispose());

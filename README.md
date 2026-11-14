@@ -1,13 +1,35 @@
 # Sunny Star Adventure ⭐🪂
 
 A cheerful 3D platformer for kids, playable in the browser. Guide a little adventurer across
-floating sky islands and a big Toy City — collect every golden star, adopt animal buddies,
-drive the car, and parachute off the tower!
+floating sky islands, a big Toy City and snowy Frosty Mountain — collect every golden star,
+adopt animal buddies, drive the car, parachute off the tower, and **play online with friends**!
+
+## Play with friends online 🌐
+
+No accounts and no passwords: kids play together with a **room code**.
+
+1. One kid presses **🌐 Play with friends → 🏠 Make a room**. A code like `TIGER22` appears at the top.
+2. Friends open the same game link, press **🌐 Play with friends**, type the code, and press **🚪 Join room**.
+3. Up to 6 kids explore the same world together. Stars are shared (anyone can grab one for the
+   team), and when someone jumps into the open portal, everyone moves on to the next world.
+
+To keep it kid-safe, there's **no typing chat**. Kids talk with 6 preset **stickers** (👋 ⭐ 👉 🆘 🎉 ❤️,
+keys `1`–`6` or the sticker buttons). Names are made-up fun names like "Bouncy Panda" (🎲 rolls a
+new one), never real names. Online play uses WebRTC through the free public PeerJS service. Game
+data goes directly between the players' browsers, and nothing is stored on a server.
+
+## Make it yours
+
+- **Outfit colors**: tap a color dot on the title screen.
+- **Easy mode** (on by default): running out of hearts refills them instead of ending the game,
+  so the youngest players never hit a game-over screen. Turn it off for a challenge.
+  Online play is always forgiving.
 
 ## How to play
 
 - **Objective**: collect all ★ in each world to unlock the golden portal, then jump into it.
-  5 worlds: Sunny Meadow → Candy Canyon → Rainbow Peak → Castle in the Clouds → **Toy City**.
+  6 worlds: Sunny Meadow → Candy Canyon → Rainbow Peak → Castle in the Clouds → **Toy City** →
+  **Frosty Mountain** (falling snow, a sliding ice floe and a spring-launch climb).
 - **Hearts**: you have 3 ♥ per level. Falling off an island or bumping an enemy from the side
   costs one — but **landing on an enemy squishes it** (+50) and bounces you into the air!
   Watch out for **hedgehogs**: their spikes always hurt, wait for them to retract.
@@ -36,6 +58,7 @@ drive the car, and parachute off the tower!
 | Mouse drag | Orbit camera |
 | `Esc` / `P` | Pause |
 | `M` / 🔊 button | Mute |
+| `1`–`6` / sticker buttons | Show a sticker above your kid (seen by friends online) |
 | Big ⬆ JUMP button | Jump (touch friendly) |
 
 In co-op both kids share hearts and must gather at the portal together — wander too far apart
@@ -49,8 +72,8 @@ npm run dev   # dev server (Vite)
 npm run build # production build → dist/
 ```
 
-The production build is fully static (`base: "./"`), so `dist/` can be hosted anywhere —
-including GitHub Pages.
+The production build is fully static (`base: "./"`), so `dist/` can be hosted anywhere.
+Every push to `main` deploys to **GitHub Pages** through `.github/workflows/deploy.yml`.
 
 ## Systems & techniques
 
@@ -76,3 +99,5 @@ including GitHub Pages.
 `window.__gameProbe()` (player position), `window.__perf()` (draw calls / triangles) and
 `window.__gameDebug()` (state, stars, slimes, ground sampler) exist for the automated smoke test
 (`npm run verify`, Playwright). `?level=N` in the URL starts directly on level N+1.
+`node scripts/playtest-online.mjs` plays two browsers together through a real room code
+(needs internet).

@@ -82,6 +82,9 @@ export class Car {
   /** Board the car: first free seat wins. Returns the seat taken, or null when full. */
   board(p: Player): "driver" | "passenger" | null {
     if (this.driver === p || this.passenger === p) return null;
+    // riders skip the controller, so a hurt-blink would freeze mid-flash: end it on boarding
+    p.invuln = 0;
+    p.group.visible = true;
     if (!this.driver) {
       this.driver = p;
       p.riding = true;

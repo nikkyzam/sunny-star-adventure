@@ -37,10 +37,14 @@ export default function Home() {
           <span id="hud-level" className="hud-pill level">1</span>
           <span id="hud-time" className="hud-pill">0:00</span>
           <span id="hud-score" className="hud-pill score">0</span>
+          <span id="hud-room" className="hud-pill room" style={{ display: 'none' }} />
         </div>
 
         <button id="btn-mute" className="round-btn" aria-label="Mute">🔊</button>
         <button id="btn-jump" className="jump-btn" aria-label="Jump">⬆ JUMP</button>
+
+        {/* preset stickers (no free-text chat): keys 1–6 or tap */}
+        <div id="sticker-bar" className="sticker-bar" style={{ display: 'none' }} />
 
         <div id="toast" />
         <div id="hurt-flash" />
@@ -49,10 +53,19 @@ export default function Home() {
         <div id="ov-title" className="overlay">
           <div className="panel title-panel">
             <h1 className="game-title">Sunny Star Adventure</h1>
-            <p className="tagline">Explore floating islands and Toy City — collect every ★, find treasure and animal buddies, drive the car, parachute off the tower!</p>
+            <p className="tagline">Explore floating islands, Toy City and Frosty Mountain — collect every ★, find treasure and animal buddies, drive the car, parachute off the tower!</p>
+            <div className="kid-setup">
+              <div className="name-row">
+                <span id="kid-name" className="kid-name" />
+                <button className="mini-btn" data-action="reroll" aria-label="Pick a new name">🎲</button>
+              </div>
+              <div id="outfits" className="outfits" />
+              <button id="btn-easy" className="mini-btn wide" data-action="easy" />
+            </div>
             <div className="btn-col">
               <button className="big-btn primary" data-action="play">▶ Play</button>
-              <button className="big-btn primary2" data-action="play2">👥 2 Players</button>
+              <button className="big-btn primary2" data-action="online">🌐 Play with friends</button>
+              <button className="big-btn" data-action="play2">👥 2 Players (same keyboard)</button>
               <button id="btn-continue" className="big-btn" data-action="continue" style={{ display: 'none' }}>▶ Continue</button>
             </div>
             <p id="title-best" className="best" />
@@ -60,7 +73,25 @@ export default function Home() {
               <span>🕹️ P1: WASD + Space (jump ×2, hold = glide)</span>
               <span>👥 P2: Arrows + Enter</span>
               <span>🖱️ Drag — camera · E — car · T — teleport to friend</span>
-              <span>Esc — pause · M — mute</span>
+              <span>1–6 — stickers · Esc — pause · M — mute</span>
+            </div>
+          </div>
+        </div>
+
+        {/* online: make or join a room */}
+        <div id="ov-online" className="overlay" style={{ display: 'none' }}>
+          <div className="panel">
+            <h2>Play with friends 🌐</h2>
+            <div className="btn-col">
+              <button className="big-btn primary" data-action="host">🏠 Make a room</button>
+              <p className="tagline">…or type your friend's room code:</p>
+              <input id="join-code" className="code-input" maxLength={8} placeholder="FROG42"
+                autoComplete="off" autoCapitalize="characters" spellCheck={false} />
+              <button className="big-btn primary2" data-action="join">🚪 Join room</button>
+            </div>
+            <p id="online-status" className="stat-line" />
+            <div className="btn-col">
+              <button className="big-btn" data-action="back">⬅ Back</button>
             </div>
           </div>
         </div>

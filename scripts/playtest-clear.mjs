@@ -39,6 +39,8 @@ const browser = await chromium.launch({
   args: ["--no-sandbox", "--disable-gpu-sandbox", "--use-gl=swiftshader"],
 });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+// easy mode (the default) refills hearts instead of game over — this run checks the hard path
+await page.addInitScript(() => localStorage.setItem("game.profile", JSON.stringify({ outfit: 0, name: [0, 0], easy: false })));
 const errors = [];
 page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
 page.on("pageerror", (e) => errors.push(String(e)));
