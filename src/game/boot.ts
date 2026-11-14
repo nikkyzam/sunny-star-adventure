@@ -69,6 +69,7 @@ declare global {
       car: { x: number; y: number; z: number; occupied: boolean } | null;
       boat: { x: number; y: number; z: number; occupied: boolean } | null;
       npcsMet: number;
+      inside: boolean;
       pet: { x: number; y: number; z: number } | null;
       onGround: boolean;
       slimes: { x: number; z: number }[];
@@ -240,7 +241,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     pet.setKind(i);
     pet.snapTo(players[0].pos.x, players[0].pos.y, players[0].pos.z);
     pet.cheer();
-    audio.sfx(i === 0 ? "ui" : "buddy");
+    audio.sfx(i === 0 ? "ui" : "pet");
   });
   // the last button in the sticker bar is the dance move
   hud.buildStickers([...STICKERS.map((st) => st.emoji), "💃"], (i) => (i < STICKERS.length ? sendSticker(i) : danceNow()));
@@ -335,6 +336,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
   function loadLevel(i: number): void {
     levelIdx = i;
     world.buildLevel(i, scene);
+    {
+      const d = world.def;
+      const watery = d.sea !== undefined || d.ocean === true;
+      audio.setTrack(watery ? "island" : d.snow ? "snow" : d.carSpawn ? "city" : "meadow", d.sea !== undefined);
+    }
     stars.build(world.starSpots);
     slimes.build(world.slimeSpecs);
     birds.build(world.def.birds ?? []);
@@ -643,6 +649,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     const seat = near.ride.board(near.kid);
     if (seat === "driver" && near.ride.kind === "boat") {
       audio.sfx("powerup");
+      audio.sfx("splash");
       hud.showToast("⛵ Move keys to sail · E hops out. Look for far-away islands!");
     } else if (seat === "driver") {
       audio.sfx("honk");
@@ -669,7 +676,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (!npc) return;
     const said = npcs.talk(npc);
     hud.showDialog(said.name, said.text);
-    audio.sfx("ui");
+    audio.sfx("talk");
     if (!said.firstTime) return;
     // meeting someone new: a little welcome gift
     coinCount += 3;
@@ -691,13 +698,17 @@ export function startGame(canvas: HTMLCanvasElement): void {
     players[0].dance();
     pet.cheer();
     audio.sfx("buddy");
+    if (pet.active) audio.sfx("pet");
     net?.send({ t: "d" });
   }
 
   function sendSticker(i: number): void {
     if (!sm.is("playing") || !STICKERS[i]) return;
     bubbles[0]?.show(i);
-    if (STICKERS[i].emoji === "❤️") pet.cheer();
+    if (STICKERS[i].emoji === "❤️" && pet.active) {
+      pet.cheer();
+      audio.sfx("pet");
+    }
     audio.sfx("ui");
     net?.send({ t: "e", k: i });
   }
@@ -962,6 +973,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     for (const b of bubbles) b.update(dt);
     updateRemotes(dt);
     npcs.update(dt, players[0].pos);
+    world.updateCutaway(players.map((p) => p.pos));
     {
       const k = players[0];
       pet.update(dt, elapsed, k.pos.x, petGroundY(pet.group.position.x, pet.group.position.z, k.pos.y), k.pos.z);
@@ -1066,6 +1078,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       npcs.pushOut(p.pos);
       if (wading && Math.random() < dt * 5 && Math.hypot(p.vel.x, p.vel.z) > 1) {
         particles.burst(p.pos.x, world.def.sea! + 0.05, p.pos.z, 0xdff6ff, 3, 1.5, 0.4, 3);
+        audio.sfx("splash");
       }
       if (ev.jumped) audio.sfx("jump");
       if (ev.doubleJumped) {
@@ -1499,6 +1512,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       ? { x: boat.pos.x, y: boat.pos.y, z: boat.pos.z, occupied: boat.occupied }
       : null,
     npcsMet: npcs.metCount,
+    inside: world.isInside(players[0].pos),
     pet: pet.active ? { x: pet.group.position.x, y: pet.group.position.y, z: pet.group.position.z } : null,
     carSpeed: car.speed,
     placeCar: (x: number, z: number, heading: number) => {

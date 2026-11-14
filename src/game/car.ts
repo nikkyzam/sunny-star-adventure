@@ -325,7 +325,7 @@ export class Car {
     }
 
     this.bob += dt;
-    this.pos.y = this.seaY + Math.sin(this.bob * 1.8) * 0.06;
+    this.pos.y = this.seaY + world.waveAt(this.pos.x, this.pos.z) * 0.8; // ride the swells
     this.group.rotation.set(Math.sin(this.bob * 1.3) * 0.03, this.heading, Math.sin(this.bob * 1.1) * 0.05, "YXZ");
 
     this.seat(this.driver, this.seatZ);

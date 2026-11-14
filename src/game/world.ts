@@ -53,7 +53,11 @@ export interface NpcDef {
   /** Said one after another each time the kid talks to them. */
   lines: string[];
 }
-export interface BuildingDef { x: number; z: number; w: number; d: number; h: number; color: number }
+export interface BuildingDef {
+  x: number; z: number; w: number; d: number; h: number; color: number;
+  /** A house with an open doorway on its +Z side: kids can walk in and look around. */
+  enter?: boolean;
+}
 interface RoadDef { x: number; z: number; w: number; d: number }
 
 export interface LevelDef {
@@ -594,19 +598,20 @@ const ADVENTURE_ISLAND: LevelDef = {
   ],
   bridges: [{ x: 6, z: 19, w: 2.4, d: 8, y: 0.1 }], // the dock
   buildings: [
-    { x: 17, z: -12, w: 4, d: 4, h: 3.5, color: 0xff9ecf },
-    { x: 23, z: -18, w: 4, d: 4, h: 4.2, color: 0x5cb8ff },
-    { x: 16, z: -27, w: 5, d: 4, h: 3.2, color: 0xffd93d },
-    { x: 23, z: -27, w: 3.5, d: 3.5, h: 5, color: 0xb197fc },
+    // the village: every house is open, walk in through the door
+    { x: 17, z: -12, w: 4, d: 4, h: 3.5, color: 0xff9ecf, enter: true },
+    { x: 23, z: -18, w: 4, d: 4, h: 4.2, color: 0x5cb8ff, enter: true },
+    { x: 16, z: -27, w: 5, d: 4, h: 3.2, color: 0xffd93d, enter: true },
+    { x: 23, z: -27, w: 3.5, d: 3.5, h: 5, color: 0xb197fc, enter: true },
     { x: 6, z: -78, w: 2.6, d: 2.6, h: 9, color: 0xfdf6ec }, // the lighthouse
-    { x: 42, z: -62, w: 4, d: 3.5, h: 3, color: 0xffa94d },  // the Coconut Cove snack hut
-    { x: -76, z: -63, w: 4, d: 4, h: 3.2, color: 0xc98a5b }, // the Pine Island cabin
+    { x: 42, z: -62, w: 4, d: 3.5, h: 3.2, color: 0xffa94d, enter: true },  // the Coconut Cove snack hut
+    { x: -76, z: -63, w: 4, d: 4, h: 3.2, color: 0xc98a5b, enter: true },   // the Pine Island cabin
     { x: 64, z: 16, w: 3.5, d: 3.5, h: 6, color: 0xff9ecf }, // the Sunset Island tower
   ],
   springs: [
     { x: 20, z: -18, y: 0.3, power: 18 },   // → the blue house roof
     { x: 8.6, z: -78, y: 0.2, power: 25 },  // → the top of the lighthouse
-    { x: 42, z: -59, y: 0.3, power: 16 },   // → the snack hut roof
+    { x: 45.3, z: -63.4, y: 0.3, power: 16 }, // → the snack hut roof (beside it, clear of the door)
     { x: -72.8, z: -63, y: 0.3, power: 16 }, // → the cabin roof
     { x: 64, z: 19.2, y: 0.3, power: 21 },  // → the top of the tower
   ],
@@ -619,10 +624,11 @@ const ADVENTURE_ISLAND: LevelDef = {
     [6, 1.3, 22],                                                                // the end of the dock
     [-56, 1.4, -14], [54, 1.4, -30], [56, 1.4, -27], [6, 10.6, -78], [30, 1.3, 15], // by boat
     [-38, 1.4, 36],                                                              // Shell Islet (by boat)
-    [30, 1.2, -50], [46, 1.5, -66], [50, 2.1, -60], [42, 4.5, -62],              // the causeway and Coconut Cove
+    [30, 1.2, -50], [46, 1.5, -66], [50, 2.1, -60], [42, 4.7, -62],              // the causeway and Coconut Cove
     [-40.6, 1.2, -44.4], [-66, 3.0, -58], [-66, 10, -60], [-78, 1.6, -54],        // Pine Island
     [-60, 1.6, -73], [-76, 4.7, -63], [-91, 1.2, -62],
     [58, 1.5, 26], [64, 7.5, 16], [68, 1.6, 27], [77, 1.2, 22], [62, 1.2, 37],    // Sunset Island (by boat)
+    [17, 1.5, -12.2], [23, 1.5, -27.2], [-76, 1.5, -63.3],                        // inside houses
   ],
   coins: [
     ...ring(16, 32, 0, -20, 1.0, 0.2),
@@ -635,6 +641,7 @@ const ADVENTURE_ISLAND: LevelDef = {
     [-32.2, 1.2, -39.3], [-36.4, 1.2, -41.8], [-44.8, 1.2, -46.9], [-49, 1.2, -49.4],
     ...ring(10, 21.5, -70, -62, 1.0),
     ...ring(8, 15.5, 62, 22, 1.0),
+    [15.2, 1.4, -26.6], [17, 1.4, -26.6], [42, 1.4, -61.8],                       // inside houses
   ],
   chests: [[-57.5, 0.2, -15.5], [-54.5, 0.2, -11.5], [6, 0.34, -42], [3.5, 0.2, -80], [51, 0.34, -71], [-38, 0.2, 38],
     [-81, 0.34, -71], [-60, 0.34, -73.8], [56, 0.34, 15]],
@@ -672,8 +679,17 @@ const ADVENTURE_ISLAND: LevelDef = {
       name: "Mayor Maple", x: 12.5, y: 0.3, z: -19, outfit: 4, hat: 3, skin: 3,
       lines: [
         "Welcome to Adventure Island! Find every star to open the portal in the meadow.",
+        "Every house in the village is open. Walk in through the door and look around!",
         "The red car is for everyone. Drive around the island, then over the causeways to Coconut Cove and Pine Island!",
-        "Thirteen friends live on these islands. Can you say hello to all of us?",
+        "Fourteen friends live on these islands. Can you say hello to all of us?",
+      ],
+    },
+    {
+      name: "Grandma Gigi", x: 23.6, y: 0.3, z: -18.9, outfit: 2, hat: 4, skin: 1,
+      lines: [
+        "Oh, a visitor! Come in, come in. Make yourself at home, dear.",
+        "The pink house has a star inside. So does the tall purple one!",
+        "Mind your head when you jump indoors!",
       ],
     },
     {
@@ -765,6 +781,17 @@ interface Solid {
   minX: number; maxX: number; minZ: number; maxZ: number; topY: number;
 }
 
+/** A walk-in house: its outside (`shell`) is hidden while a kid is inside, like a dollhouse. */
+interface House {
+  shell: THREE.Group;
+  minX: number; maxX: number; minZ: number; maxZ: number;
+  topY: number;
+}
+
+const WALL = 0.3;       // wall thickness of walk-in houses
+const DOORWAY = 1.8;    // doorway width
+const RUG_COLORS = [0xff6b9d, 0x5cb8ff, 0x7ed957, 0xb197fc, 0xffa94d, 0xffd93d];
+
 export class World {
   readonly group = new THREE.Group();
   platforms: Platform[] = [];
@@ -776,6 +803,7 @@ export class World {
   checkpoints: { pos: THREE.Vector3; flag: THREE.Mesh; taken: boolean }[] = [];
   def: LevelDef = LEVELS[0];
   solids: Solid[] = [];
+  private houses: House[] = [];
 
   private portalTorus: THREE.Mesh | null = null;
   private portalDisc: THREE.Mesh | null = null;
@@ -783,7 +811,13 @@ export class World {
   private snow: THREE.Points | null = null;
   private ocean: THREE.Mesh | null = null;
   private oceanY = -7;
+  private waveAmp = 0.1;
   private time = 0;
+
+  /** Height of the sea's surface above its resting level at world (x, z) — the boat rides this. */
+  waveAt(x: number, z: number): number {
+    return this.ocean ? this.waveAmp * swell(x - this.ocean.position.x, z - this.ocean.position.z, this.time) : 0;
+  }
 
   /** Highest platform top under (x,z) that is not above refY + step allowance. */
   groundAt(x: number, z: number, refY: number): GroundHit | null {
@@ -800,6 +834,149 @@ export class World {
       if (inside && (!best || p.topY > best.y)) best = { y: p.topY, plat: p };
     }
     return best;
+  }
+
+  /** The walk-in house whose room contains pos, or null. */
+  private houseAt(pos: THREE.Vector3): House | null {
+    for (const h of this.houses) {
+      if (pos.x > h.minX && pos.x < h.maxX && pos.z > h.minZ && pos.z < h.maxZ && pos.y < h.topY) return h;
+    }
+    return null;
+  }
+
+  isInside(pos: THREE.Vector3): boolean {
+    return this.houseAt(pos) !== null;
+  }
+
+  /** Open up (hide the outside of) every house that has one of these kids in it. */
+  updateCutaway(kids: THREE.Vector3[]): void {
+    for (const h of this.houses) h.shell.visible = !kids.some((k) => this.houseAt(k) === h);
+  }
+
+  /** Inside a house: the highest a kid's feet can go before their head meets the ceiling. */
+  ceilingAt(pos: THREE.Vector3): number | null {
+    const h = this.houseAt(pos);
+    return h ? h.topY - 1.95 : null;
+  }
+
+  /**
+   * A house kids can walk into: four walls with a doorway, a roof you can still land on, and a
+   * furnished room. The outside is one group (`shell`) so it can be hidden while a kid is inside;
+   * the room's own walls face inward only, so the ones between the camera and the kid vanish.
+   */
+  private buildHouse(b: BuildingDef, index: number, trimMat: THREE.Material, doorMat: THREE.Material, winMat: THREE.Material): void {
+    const floorY = this.groundAt(b.x, b.z, 2)?.y ?? 0;
+    const hw = b.w / 2, hd = b.d / 2;
+    const doorTop = floorY + 2.1;
+    const side = (b.w - DOORWAY) / 2;
+    const g = new THREE.Group();
+    const shell = new THREE.Group();
+    const room = new THREE.Group();
+    const flat = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85 });
+    const box = (parent: THREE.Object3D, mat: THREE.Material, w: number, h: number, d: number, x: number, y: number, z: number, shadow = true) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      m.position.set(x, y, z);
+      m.castShadow = shadow;
+      m.receiveShadow = true;
+      parent.add(m);
+      return m;
+    };
+
+    // ── outside ──
+    const bodyMat = flat(b.color);
+    box(shell, bodyMat, b.w, b.h, WALL, 0, b.h / 2, -hd + WALL / 2);                 // back
+    box(shell, bodyMat, WALL, b.h, b.d - 2 * WALL, -hw + WALL / 2, b.h / 2, 0);      // left
+    box(shell, bodyMat, WALL, b.h, b.d - 2 * WALL, hw - WALL / 2, b.h / 2, 0);       // right
+    box(shell, bodyMat, side, b.h, WALL, -hw + side / 2, b.h / 2, hd - WALL / 2);    // front, left of the door
+    box(shell, bodyMat, side, b.h, WALL, hw - side / 2, b.h / 2, hd - WALL / 2);     // front, right of the door
+    box(shell, bodyMat, DOORWAY, b.h - doorTop, WALL, 0, (b.h + doorTop) / 2, hd - WALL / 2); // above the door
+    box(shell, bodyMat, b.w - 0.02, 0.2, b.d - 0.02, 0, b.h - 0.1, 0);               // roof slab
+    box(shell, trimMat, b.w + 0.3, 0.25, b.d + 0.3, 0, b.h + 0.12, 0);
+    for (const sx of [-1, 1]) {
+      box(shell, doorMat, 0.14, doorTop, 0.12, (DOORWAY / 2 + 0.07) * sx, doorTop / 2, hd + 0.03, false); // door frame
+      if (side > 0.9) box(shell, winMat, Math.min(0.8, side - 0.3), 0.7, 0.06, (DOORWAY / 2 + side / 2) * sx, floorY + 1.45, hd + 0.03, false);
+    }
+    box(shell, doorMat, DOORWAY + 0.28, 0.14, 0.12, 0, doorTop + 0.07, hd + 0.03, false);
+
+    // ── inside ──
+    const iw = b.w - 2 * WALL, id = b.d - 2 * WALL, ih = b.h - 0.2 - floorY;
+    box(room, flat(0xe0b98a), iw, 0.04, id + WALL, 0, floorY + 0.02, WALL / 2, false); // floorboards (out to the doorstep)
+    const paper = new THREE.MeshStandardMaterial({ color: new THREE.Color(b.color).lerp(new THREE.Color(0xffffff), 0.6), roughness: 0.95 });
+    const wall = (w: number, h: number, x: number, y: number, z: number, ry: number) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), paper);
+      m.position.set(x, y, z);
+      m.rotation.y = ry;
+      m.receiveShadow = true;
+      room.add(m);
+    };
+    const wy = floorY + ih / 2;
+    wall(iw, ih, 0, wy, -hd + WALL + 0.01, 0);                         // back wall, faces the door
+    wall(id, ih, -hw + WALL + 0.01, wy, 0, Math.PI / 2);
+    wall(id, ih, hw - WALL - 0.01, wy, 0, -Math.PI / 2);
+    for (const sx of [-1, 1]) wall(side - WALL, ih, (DOORWAY / 2 + (side - WALL) / 2) * sx, wy, hd - WALL - 0.01, Math.PI);
+    const rug = new THREE.Mesh(new THREE.CircleGeometry(Math.min(iw, id) * 0.3, 20), flat(RUG_COLORS[index % RUG_COLORS.length]));
+    rug.rotation.x = -Math.PI / 2;
+    rug.position.set(0, floorY + 0.05, 0.1);
+    rug.receiveShadow = true;
+    room.add(rug);
+    box(room, flat(0x8a5a33), 1.4, 0.03, 0.7, 0, floorY + 0.02, hd + 0.5, false); // doormat
+
+    const furniture = (minX: number, maxX: number, minZ: number, maxZ: number, top: number) => {
+      this.solids.push({ minX: b.x + minX, maxX: b.x + maxX, minZ: b.z + minZ, maxZ: b.z + maxZ, topY: top });
+    };
+    // bed in the back-left corner
+    if (iw >= 3.2 && id >= 3.2) {
+      const bx = -hw + WALL + 0.55, bz = -hd + WALL + 0.95;
+      box(room, flat(0xc98a5b), 1.0, 0.3, 1.8, bx, floorY + 0.2, bz);
+      box(room, flat(RUG_COLORS[(index + 2) % RUG_COLORS.length]), 1.0, 0.14, 1.25, bx, floorY + 0.42, bz + 0.27);
+      box(room, flat(0xffffff), 0.8, 0.14, 0.4, bx, floorY + 0.42, bz - 0.65);
+      furniture(bx - 0.5, bx + 0.5, bz - 0.9, bz + 0.9, floorY + 0.6);
+    }
+    // bookshelf on the back wall, to the right
+    {
+      const sx = hw - WALL - 0.75, sz = -hd + WALL + 0.2;
+      box(room, flat(0x8a5a33), 1.3, 1.5, 0.36, sx, floorY + 0.75, sz);
+      for (let r = 0; r < 3; r++) {
+        for (let k = 0; k < 4; k++) {
+          box(room, flat(RUG_COLORS[(index + r + k) % RUG_COLORS.length]), 0.2, 0.3, 0.06, sx - 0.42 + k * 0.28, floorY + 0.32 + r * 0.45, sz + 0.19, false);
+        }
+      }
+      furniture(sx - 0.65, sx + 0.65, sz - 0.2, sz + 0.2, floorY + 1.5);
+    }
+    // potted plant by the door
+    {
+      const px = hw - WALL - 0.4, pz = hd - WALL - 0.4;
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.12, 0.28, 10), flat(0xd9795a));
+      pot.position.set(px, floorY + 0.14, pz);
+      room.add(pot);
+      const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), flat(0x3fa34d));
+      leaves.position.set(px, floorY + 0.55, pz);
+      room.add(leaves);
+    }
+
+    g.add(shell, room);
+    g.position.set(b.x, 0, b.z);
+    this.group.add(g);
+
+    // roof is landable, walls are solid (with a gap for the doorway)
+    this.platforms.push({
+      kind: "box", x: b.x, z: b.z, r: 0, hw: hw + 0.15, hd: hd + 0.15, topY: b.h + 0.25, spring: 0,
+      baseX: b.x, baseZ: b.z, dx: 0, dz: 0, mesh: g, squashT: 0,
+    });
+    const solid = (minX: number, maxX: number, minZ: number, maxZ: number) => {
+      this.solids.push({ minX: b.x + minX, maxX: b.x + maxX, minZ: b.z + minZ, maxZ: b.z + maxZ, topY: b.h });
+    };
+    solid(-hw, hw, -hd, -hd + WALL);
+    solid(-hw, -hw + WALL, -hd, hd);
+    solid(hw - WALL, hw, -hd, hd);
+    solid(-hw, -DOORWAY / 2, hd - WALL, hd);
+    solid(DOORWAY / 2, hw, hd - WALL, hd);
+    this.houses.push({
+      shell,
+      minX: b.x - hw + WALL - 0.05, maxX: b.x + hw - WALL + 0.05,
+      minZ: b.z - hd + WALL - 0.05, maxZ: b.z + hd - 0.05,
+      topY: b.h - 0.2,
+    });
   }
 
   /** Push a circle (player/car) out of solid building walls horizontally. */
@@ -838,6 +1015,7 @@ export class World {
     this.clouds = [];
     this.checkpoints = [];
     this.solids = [];
+    this.houses = [];
     this.starSpots = def.stars.map((s) => [...s] as [number, number, number]);
     this.slimeSpecs = def.slimes;
     this.spawn.set(def.spawn[0], def.spawn[1], def.spawn[2]);
@@ -982,7 +1160,11 @@ export class World {
       const trimMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 0.85 });
       const doorMat = new THREE.MeshStandardMaterial({ color: 0x7a4a2b, flatShading: true, roughness: 0.9 });
       const winMat = new THREE.MeshStandardMaterial({ color: 0xfff6b8, flatShading: true, roughness: 0.4 });
-      for (const b of def.buildings) {
+      for (const [bi, b] of def.buildings.entries()) {
+        if (b.enter) {
+          this.buildHouse(b, bi, trimMat, doorMat, winMat);
+          continue;
+        }
         const g = new THREE.Group();
         const bodyMat = new THREE.MeshStandardMaterial({ color: b.color, flatShading: true, roughness: 0.85 });
         const body = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), bodyMat);
@@ -1131,11 +1313,22 @@ export class World {
     this.ocean = null;
     if (def.ocean || def.sea !== undefined) {
       this.oceanY = def.sea ?? -7;
+      // a grid of flat-shaded facets whose corners rise and fall, so the water visibly rolls
+      const open = def.sea !== undefined;
+      const size = open ? 560 : 320;
+      const seg = open ? 110 : 64;
+      const geo = new THREE.PlaneGeometry(size, size, seg, seg);
+      geo.rotateX(-Math.PI / 2);
+      this.waveAmp = open ? 0.15 : 0.4;
+      // per-corner colors: crests are light, troughs are deep blue
+      geo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(geo.getAttribute("position").count * 3), 3));
       this.ocean = new THREE.Mesh(
-        new THREE.CircleGeometry(def.sea !== undefined ? 280 : 160, 48),
-        new THREE.MeshStandardMaterial({ color: 0x3fa7e0, emissive: 0x0a3a5a, roughness: 0.25, metalness: 0.1, transparent: true, opacity: 0.92 }),
+        geo,
+        new THREE.MeshStandardMaterial({
+          vertexColors: true, emissive: 0x06304e, roughness: 0.5, metalness: 0.05, flatShading: true,
+          transparent: true, opacity: 0.93,
+        }),
       );
-      this.ocean.rotation.x = -Math.PI / 2;
       this.ocean.position.set(0, this.oceanY, -25);
       this.ocean.receiveShadow = true;
       this.group.add(this.ocean);
@@ -1212,7 +1405,24 @@ export class World {
     for (const cp of this.checkpoints) {
       cp.flag.rotation.y = Math.sin(t * 3 + cp.pos.x) * 0.25;
     }
-    if (this.ocean) this.ocean.position.y = this.oceanY + Math.sin(t * 0.8) * (this.def.sea !== undefined ? 0.04 : 0.15);
+    if (this.ocean) {
+      // three sets of swells crossing each other, drifting toward the shore
+      const attr = this.ocean.geometry.getAttribute("position") as THREE.BufferAttribute;
+      const a = attr.array as Float32Array;
+      const amp = this.waveAmp;
+      const col = this.ocean.geometry.getAttribute("color") as THREE.BufferAttribute;
+      const c = col.array as Float32Array;
+      for (let i = 0; i < a.length; i += 3) {
+        const h = swell(a[i], a[i + 2], t); // about -2.2 … 2.2
+        a[i + 1] = amp * h;
+        const k = Math.min(1, Math.max(0, 0.5 + h * 0.3)); // 0 = trough, 1 = crest
+        c[i] = 0.02 + 0.2 * k;
+        c[i + 1] = 0.22 + 0.36 * k;
+        c[i + 2] = 0.55 + 0.35 * k;
+      }
+      attr.needsUpdate = true;
+      col.needsUpdate = true;
+    }
     if (this.snow) {
       const attr = this.snow.geometry.getAttribute("position") as THREE.BufferAttribute;
       const a = attr.array as Float32Array;
@@ -1236,6 +1446,11 @@ export class World {
       }
     });
   }
+}
+
+/** Three sets of swells crossing each other (about -2.2 … 2.2), in the sea mesh's local x/z. */
+function swell(x: number, z: number, t: number): number {
+  return Math.sin(x * 0.33 + t * 1.5) + 0.7 * Math.sin(z * 0.27 - t * 1.2) + 0.5 * Math.sin((x + z) * 0.14 + t * 1.9);
 }
 
 function makeTree(trunkMat: THREE.Material, foliageMat: THREE.Material, s: number): THREE.Group {

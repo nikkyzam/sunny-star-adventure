@@ -329,6 +329,13 @@ export class Player {
     this.pos.z += this.vel.z * dt;
     this.pos.y += this.vel.y * dt;
 
+    // indoors: don't jump through the ceiling
+    const ceil = world.ceilingAt(this.pos);
+    if (ceil !== null && this.pos.y > ceil) {
+      this.pos.y = ceil;
+      if (this.vel.y > 0) this.vel.y = 0;
+    }
+
     // solid walls (city buildings) push the kid out horizontally
     world.resolveSolids(this.pos, 0.38);
 

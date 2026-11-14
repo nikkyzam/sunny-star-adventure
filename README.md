@@ -33,10 +33,13 @@ where friends meet when someone makes a room.
   run aground, and the water is shallow everywhere, so nobody can drown or lose a heart at sea.
   Wading works too, it's just slow.
 - **Drive the car** 🚗 around the beach loop: cones to knock over, a boost pad and a ramp.
-- **Talk to the villagers** 💬: walk up to one and press `F` (or the Talk button). Thirteen friends
+- **Go inside the houses** 🏠: the four village houses, the Pine Island cabin and the snack hut
+  have open doors. Walk in and the house opens up like a dollhouse so you can see the room:
+  a bed, a bookshelf, a rug, and sometimes a star, coins or someone to talk to.
+- **Talk to the villagers** 💬: walk up to one and press `F` (or the Talk button). Fourteen friends
   live on the islands; each has a few things to say and a small gift the first time you meet.
   Villagers only say fixed, friendly lines. There is no typed chat anywhere in the game.
-- 35 stars to find, including one on top of the lighthouse and one high in the sky.
+- 38 stars to find, including one on top of the lighthouse and one high in the sky.
 
 ## Driving 🚗
 
@@ -131,8 +134,10 @@ Every push to `main` deploys to **GitHub Pages** through `.github/workflows/depl
 - **Interacting systems**: stars gate the portal; buddies grant verbs (vacuum / glide / heart);
   slimes, birds and hedgehogs each demand a different answer; springs chain into double jumps.
 - **Fixed-timestep loop** (60 Hz) decoupled from frame rate (`src/game/engine.ts`).
-- **Web Audio synth**: all SFX + a chiptune I–V–vi–IV music loop synthesized at runtime
-  (`src/game/audio.ts`), autoplay-compliant, persistent mute.
+- **Web Audio synth**: all sound is synthesized at runtime (`src/game/audio.ts`), no audio files.
+  Four 16-bar tunes built from chord progressions (meadow, island, city, snow), each with lead,
+  bass, chord pad and a light beat; sea-wave ambience on Adventure Island; effects for jumps,
+  coins, pets, splashes, villagers talking and more. Autoplay-compliant, persistent mute.
 - **Pooled particles** on a single additive `THREE.Points` — zero allocation in the hot loop.
 - Perf: ~150–200 draw calls / ~10–19k triangles in the busiest scenes; 60 fps measured on
   Apple M2.

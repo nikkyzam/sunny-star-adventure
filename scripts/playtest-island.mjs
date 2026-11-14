@@ -4,6 +4,7 @@
  *   A3 the pet follows the kid                   A4 Talk button + F talks to Captain Coral (gift)
  *   A5 Hop in appears on the dock, E boards      A6 sailing moves the boat out to sea
  *   A7 the boat stops at land instead of driving onto it
+ *   A10 the kid walks into a village house; it opens up, and the star inside can be collected
  *   A9 the car drives over the causeway to Pine Island
  *   A8 the causeways, Coconut Cove, Pine Island, Sunset Island and Shell Islet are land
  */
@@ -62,6 +63,24 @@ try {
     await page.keyboard.up(key);
   };
 
+  // walk in small self-correcting steps (W/A/S/D at the default camera = -z/-x/+z/+x), so a busy
+  // machine can't make the kid overshoot
+  const walkTo = async (tx, tz, r = 0.7, ms = 30000) => {
+    const t0 = Date.now();
+    while (Date.now() - t0 < ms) {
+      const d = await dbg();
+      const dx = tx - d.px, dz = tz - d.pz;
+      const dist = Math.hypot(dx, dz);
+      if (dist < r) return true;
+      const key = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? "KeyD" : "KeyA") : (dz > 0 ? "KeyS" : "KeyW");
+      await page.keyboard.down(key);
+      await page.waitForTimeout(Math.min(260, Math.max(50, dist * 55)));
+      await page.keyboard.up(key);
+      await page.waitForTimeout(40);
+    }
+    return false;
+  };
+
   // dress-up
   await page.click("[data-action=dress]");
   await page.waitForTimeout(600);
@@ -83,8 +102,7 @@ try {
   await page.screenshot({ path: join(ROOT, "verification-shots/24-island-start.png") });
 
   // walk to Captain Coral at (3.6, 15); spawn is (0, 12)
-  await hold("KeyD", (d) => d.px > 2.4);
-  await hold("KeyS", (d) => d.pz > 13.6);
+  await walkTo(2.6, 13.8, 0.8);
   await page.waitForTimeout(700);
   const d1 = await dbg();
   check("A3 the pet follows the kid", d1.pet !== null && Math.hypot(d1.pet.x - d1.px, d1.pet.z - d1.pz) < 4, JSON.stringify(d1.pet));
@@ -98,8 +116,8 @@ try {
   await page.screenshot({ path: join(ROOT, "verification-shots/25-villager.png") });
 
   // onto the dock (x 4.8–7.2, z 15–23); the boat is moored at (9.4, 21)
-  await hold("KeyD", (d) => d.px > 6.3);
-  await hold("KeyS", (d) => d.pz > 20.6);
+  await walkTo(6.1, 16.4, 0.5);
+  await walkTo(6.3, 20.6, 0.5);
   await page.waitForTimeout(300);
   const label = await page.textContent("#btn-car");
   check("A5a Hop in shows the boat", (await visible("#btn-car")) && label.includes("⛵"), label);
@@ -129,12 +147,30 @@ try {
     return [g(30, -50), g(28.2, -48.2), g(46, -66), g(-38, 36), g(-40.6, -44.4), g(-34.3, -40.5), g(-47, -48.2), g(-70, -62), g(62, 22)];
   });
   check("A8 causeways and the new islands are land", land.every((y) => y !== null && y >= 0), JSON.stringify(land));
-  // A9: drive the car over the west causeway to Pine Island
+  // A10: walk into the pink village house (17, -12; its door faces +z at z = -10)
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
   await page.click("[data-action=island]");
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
-  await hold("KeyA", (d) => d.px < -4.2); // the car is parked at (-6, 11)
+  const stars0 = (await dbg()).stars.length;
+  await walkTo(9, 6, 1);
+  await walkTo(17, -4, 1);
+  await walkTo(17, -8.4, 0.5);
+  check("A10a outside the house counts as outside", (await dbg()).inside === false);
+  await walkTo(17, -11.6, 0.6);
+  await page.waitForTimeout(500);
+  const dIn = await dbg();
+  check("A10 the kid walks through the door into the house", dIn.inside === true && Math.abs(dIn.px - 17) < 1.5, `at (${dIn.px.toFixed(1)}, ${dIn.pz.toFixed(1)})`);
+  check("A10b the star inside the house is collected", dIn.stars.length === stars0 - 1, `${stars0} → ${dIn.stars.length}`);
+  await page.screenshot({ path: join(ROOT, "verification-shots/29-inside-house.png") });
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(450);
+  check("A10c jumping indoors stays under the ceiling", (await dbg()).inside === true);
+  await walkTo(17, -8.4, 0.6);
+  await walkTo(9, 6, 1.2);
+
+  // A9: drive the car over the west causeway to Pine Island
+  await walkTo(-4.3, 11.5, 0.8); // the car is parked at (-6, 11)
   await page.keyboard.press("KeyE");
   await page.waitForTimeout(300);
   check("A9a E boards the car on the beach", (await dbg()).car.occupied === true);
