@@ -1,11 +1,14 @@
 /**
- * pickups.ts — coins (+10), heart pickups (heal 1), and star-magnet power-ups.
+ * pickups.ts — coins (+10), heart pickups (heal 1), star-magnet power-ups, and party
+ * balloons (float up for a few seconds; they grow back so kids can ride them again).
  * Shared geometries/materials; per-pickup meshes, spin & bob in update.
  */
 
 import * as THREE from "three";
 
-export type PickupType = "coin" | "heart" | "magnet";
+export type PickupType = "coin" | "heart" | "magnet" | "balloon";
+
+const BALLOON_REGROW = 6; // seconds until a popped balloon reappears
 
 interface Pickup {
   type: PickupType;
@@ -13,6 +16,7 @@ interface Pickup {
   mesh: THREE.Mesh;
   taken: boolean;
   phase: number;
+  regrow: number;
 }
 
 function makeHeartGeometry(): THREE.ExtrudeGeometry {
@@ -36,8 +40,11 @@ export class Pickups {
   private heartMat = new THREE.MeshStandardMaterial({ color: 0xff4d6d, emissive: 0x7a1030, roughness: 0.4, flatShading: true });
   private magnetGeo = new THREE.TorusGeometry(0.32, 0.13, 10, 18, Math.PI);
   private magnetMat = new THREE.MeshStandardMaterial({ color: 0xff4757, emissive: 0x5a0a12, roughness: 0.5, flatShading: true });
+  private balloonGeo = new THREE.SphereGeometry(0.42, 14, 10);
+  private balloonMats = [0xff6b9d, 0x5cb8ff, 0xffd93d].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.35 }));
 
-  build(coins: [number, number, number][], hearts: [number, number, number][], magnets: [number, number, number][]): void {
+  build(coins: [number, number, number][], hearts: [number, number, number][], magnets: [number, number, number][],
+    balloons: [number, number, number][] = []): void {
     this.group.clear();
     this.items = [];
     this.coinsTaken = 0;
@@ -45,7 +52,7 @@ export class Pickups {
       mesh.position.set(x, y, z);
       mesh.castShadow = true;
       this.group.add(mesh);
-      this.items.push({ type, base: new THREE.Vector3(x, y, z), mesh, taken: false, phase: this.items.length * 0.9 });
+      this.items.push({ type, base: new THREE.Vector3(x, y, z), mesh, taken: false, phase: this.items.length * 0.9, regrow: 0 });
     };
     for (const [x, y, z] of coins) {
       const m = new THREE.Mesh(this.coinGeo, this.coinMat);
@@ -54,17 +61,30 @@ export class Pickups {
     }
     for (const [x, y, z] of hearts) add("heart", new THREE.Mesh(this.heartGeo, this.heartMat), x, y, z);
     for (const [x, y, z] of magnets) add("magnet", new THREE.Mesh(this.magnetGeo, this.magnetMat), x, y, z);
+    balloons.forEach(([x, y, z], i) => {
+      const m = new THREE.Mesh(this.balloonGeo, this.balloonMats[i % this.balloonMats.length]);
+      m.scale.y = 1.15;
+      add("balloon", m, x, y, z);
+    });
   }
 
-  update(t: number): void {
+  update(t: number, dt = 0): void {
     for (const p of this.items) {
-      if (p.taken) continue;
+      if (p.taken) {
+        if (p.type === "balloon" && (p.regrow -= dt) <= 0) {
+          p.taken = false;
+          p.mesh.visible = true;
+        }
+        continue;
+      }
       if (p.type === "coin") {
         p.mesh.rotation.z = t * 2.6 + p.phase;
       } else if (p.type === "heart") {
         const s = 1 + Math.sin(t * 4 + p.phase) * 0.12;
         p.mesh.scale.setScalar(s);
         p.mesh.rotation.y = t * 1.6 + p.phase;
+      } else if (p.type === "balloon") {
+        p.mesh.rotation.z = Math.sin(t * 1.5 + p.phase) * 0.12;
       } else {
         p.mesh.rotation.y = t * 2 + p.phase;
         p.mesh.rotation.z = Math.PI + Math.sin(t * 2) * 0.15;
@@ -73,11 +93,14 @@ export class Pickups {
     }
   }
 
-  /** Collect the first untaken pickup (optionally of one type) within radius of pos. */
+  /**
+   * Collect the first untaken pickup (optionally of one type) within radius of pos.
+   * Balloons are only taken when asked for by type, so magnet / vacuum radii never grab them.
+   */
   collectNear(pos: THREE.Vector3, radius: number, type?: PickupType): Pickup | null {
     const r2 = radius * radius;
     for (const p of this.items) {
-      if (p.taken || (type && p.type !== type)) continue;
+      if (p.taken || (type ? p.type !== type : p.type === "balloon")) continue;
       const dx = p.mesh.position.x - pos.x;
       const dy = p.mesh.position.y - pos.y;
       const dz = p.mesh.position.z - pos.z;
@@ -85,6 +108,7 @@ export class Pickups {
         p.taken = true;
         p.mesh.visible = false;
         if (p.type === "coin") this.coinsTaken++;
+        if (p.type === "balloon") p.regrow = BALLOON_REGROW;
         return p;
       }
     }
@@ -98,5 +122,7 @@ export class Pickups {
     this.heartMat.dispose();
     this.magnetGeo.dispose();
     this.magnetMat.dispose();
+    this.balloonGeo.dispose();
+    for (const m of this.balloonMats) m.dispose();
   }
 }

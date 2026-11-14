@@ -53,13 +53,14 @@ export default function Home() {
         <div id="ov-title" className="overlay">
           <div className="panel title-panel">
             <h1 className="game-title">Sunny Star Adventure</h1>
-            <p className="tagline">Explore floating islands, Toy City and Frosty Mountain — collect every ★, find treasure and animal buddies, drive the car, parachute off the tower!</p>
+            <p className="tagline">Explore floating islands, Toy City, Frosty Mountain and Bubbly Beach — collect every ★, ride balloons, find treasure and animal buddies, drive the car, parachute off the tower!</p>
             <div className="kid-setup">
               <div className="name-row">
                 <span id="kid-name" className="kid-name" />
                 <button className="mini-btn" data-action="reroll" aria-label="Pick a new name">🎲</button>
               </div>
               <div id="outfits" className="outfits" />
+              <div id="hats" className="outfits" />
               <button id="btn-easy" className="mini-btn wide" data-action="easy" />
             </div>
             <div className="btn-col">
@@ -73,7 +74,7 @@ export default function Home() {
               <span>🕹️ P1: WASD + Space (jump ×2, hold = glide)</span>
               <span>👥 P2: Arrows + Enter</span>
               <span>🖱️ Drag — camera · E — car · T — teleport to friend</span>
-              <span>1–6 — stickers · Esc — pause · M — mute</span>
+              <span>1–6 — stickers · 7 — dance 💃 · Esc — pause · M — mute</span>
             </div>
           </div>
         </div>

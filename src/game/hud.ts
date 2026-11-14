@@ -44,7 +44,6 @@ export class Hud {
   private room = el("hud-room");
   private stickerBar = el("sticker-bar");
   private onStickerCb: ((i: number) => void) | null = null;
-  private onOutfitCb: ((i: number) => void) | null = null;
 
   constructor() {
     const bind = (elm: HTMLElement, action: HudAction) => {
@@ -135,25 +134,41 @@ export class Hud {
     });
   }
 
-  /** Outfit swatches on the title screen. */
+  /** Outfit color swatches on the title screen. */
   buildOutfits(colors: number[], selected: number, cb: (i: number) => void): void {
-    this.onOutfitCb = cb;
-    const box = el("outfits");
-    box.textContent = "";
-    colors.forEach((c, i) => {
-      const b = document.createElement("button");
-      b.className = "swatch" + (i === selected ? " on" : "");
-      b.style.background = `#${c.toString(16).padStart(6, "0")}`;
+    this.buildChoices("outfits", colors.length, selected, cb, (b, i) => {
+      b.style.background = `#${colors[i].toString(16).padStart(6, "0")}`;
       b.setAttribute("aria-label", `Outfit ${i + 1}`);
-      const fn = (e: Event) => { e.preventDefault(); this.onOutfitCb?.(i); };
-      b.addEventListener("click", fn);
-      this.unsub.push(() => b.removeEventListener("click", fn));
-      box.appendChild(b);
     });
   }
 
-  setOutfit(selected: number): void {
-    el("outfits").querySelectorAll(".swatch").forEach((b, i) => b.classList.toggle("on", i === selected));
+  /** Hat buttons on the title screen. */
+  buildHats(labels: string[], selected: number, cb: (i: number) => void): void {
+    this.buildChoices("hats", labels.length, selected, cb, (b, i) => {
+      b.textContent = labels[i];
+      b.classList.add("hat");
+      b.setAttribute("aria-label", `Hat ${i + 1}`);
+    });
+  }
+
+  /** Highlight the chosen swatch in a choice row ("outfits" / "hats"). */
+  setChoice(boxId: string, selected: number): void {
+    el(boxId).querySelectorAll(".swatch").forEach((b, i) => b.classList.toggle("on", i === selected));
+  }
+
+  private buildChoices(boxId: string, count: number, selected: number, cb: (i: number) => void,
+    decorate: (b: HTMLButtonElement, i: number) => void): void {
+    const box = el(boxId);
+    box.textContent = "";
+    for (let i = 0; i < count; i++) {
+      const b = document.createElement("button");
+      b.className = "swatch" + (i === selected ? " on" : "");
+      decorate(b, i);
+      const fn = (e: Event) => { e.preventDefault(); cb(i); };
+      b.addEventListener("click", fn);
+      this.unsub.push(() => b.removeEventListener("click", fn));
+      box.appendChild(b);
+    }
   }
   setKidName(name: string): void {
     el("kid-name").textContent = `Hi, ${name}!`;

@@ -1,8 +1,9 @@
 # Sunny Star Adventure ⭐🪂
 
 A cheerful 3D platformer for kids, playable in the browser. Guide a little adventurer across
-floating sky islands, a big Toy City and snowy Frosty Mountain — collect every golden star,
-adopt animal buddies, drive the car, parachute off the tower, and **play online with friends**!
+floating sky islands, a big Toy City, snowy Frosty Mountain and sunny Bubbly Beach — collect
+every golden star, ride party balloons, adopt animal buddies, drive the car, parachute off the
+tower, and **play online with friends**!
 
 ## Play with friends online 🌐
 
@@ -21,6 +22,8 @@ data goes directly between the players' browsers, and nothing is stored on a ser
 ## Make it yours
 
 - **Outfit colors**: tap a color dot on the title screen.
+- **Hats**: cap 🧢, crown 👑, bunny ears 🐰, wizard hat 🧙 or flower 🌸. Friends online see your hat.
+- **Dance** 💃: press `7` or the dance button. Friends online see it too.
 - **Easy mode** (on by default): running out of hearts refills them instead of ending the game,
   so the youngest players never hit a game-over screen. Turn it off for a challenge.
   Online play is always forgiving.
@@ -29,7 +32,10 @@ data goes directly between the players' browsers, and nothing is stored on a ser
 
 - **Objective**: collect all ★ in each world to unlock the golden portal, then jump into it.
   6 worlds: Sunny Meadow → Candy Canyon → Rainbow Peak → Castle in the Clouds → **Toy City** →
-  **Frosty Mountain** (falling snow, a sliding ice floe and a spring-launch climb).
+  **Frosty Mountain** (falling snow, a sliding ice floe and a spring-launch climb) →
+  **Bubbly Beach** (sandy islands over a sparkly sea, with secret sky islands).
+- **Party balloons** 🎈 (Bubbly Beach, and one on Frosty Mountain): touch one to float up for a
+  few seconds, then steer to a secret island. Balloons grow back, so you can ride again.
 - **Hearts**: you have 3 ♥ per level. Falling off an island or bumping an enemy from the side
   costs one — but **landing on an enemy squishes it** (+50) and bounces you into the air!
   Watch out for **hedgehogs**: their spikes always hurt, wait for them to retract.
@@ -59,6 +65,7 @@ data goes directly between the players' browsers, and nothing is stored on a ser
 | `Esc` / `P` | Pause |
 | `M` / 🔊 button | Mute |
 | `1`–`6` / sticker buttons | Show a sticker above your kid (seen by friends online) |
+| `7` / 💃 button | Dance |
 | Big ⬆ JUMP button | Jump (touch friendly) |
 
 In co-op both kids share hearts and must gather at the portal together — wander too far apart
@@ -100,4 +107,4 @@ Every push to `main` deploys to **GitHub Pages** through `.github/workflows/depl
 `window.__gameDebug()` (state, stars, slimes, ground sampler) exist for the automated smoke test
 (`npm run verify`, Playwright). `?level=N` in the URL starts directly on level N+1.
 `node scripts/playtest-online.mjs` plays two browsers together through a real room code
-(needs internet).
+(needs internet). `node scripts/playtest-fun.mjs` checks hats, dancing, balloons and Bubbly Beach.

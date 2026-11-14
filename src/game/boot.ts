@@ -34,7 +34,7 @@ import { Car } from "./car";
 import { Particles } from "./particles";
 import { Hud } from "./hud";
 import { storage, highScore } from "./storage";
-import { OUTFITS, loadProfile, saveProfile, rerollName, nameText, safeName, safeOutfit } from "./profile";
+import { OUTFITS, HATS, loadProfile, saveProfile, rerollName, nameText, safeName, safeOutfit, safeHat } from "./profile";
 import { STICKERS, Bubble, makeTextSprite, disposeSprite } from "./social";
 import { Net, MAX_KIDS, type NetMsg } from "./net";
 
@@ -76,6 +76,8 @@ const BUDDY_EMOJI: Record<string, string> = { bunny: "🐰", birdie: "🐦", tur
 const P2_JUMP = "Enter";
 const NET_SEND_EVERY = 4; // fixed steps between state packets (60 Hz / 4 = 15 Hz)
 const REMOTE_TIMEOUT = 6; // seconds without a packet before a friend's kid is removed
+const BALLOON_FLOAT = 3.5; // seconds a balloon carries a kid upward
+const DANCE_KEY = "Digit7";
 
 /** A friend's kid, driven by their network packets. */
 interface Remote {
@@ -86,7 +88,7 @@ interface Remote {
   level: number;
   x: number; y: number; z: number;
   vx: number; vy: number; vz: number;
-  g: boolean; gl: boolean; r: boolean; f: number;
+  g: boolean; gl: boolean; r: boolean; f: number; fl: boolean;
 }
 
 /** Untrusted number from the network: finite and inside the play space, else 0. */
@@ -189,15 +191,27 @@ export function startGame(canvas: HTMLCanvasElement): void {
   hud.buildOutfits(OUTFITS.map((o) => o.jacket), profile.outfit, (i) => {
     profile.outfit = i;
     saveProfile(profile);
-    hud.setOutfit(i);
-    if (sm.is("title")) {
-      // live preview on the title island
-      makePlayers(false);
-      players[0].respawn(world.spawn.x, world.spawn.y, world.spawn.z);
-    }
+    hud.setChoice("outfits", i);
+    previewKid();
     audio.sfx("ui");
   });
-  hud.buildStickers(STICKERS.map((st) => st.emoji), (i) => sendSticker(i));
+  hud.buildHats(HATS, profile.hat, (i) => {
+    profile.hat = i;
+    saveProfile(profile);
+    hud.setChoice("hats", i);
+    previewKid();
+    audio.sfx("ui");
+  });
+  // the last button in the sticker bar is the dance move
+  hud.buildStickers([...STICKERS.map((st) => st.emoji), "💃"], (i) => (i < STICKERS.length ? sendSticker(i) : danceNow()));
+
+  /** Live preview of a new outfit / hat on the title island. */
+  function previewKid(): void {
+    if (!sm.is("title")) return;
+    makePlayers(false);
+    players[0].respawn(world.spawn.x, world.spawn.y, world.spawn.z);
+    players[0].invuln = 0;
+  }
 
   /** Easy mode and online play refill hearts instead of ending the game. */
   function forgiving(): boolean {
@@ -234,6 +248,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       : [OUTFITS[profile.outfit]];
     for (const pal of palettes) {
       const p = new Player(pal);
+      if (players.length === 0) p.setHat(profile.hat);
       players.push(p);
       bubbles.push(new Bubble(p.group, 2.75));
       scene.add(p.group);
@@ -251,7 +266,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     slimes.build(world.slimeSpecs);
     birds.build(world.def.birds ?? []);
     hedgehogs.build(world.def.hedgehogs ?? []);
-    pickups.build(world.def.coins ?? [], world.def.hearts ?? [], world.def.magnets ?? []);
+    pickups.build(world.def.coins ?? [], world.def.hearts ?? [], world.def.magnets ?? [], world.def.balloons ?? []);
     chests.build(world.def.chests ?? []);
     buddies.build(world.def.buddies ?? []);
     world.setPortalUnlocked(false);
@@ -509,7 +524,14 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
   }
 
-  // ── Stickers ─────────────────────────────────────────────────────────────
+  // ── Stickers & dancing ───────────────────────────────────────────────────
+  function danceNow(): void {
+    if (!sm.is("playing") || players[0].riding) return;
+    players[0].dance();
+    audio.sfx("buddy");
+    net?.send({ t: "d" });
+  }
+
   function sendSticker(i: number): void {
     if (!sm.is("playing") || !STICKERS[i]) return;
     bubbles[0]?.show(i);
@@ -552,12 +574,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
         if (!r) {
           if (remotes.size >= MAX_KIDS - 1 || !from) return;
           const p = new Player(OUTFITS[safeOutfit(m.o)]);
+          p.setHat(safeHat(m.h));
           const tag = makeTextSprite(nameText(safeName(m.n)), { bg: "rgba(108,92,231,0.88)", fg: "#ffffff", size: 44, height: 0.4 });
           tag.position.y = 2.25;
           p.group.add(tag);
           p.pos.set(num(m.x), num(m.y), num(m.z));
           scene.add(p.group);
-          r = { p, tag, bubble: new Bubble(p.group, 2.75), seen: elapsed, level: -1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, g: true, gl: false, r: false, f: 0 };
+          r = { p, tag, bubble: new Bubble(p.group, 2.75), seen: elapsed, level: -1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, g: true, gl: false, r: false, f: 0, fl: false };
           remotes.set(from, r);
           roomPill();
           hud.showToast(`${nameText(safeName(m.n))} is here! 👋`);
@@ -566,9 +589,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
         r.level = num(m.L);
         r.x = num(m.x); r.y = num(m.y); r.z = num(m.z);
         r.vx = num(m.vx, 40); r.vy = num(m.vy, 40); r.vz = num(m.vz, 40);
-        r.g = m.g === true; r.gl = m.gl === true; r.r = m.r === true; r.f = num(m.f, 100);
+        r.g = m.g === true; r.gl = m.gl === true; r.r = m.r === true; r.f = num(m.f, 100); r.fl = m.fl === true;
+        r.p.setHat(safeHat(m.h));
         break;
       }
+      case "d":
+        remotes.get(from)?.p.dance();
+        break;
       case "e": {
         const k = num(m.k);
         if (Number.isInteger(k)) remotes.get(from)?.bubble.show(k);
@@ -666,7 +693,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     net.send({
       t: "s", L: levelIdx, n: profile.name, o: profile.outfit,
       x: p.pos.x, y: p.pos.y, z: p.pos.z, vx: p.vel.x, vy: p.vel.y, vz: p.vel.z,
-      g: p.onGround, gl: p.glideActive, r: p.riding, f: p.facing,
+      g: p.onGround, gl: p.glideActive, r: p.riding, f: p.facing, fl: p.floatT > 0, h: profile.hat,
     });
   }
 
@@ -677,7 +704,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
         continue;
       }
       r.p.group.visible = r.level === levelIdx && sm.is("playing", "paused");
-      if (r.p.group.visible) r.p.applyRemote(dt, r.x, r.y, r.z, r.vx, r.vy, r.vz, r.g, r.gl, r.r, r.f);
+      if (r.p.group.visible) r.p.applyRemote(dt, r.x, r.y, r.z, r.vx, r.vy, r.vz, r.g, r.gl, r.r, r.f, r.fl);
       r.bubble.update(dt);
     }
   }
@@ -719,6 +746,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     for (let k = 0; k < STICKERS.length; k++) {
       if (input.consumeAction(`Digit${k + 1}`)) sendSticker(k);
     }
+    if (input.consumeAction(DANCE_KEY)) danceNow();
 
     if (sm.is("paused")) return;
 
@@ -729,7 +757,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     slimes.update(dt, elapsed);
     birds.update(dt, elapsed);
     hedgehogs.update(dt, elapsed);
-    pickups.update(elapsed);
+    pickups.update(elapsed, dt);
     chests.update(dt);
     particles.update(dt);
     buddies.update(dt, elapsed, players[0].pos, players[0].facing);
@@ -848,7 +876,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
     // pickups (coins / hearts / magnets): players + the bunny buddy vacuum + the car
     const collectRadius = magnetTimer > 0 ? 5 : 1.5;
-    const handlePickupAt = (pos: THREE.Vector3, radius: number, type?: "coin" | "heart" | "magnet") => {
+    const handlePickupAt = (pos: THREE.Vector3, radius: number, type?: "coin" | "heart" | "magnet" | "balloon", who?: Player) => {
       scratch.copy(pos);
       scratch.y += 0.8;
       const got = pickups.collectNear(scratch, radius, type);
@@ -866,6 +894,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
         audio.sfx("powerup");
         hud.showToast("+1 ♥");
         particles.burst(got.base.x, got.base.y, got.base.z, 0xff4d6d, 14, 3, 0.7, 5);
+      } else if (got.type === "balloon") {
+        who?.startFloat(BALLOON_FLOAT);
+        audio.sfx("boing");
+        hud.showToast("Up, up and away! 🎈");
+        particles.burst(got.base.x, got.base.y, got.base.z, 0xff9ecf, 12, 2.5, 0.6, 4);
       } else {
         magnetTimer = 8;
         lastMagnetSecond = -1;
@@ -880,6 +913,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       handlePickupAt(p.pos, collectRadius);
       handlePickupAt(p.pos, collectRadius); // up to two per frame when crossing a cluster
       if (buddies.has("bunny")) handlePickupAt(p.pos, 3.2, "coin");
+      handlePickupAt(p.pos, 1.3, "balloon", p);
     }
     if (car.group.visible && car.occupied) {
       handlePickupAt(car.pos, 2.0, "coin");

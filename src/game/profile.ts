@@ -17,6 +17,9 @@ export const OUTFITS: KidPalette[] = [
   { jacket: 0xffd93d, cap: 0x5cb8ff, pants: 0x3fa34d },
 ];
 
+/** Hat choices shown on the title screen; index matches makeHat() in player.ts. */
+export const HATS = ["🧢", "👑", "🐰", "🧙", "🌸"];
+
 export const NAME_ADJ = [
   "Bouncy", "Happy", "Sunny", "Zippy", "Giggly", "Sparkly", "Brave", "Fluffy",
   "Speedy", "Jolly", "Cosmic", "Silly", "Wiggly", "Snuggly", "Super", "Twinkly",
@@ -28,6 +31,7 @@ export const NAME_ANIMAL = [
 
 export interface Profile {
   outfit: number;
+  hat: number;
   name: [number, number];
   easy: boolean;
 }
@@ -50,6 +54,10 @@ export function safeOutfit(v: unknown): number {
   return Number.isInteger(v) ? Math.abs(v as number) % OUTFITS.length : 0;
 }
 
+export function safeHat(v: unknown): number {
+  return Number.isInteger(v) ? Math.abs(v as number) % HATS.length : 0;
+}
+
 export function nameText(n: [number, number]): string {
   return `${NAME_ADJ[n[0]]} ${NAME_ANIMAL[n[1]]}`;
 }
@@ -58,6 +66,7 @@ export function loadProfile(): Profile {
   const raw = storage.get<Partial<Profile> | null>(KEY, null);
   return {
     outfit: safeOutfit(raw?.outfit),
+    hat: safeHat(raw?.hat),
     name: raw?.name ? safeName(raw.name) : randomName(),
     easy: raw?.easy ?? true, // the youngest players shouldn't meet a game-over screen by default
   };

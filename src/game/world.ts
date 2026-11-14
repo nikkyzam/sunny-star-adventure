@@ -1,14 +1,15 @@
 /**
  * world.ts — floating-island level construction + collision queries + ambient animation.
  *
- * Six hand-designed worlds (geometry is parametric, placed from level data):
+ * Seven hand-designed worlds (geometry is parametric, placed from level data):
  *   1. Sunny Meadow        — gentle gaps, teaches jump / stars / stomp (+ bunny buddy)
  *   2. Candy Canyon        — bridges, a moving platform (+ birdie buddy, circling bird)
  *   3. Rainbow Peak        — vertical climb, springs (+ hedgehogs, turtle buddy)
  *   4. Castle in the Clouds — cloud towers, trampolines, every creature
  *   5. Toy City            — big explorable city: solid buildings, roads, a drivable car,
  *                            and a parachute tower (free glide in this world)
- *   6. Frosty Mountain     — snowy finale: falling snow, a sliding ice bridge, a spring-launch climb
+ *   6. Frosty Mountain     — falling snow, a sliding ice bridge, a spring-launch climb
+ *   7. Bubbly Beach        — sandy islands over the sea; party balloons float you to secret islands
  *
  * Colliders are analytic (disc / box footprints with a top surface height) plus solid
  * wall boxes for buildings. Ground queries and wall pushes stay allocation-free.
@@ -77,6 +78,10 @@ export interface LevelDef {
   freeGlide?: boolean;
   /** Falling snowflakes (decorative). */
   snow?: boolean;
+  /** Sparkly sea far below the islands (decorative — falling in still costs a heart). */
+  ocean?: boolean;
+  /** Party balloons: touch one to float up for a few seconds. */
+  balloons?: [number, number, number][];
 }
 
 export const LEVELS: LevelDef[] = [
@@ -415,6 +420,63 @@ export const LEVELS: LevelDef[] = [
     birds: [{ cx: 4, cy: 7.6, cz: -38, r: 3, speed: 1.3 }],
     checkpoints: [[-2, 1.8, -24.5], [-1.5, 6.2, -39.5]],
     portal: [0, 7.4, -59.5],
+    balloons: [[-3, 8.6, -58]],
+  },
+  {
+    name: "Bubbly Beach",
+    sky: 0x7fd6ff, fog: 0xbdeeff,
+    grass: 0xffe6a7, dirt: 0xd9a066, foliage: 0x3fbf6b,
+    flowerColors: [0xff6b9d, 0xffd93d, 0xffffff, 0x5cb8ff],
+    spawn: [0, 0, 5],
+    ocean: true,
+    discs: [
+      { x: 0, z: 0, r: 6, y: 0, trees: 2, flowers: 6 },
+      { x: 0, z: -11, r: 3.5, y: 0.4, flowers: 3 },
+      { x: -7, z: -18, r: 3.5, y: 1.0, flowers: 3, rocks: 1 },
+      { x: 0, z: -26, r: 4.5, y: 1.4, trees: 2, flowers: 4 },
+      { x: 0, z: -36, r: 3.5, y: 2.0, flowers: 3 },
+      { x: 0, z: -52, r: 6, y: 3.0, trees: 3, flowers: 7 },
+      // secret sky islands (balloon / spring)
+      { x: 8, z: -30, r: 3.5, y: 7.5, trees: 1, flowers: 3 },
+      { x: -6, z: -57, r: 3, y: 8.3, flowers: 3 },
+      // side island
+      { x: 9, z: -12, r: 2.5, y: 0.6, flowers: 2 },
+    ],
+    bridges: [
+      { x: 0, z: -42.5, w: 3, d: 3, y: 2.4, move: { axis: "z", amp: 2, speed: 1.0 } },
+    ],
+    springs: [{ x: -3, z: -52, y: 3.0, power: 18 }],
+    balloons: [[3.5, 1.5, 2], [4, 2.6, -27], [3, 4.2, -55]],  // the first one is a practice balloon
+    stars: [
+      [0, 1.2, -1], [0, 1.2, -4],
+      [0, 1.6, -11],
+      [-7, 2.2, -18],
+      [0, 2.6, -24],
+      [8, 8.7, -30], [9.5, 8.7, -31.5],
+      [0, 3.2, -36],
+      [0, 3.6, -42.5],
+      [-2, 4.2, -51], [2, 4.2, -53],
+      [-6, 9.5, -57],
+    ],
+    coins: [
+      [0, 1.2, -7], [0, 1.6, -13],
+      [-5.5, 2.2, -17], [-8.5, 2.2, -19],
+      [-2, 2.6, -27], [2, 2.6, -25],
+      [4, 4.5, -27], [4, 6.0, -27.5],          // a balloon ride trail
+      [7, 8.7, -29], [8.5, 8.7, -28.2],
+      [9, 1.8, -11], [9.8, 1.8, -12.8],
+      [0, 4.2, -49], [-6.8, 9.5, -57.8],
+    ],
+    chests: [[7, 7.5, -31.5]],
+    hearts: [[9, 1.8, -12]],
+    magnets: [[-5.2, 9.5, -56.2]],
+    buddies: [],
+    slimes: [{ ax: -3, az: -26, bx: 3, bz: -26, y: 1.4, speed: 1.2 }],
+    hedgehogs: [{ ax: -3, az: -50, bx: 3, bz: -50, y: 3.0, speed: 1.0 }],
+    birds: [{ cx: 0, cy: 3.6, cz: -31, r: 3, speed: 1.2 }],
+    checkpoints: [[-2, 1.4, -24], [-2, 3.0, -48]],
+    portal: [0, 3.0, -56],
+    rainbow: true,
   },
 ];
 
@@ -440,6 +502,7 @@ export class World {
   private portalDisc: THREE.Mesh | null = null;
   private clouds: THREE.Group[] = [];
   private snow: THREE.Points | null = null;
+  private ocean: THREE.Mesh | null = null;
   private time = 0;
 
   /** Highest platform top under (x,z) that is not above refY + step allowance. */
@@ -782,6 +845,19 @@ export class World {
       this.group.add(this.snow);
     }
 
+    // ── Ocean (decorative sea far below) ──
+    this.ocean = null;
+    if (def.ocean) {
+      this.ocean = new THREE.Mesh(
+        new THREE.CircleGeometry(160, 48),
+        new THREE.MeshStandardMaterial({ color: 0x3fa7e0, emissive: 0x0a3a5a, roughness: 0.25, metalness: 0.1, transparent: true, opacity: 0.92 }),
+      );
+      this.ocean.rotation.x = -Math.PI / 2;
+      this.ocean.position.set(0, -7, -25);
+      this.ocean.receiveShadow = true;
+      this.group.add(this.ocean);
+    }
+
     // ── Rainbow (big, far, decorative) ──
     if (def.rainbow) {
       const rainbow = new THREE.Group();
@@ -846,6 +922,7 @@ export class World {
     for (const cp of this.checkpoints) {
       cp.flag.rotation.y = Math.sin(t * 3 + cp.pos.x) * 0.25;
     }
+    if (this.ocean) this.ocean.position.y = -7 + Math.sin(t * 0.8) * 0.15;
     if (this.snow) {
       const attr = this.snow.geometry.getAttribute("position") as THREE.BufferAttribute;
       const a = attr.array as Float32Array;

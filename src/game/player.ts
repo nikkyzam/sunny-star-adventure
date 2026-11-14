@@ -6,7 +6,8 @@
  * Movement is camera-relative: boot.ts converts input axes to a world-space wish direction.
  *
  * Forgiving kid-friendly movement: coyote time, jump buffering, double jump, and an optional
- * glide/parachute (hold jump while falling — unlocked by the birdie buddy, free in Toy City).
+ * glide/parachute (hold jump while falling — unlocked by the birdie buddy, free in Toy City),
+ * balloon float (a gentle rise for a few seconds), a dance move, and a choice of hats.
  */
 
 import * as THREE from "three";
@@ -22,6 +23,71 @@ const MAX_FALL = 28;
 const GLIDE_FALL = 2.2; // fall speed while gliding / parachuting
 const COYOTE = 0.12;
 const JUMP_BUFFER = 0.12;
+const FLOAT_RISE = 3.2;   // upward speed while holding a balloon
+const DANCE_TIME = 2;
+
+/** Hat choices (index 0 = just the cap). Order must match HATS in profile.ts. */
+function makeHat(i: number): THREE.Group | null {
+  const g = new THREE.Group();
+  const mat = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.6 });
+  if (i === 1) {
+    // crown
+    const gold = new THREE.MeshStandardMaterial({ color: 0xffc93c, emissive: 0x6a4a00, metalness: 0.5, roughness: 0.35, flatShading: true });
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.14, 10, 1, true), gold);
+    band.material.side = THREE.DoubleSide;
+    band.position.y = 1.87;
+    g.add(band);
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2;
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.13, 6), gold);
+      spike.position.set(Math.cos(a) * 0.2, 2.0, Math.sin(a) * 0.2);
+      g.add(spike);
+    }
+    const gem = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), mat(0xff4d6d));
+    gem.position.set(0, 1.88, 0.21);
+    g.add(gem);
+  } else if (i === 2) {
+    // bunny ears
+    for (const sx of [-1, 1]) {
+      const ear = new THREE.Mesh(new THREE.CapsuleGeometry(0.065, 0.3, 4, 8), mat(0xffffff));
+      ear.position.set(0.11 * sx, 2.02, -0.02);
+      ear.rotation.z = -0.18 * sx;
+      g.add(ear);
+      const inner = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.22, 4, 6), mat(0xffb3c6));
+      inner.position.set(0.11 * sx, 2.02, 0.035);
+      inner.rotation.z = -0.18 * sx;
+      g.add(inner);
+    }
+  } else if (i === 3) {
+    // wizard hat
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.04, 16), mat(0x6c5ce7));
+    brim.position.y = 1.8;
+    g.add(brim);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.62, 14), mat(0x6c5ce7));
+    cone.position.y = 2.12;
+    cone.rotation.z = 0.12;
+    g.add(cone);
+    const star = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), new THREE.MeshStandardMaterial({ color: 0xffd93d, emissive: 0x806000 }));
+    star.position.set(0.04, 2.1, 0.2);
+    g.add(star);
+  } else if (i === 4) {
+    // flower tucked on the side of the cap
+    const petalMat = mat(0xff6b9d);
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2;
+      const petal = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), petalMat);
+      petal.position.set(0.24 + Math.cos(a) * 0.07, 1.74 + Math.sin(a) * 0.07, 0.06);
+      g.add(petal);
+    }
+    const mid = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), mat(0xffd93d));
+    mid.position.set(0.24, 1.74, 0.1);
+    g.add(mid);
+  } else {
+    return null;
+  }
+  g.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+  return g;
+}
 
 export interface PlayerEvents {
   jumped: boolean;
@@ -48,6 +114,10 @@ export class Player {
   glideActive = false;
   /** Set by the car: while riding, the controller physics is skipped and boot places the kid. */
   riding = false;
+  /** Seconds of balloon float left (0 = not floating). */
+  floatT = 0;
+  /** Seconds of dance left. */
+  danceT = 0;
 
   private body = new THREE.Group();
   private armL!: THREE.Group;
@@ -55,6 +125,9 @@ export class Player {
   private legL!: THREE.Group;
   private legR!: THREE.Group;
   private canopy!: THREE.Mesh;
+  private balloon!: THREE.Group;
+  private hat: THREE.Group | null = null;
+  private hatIndex = 0;
   private groundPlat: Platform | null = null;
   private coyote = 0;
   private jumpBuffer = 0;
@@ -143,7 +216,49 @@ export class Player {
     this.canopy.visible = false;
     this.body.add(this.canopy);
 
+    // party balloon (shown while floating)
+    this.balloon = new THREE.Group();
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 10), new THREE.MeshStandardMaterial({ color: 0xff6b9d, roughness: 0.35 }));
+    ball.scale.y = 1.15;
+    ball.position.y = 2.75;
+    this.balloon.add(ball);
+    const string = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 1.0, 4), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    string.position.set(0.15, 1.9, 0);
+    string.rotation.z = 0.15;
+    this.balloon.add(string);
+    this.balloon.position.x = 0.2;
+    this.balloon.visible = false;
+    this.body.add(this.balloon);
+
     this.group.add(this.body);
+  }
+
+  /** Swap the hat (0 = cap only). */
+  setHat(i: number): void {
+    if (i === this.hatIndex) return;
+    if (this.hat) {
+      this.hat.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          (o.material as THREE.Material).dispose();
+        }
+      });
+      this.body.remove(this.hat);
+    }
+    this.hatIndex = i;
+    this.hat = makeHat(i);
+    if (this.hat) this.body.add(this.hat);
+  }
+
+  /** Grab a balloon: rise gently for a few seconds. */
+  startFloat(seconds: number): void {
+    this.floatT = seconds;
+    this.onGround = false;
+    this.glideActive = false;
+  }
+
+  dance(): void {
+    if (!this.riding) this.danceT = DANCE_TIME;
   }
 
   get pos(): THREE.Vector3 {
@@ -172,6 +287,8 @@ export class Player {
     this.invuln = 2;
     this.riding = false;
     this.glideActive = false;
+    this.floatT = 0;
+    this.danceT = 0;
     this.coyote = 0;
     this.jumpBuffer = 0;
     this.facing = Math.PI;
@@ -194,8 +311,14 @@ export class Player {
     this.vel.x += (wishX * SPEED - this.vel.x) * Math.min(1, accel * dt / SPEED);
     this.vel.z += (wishZ * SPEED - this.vel.z) * Math.min(1, accel * dt / SPEED);
 
-    // gravity (+ glide / parachute)
-    this.vel.y -= GRAVITY * dt;
+    // gravity (+ balloon float / glide / parachute)
+    if (this.floatT > 0) {
+      this.floatT -= dt;
+      this.vel.y += (FLOAT_RISE - this.vel.y) * Math.min(1, dt * 3);
+      if (this.floatT <= 0) this.jumpsLeft = Math.max(this.jumpsLeft, 1); // let go: one air jump to steer
+    } else {
+      this.vel.y -= GRAVITY * dt;
+    }
     this.glideActive = this.glideEnabled && glideHeld && !this.onGround && this.vel.y < -GLIDE_FALL;
     if (this.glideActive) this.vel.y = -GLIDE_FALL;
     if (this.vel.y < -MAX_FALL) this.vel.y = -MAX_FALL;
@@ -269,7 +392,8 @@ export class Player {
    * The position eases toward the target so 15 Hz updates still look smooth.
    */
   applyRemote(dt: number, x: number, y: number, z: number, vx: number, vy: number, vz: number,
-    onGround: boolean, glide: boolean, riding: boolean, facing: number): void {
+    onGround: boolean, glide: boolean, riding: boolean, facing: number, floating: boolean): void {
+    this.floatT = floating ? 1 : 0;
     const dx = x - this.pos.x, dy = y - this.pos.y, dz = z - this.pos.z;
     if (dx * dx + dy * dy + dz * dz > 36) this.pos.set(x, y, z); // teleport / respawn: snap
     else {
@@ -360,6 +484,22 @@ export class Player {
     }
 
     // parachute canopy
+    // dance: spin, wave both arms, bounce (overrides the pose above)
+    if (this.danceT > 0) {
+      this.danceT = Math.max(0, this.danceT - dt);
+      const k = DANCE_TIME - this.danceT;
+      const w = Math.sin(k * 12);
+      this.body.rotation.y = this.danceT > 0 ? k * 6.5 : 0;
+      this.armL.rotation.set(0, 0, 2.3 + w * 0.5);
+      this.armR.rotation.set(0, 0, -2.3 - w * 0.5);
+      this.legL.rotation.x = w * 0.4;
+      this.legR.rotation.x = -w * 0.4;
+      this.body.position.y = Math.abs(w) * 0.15;
+    }
+
+    this.balloon.visible = this.floatT > 0;
+    if (this.balloon.visible && this.danceT <= 0) this.armR.rotation.set(0, 0, -2.8); // holding the string
+    if (this.balloon.visible) this.balloon.rotation.z = Math.sin(this.runPhase + this.floatT * 3) * 0.08;
     this.canopy.visible = this.glideActive;
     if (this.glideActive) this.canopy.rotation.y += dt * 0.8;
 
