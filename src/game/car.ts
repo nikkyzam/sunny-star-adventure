@@ -145,6 +145,14 @@ export class Car {
     deck.position.y = 0.43;
     this.group.add(deck);
 
+    // a little cannon on the bow
+    const iron = new THREE.MeshStandardMaterial({ color: 0x33323e, roughness: 0.5, metalness: 0.4 });
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.17, 0.9, 10), iron);
+    barrel.rotation.x = Math.PI / 2 - 0.25;
+    barrel.position.set(0, 0.72, 1.75);
+    barrel.castShadow = true;
+    this.group.add(barrel);
+
     const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.2, 8), wood);
     mast.position.set(0, 2.0, 0.75);
     mast.castShadow = true;

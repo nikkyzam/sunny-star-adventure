@@ -53,6 +53,13 @@ where friends meet when someone makes a room.
   into, and two aliens to talk to. The Moon's rocket flies you home.
 - Friends online see your helicopter or jet, and come along when someone takes the rocket.
 
+## Ship battles 🏴‍☠️
+
+Three toy pirate ships sail in circles off Adventure Island. Board the sailboat, point it roughly
+at one, and press jump (Space or the JUMP button) to fire the cannon. The cannon aims itself at a
+ship that's ahead of you. Three hits and the ship tips over and sinks: +100 points and 5 coins.
+A new ship sails in a little later. Nobody is on board; they're toy ships.
+
 ## Food 🍕
 
 Snacks float around every world. Walk into one to eat it:

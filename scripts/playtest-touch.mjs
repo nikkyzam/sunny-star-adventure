@@ -74,7 +74,7 @@ try {
     await page.waitForTimeout(60);
     await touch("touchEnd", id);
   };
-  const dbg = () => page.evaluate(() => { const d = window.__gameDebug(); return { ...d, placeCar: undefined, groundAt: undefined }; });
+  const dbg = () => page.evaluate(() => { const d = window.__gameDebug(); return { ...d, placeCar: undefined, placeHeli: undefined, placeBoat: undefined, warp: undefined, groundAt: undefined }; });
   const shown = (sel) => page.evaluate((s) => { const e = document.querySelector(s); return !!e && getComputedStyle(e).display !== "none"; }, sel);
 
   await page.goto(`http://127.0.0.1:${port}/?level=4`, { waitUntil: "load" });

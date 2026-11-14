@@ -23,6 +23,7 @@ import * as THREE from "three";
 import { mulberry32, pick } from "./rng";
 import type { PropDefs } from "./props";
 import type { FoodDef } from "./food";
+import type { ShipDef } from "./ships";
 
 export interface Platform {
   kind: "disc" | "box";
@@ -109,6 +110,8 @@ export interface LevelDef {
   rocket?: [number, number, number];
   /** Golden hoops in the sky: x, y, z, heading. */
   rings?: [number, number, number, number][];
+  /** Toy pirate ships to sink with the sailboat's cannon: circle center x, z, radius, speed. */
+  pirates?: ShipDef[];
   /** Snacks to eat (food.ts). */
   food?: FoodDef[];
   /** Gravity multiplier (1 = normal; the Moon is 0.3). */
@@ -564,6 +567,7 @@ const ADVENTURE_ISLAND: LevelDef = {
     ["cupcake", -3, 1.0, 6], ["apple", -14, 1.3, -6], ["apple", 6, 1.3, -38], ["icecream", 28, 1.0, -22],
     ["apple", -78, 1.3, -57], ["icecream", -70, 1.3, -67], ["pizza", 60, 1.3, 20], ["cupcake", 30, 31, 3],
   ],
+  pirates: [[0, 50, 10, 0.22], [-48, 12, 8, -0.26], [46, -6, 6, 0.3]],
   heliSpawn: [13, 0, 10, Math.PI],
   jetSpawn: [-31, 0, -12, Math.PI],
   rocket: [-70, 0, -40.5],
@@ -704,6 +708,7 @@ const ADVENTURE_ISLAND: LevelDef = {
       name: "Captain Coral", x: 3.6, y: 0, z: 15, outfit: 1, hat: 0, skin: 1,
       lines: [
         "Ahoy! That's my sailboat by the dock. Hop in and sail away!",
+        "Pirate ships are sailing out there! Point my boat at one and press JUMP to fire the cannon.",
         "Sail west to Treasure Rock. I hear there are chests full of treasure!",
         "Sunset Island is east of my dock. You can only get there by boat!",
         "The lighthouse is far to the north. Sail all the way around Coconut Cove to reach it!",

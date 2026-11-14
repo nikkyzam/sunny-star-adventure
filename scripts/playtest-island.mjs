@@ -5,6 +5,7 @@
  *   A5 Hop in appears on the dock, E boards      A6 sailing moves the boat out to sea
  *   A7 the boat stops at land instead of driving onto it
  *   A10 the kid walks into a village house; it opens up, and the star inside can be collected
+ *   A11 the sailboat's cannon sinks a pirate ship
  *   A9 the car drives over the causeway to Pine Island
  *   A8 the causeways, Coconut Cove, Pine Island, Sunset Island and Shell Islet are land
  */
@@ -51,7 +52,7 @@ try {
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
-  const dbg = () => page.evaluate(() => { const d = window.__gameDebug(); return { ...d, placeCar: undefined, groundAt: undefined }; });
+  const dbg = () => page.evaluate(() => { const d = window.__gameDebug(); return { ...d, placeCar: undefined, placeHeli: undefined, placeBoat: undefined, warp: undefined, groundAt: undefined }; });
   const visible = (sel) => page.evaluate((s) => document.querySelector(s)?.style.display !== "none", sel);
   const hold = async (key, pred, ms = 8000) => {
     await page.keyboard.down(key);
@@ -132,8 +133,21 @@ try {
   check("A6 sailing moves the boat out to sea", d3.boat.z - z0 > 8 && d3.hearts === d0.hearts, `moved ${(d3.boat.z - z0).toFixed(1)}, hearts ${d3.hearts}`);
   await page.screenshot({ path: join(ROOT, "verification-shots/26-sailing.png") });
 
+  // sea battle: a pirate ship circles (0, 50) with radius 10; park facing it and fire the cannon
+  check("A11a three pirate ships are sailing", (await dbg()).shipsAfloat === 3);
+  await page.evaluate(() => window.__gameDebug().placeBoat(0, 30, 0));
+  await page.waitForTimeout(600);
+  for (let i = 0; i < 30 && (await dbg()).shipsSunk < 1; i++) {
+    await page.keyboard.press("Space");
+    await page.waitForTimeout(650);
+  }
+  const battle = await dbg();
+  check("A11 the cannon sinks a pirate ship", battle.shipsSunk >= 1 && battle.shipsAfloat === 2, `sunk=${battle.shipsSunk} afloat=${battle.shipsAfloat} coins=${battle.coins}`);
+  await page.screenshot({ path: join(ROOT, "verification-shots/36-ship-battle.png") });
+  await page.evaluate(() => window.__gameDebug().placeBoat(11, 30, Math.PI));
+  await page.waitForTimeout(400);
+
   // turn around and sail straight at the island: the boat must stop at the shore
-  await hold("KeyA", () => false, 2400);
   await hold("KeyW", () => false, 6000);
   const d4 = await dbg();
   const under = await page.evaluate(([x, z]) => window.__gameDebug().groundAt(x, z), [d4.boat.x, d4.boat.z]);

@@ -48,7 +48,7 @@ try {
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
-  const dbg = () => page.evaluate(() => { const d = window.__gameDebug(); return { ...d, placeCar: undefined, placeHeli: undefined, warp: undefined, groundAt: undefined }; });
+  const dbg = () => page.evaluate(() => { const d = window.__gameDebug(); return { ...d, placeCar: undefined, placeHeli: undefined, placeBoat: undefined, warp: undefined, groundAt: undefined }; });
   const level = () => page.evaluate(() => document.getElementById("hud-level")?.textContent ?? "");
   await page.click("[data-action=island]");
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });

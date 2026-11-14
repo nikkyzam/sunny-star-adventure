@@ -33,6 +33,7 @@ import { Buddies, BUDDY_NAMES } from "./buddies";
 import { Car, makeRocket, type RideKind } from "./car";
 import { Rings } from "./rings";
 import { Foods } from "./food";
+import { Fleet } from "./ships";
 import { Props } from "./props";
 import { Particles } from "./particles";
 import { Hud } from "./hud";
@@ -73,6 +74,9 @@ declare global {
       heli: { x: number; y: number; z: number; occupied: boolean } | null;
       rings: number;
       food: number;
+      shipsSunk: number;
+      shipsAfloat: number;
+      placeBoat: (x: number, z: number, heading: number) => void;
       big: number;
       npcsMet: number;
       inside: boolean;
@@ -177,6 +181,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   let launchT = -1; // seconds since blast-off began (-1 = on the pad)
   const rings = new Rings();
   const foods = new Foods();
+  const fleet = new Fleet();
   const props = new Props();
   const npcs = new Npcs();
   const pet = new Pet();
@@ -192,7 +197,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const blobGeo = new THREE.CircleGeometry(0.5, 20);
   const blobMat = new THREE.MeshBasicMaterial({ color: 0x1a2a1a, transparent: true, opacity: 0.28, depthWrite: false });
 
-  scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, boat.group, heli.group, jet.group, rocket, rings.group, foods.group, props.group, npcs.group, pet.group, particles.points);
+  scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, boat.group, heli.group, jet.group, rocket, rings.group, foods.group, fleet.group, props.group, npcs.group, pet.group, particles.points);
 
   // ── Run state ────────────────────────────────────────────────────────────
   let levelIdx = 0;
@@ -412,6 +417,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
     rings.build(world.def.rings ?? []);
     foods.build(world.def.food ?? []);
+    fleet.build(world.def.pirates ?? [], world.def.sea ?? 0);
 
     npcs.build(world.def.npcs ?? []);
     pet.setKind(profile.pet);
@@ -717,7 +723,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     } else if (seat === "driver" && near.ride.kind === "boat") {
       audio.sfx("powerup");
       audio.sfx("splash");
-      hud.showToast(onTouch() ? "⛵ Use the stick to sail. Look for far-away islands!" : "⛵ Move keys to sail · E hops out. Look for far-away islands!");
+      hud.showToast(onTouch() ? "⛵ Stick sails · JUMP fires the cannon at pirate ships!" : "⛵ Move keys sail · Space fires the cannon at pirate ships · E hops out");
     } else if (seat === "driver") {
       audio.sfx("honk");
       audio.engineStart();
@@ -1121,7 +1127,14 @@ export function startGame(canvas: HTMLCanvasElement): void {
       const driverIdx = Math.max(0, players.indexOf(v.driver));
       v.lift = driverIdx === 1 ? input.isHeld(P2_JUMP) : input.isHeld("Space") || hud.jumpHeld;
       // the driver's jump key makes the car hop
-      if ((driverIdx === 1 ? jump2Now : jumpNow) && v.jump(7.5)) audio.sfx("jump");
+      const pressed = driverIdx === 1 ? jump2Now : jumpNow;
+      if (pressed && v.jump(7.5)) audio.sfx("jump");
+      // the sailboat's jump key fires its cannon
+      if (pressed && v.kind === "boat" && fleet.fire(v.pos, v.heading)) {
+        audio.sfx("stomp");
+        shake = Math.max(shake, 0.2);
+        particles.burst(v.pos.x + Math.sin(v.heading) * 2.2, v.pos.y + 1.1, v.pos.z + Math.cos(v.heading) * 2.2, 0xffffff, 8, 3, 0.4, 2);
+      }
       const a = axesOf(driverIdx);
       // camera-relative wish → ride-local: forward component accelerates, lateral steers
       const cfX = Math.sin(v.heading), cfZ = Math.cos(v.heading);
@@ -1401,6 +1414,30 @@ export function startGame(canvas: HTMLCanvasElement): void {
       if (e) audio.engineSet(Math.abs(e.speed) / (e.kind === "jet" ? 26 : 13) + (e.flies && e.inAir ? 0.5 : 0));
     }
 
+    // sea battles: cannonballs, hits and sinking pirate ships
+    for (const e of fleet.update(dt, elapsed)) {
+      if (e.type === "splash") {
+        particles.burst(e.x, e.y + 0.1, e.z, 0xdff6ff, 10, 4, 0.6, 6);
+        audio.sfx("splash");
+      } else if (e.type === "hit") {
+        score += 20;
+        hud.setScore(score);
+        audio.sfx("stomp");
+        shake = Math.max(shake, 0.25);
+        hud.showToast("💥 Hit! Keep firing!");
+        particles.burst(e.x, e.y, e.z, 0xffa94d, 18, 5, 0.7, 6);
+      } else {
+        score += 100;
+        coinCount += 5;
+        hud.setScore(score);
+        hud.setCoins(coinCount);
+        audio.sfx("chest");
+        shake = Math.max(shake, 0.5);
+        hud.showToast("🏴‍☠️ You sank a pirate ship! +100 and 5 coins");
+        particles.burst(e.x, e.y, e.z, 0xffd93d, 40, 7, 1.2, 5);
+      }
+    }
+
     // snacks: eat one for a few seconds of something silly
     foods.update(elapsed, dt);
     for (const p of players) {
@@ -1657,6 +1694,14 @@ export function startGame(canvas: HTMLCanvasElement): void {
     heli: heli.group.visible ? { x: heli.pos.x, y: heli.pos.y, z: heli.pos.z, occupied: heli.occupied } : null,
     rings: rings.passed,
     food: foods.items.filter((f) => !f.taken).length,
+    shipsSunk: fleet.sunk,
+    shipsAfloat: fleet.afloat,
+    placeBoat: (x: number, z: number, heading: number) => {
+      boat.pos.set(x, boat.seaY, z);
+      boat.heading = heading;
+      boat.speed = 0;
+      camYaw = heading + Math.PI;
+    },
     big: players[0].group.scale.x,
     boat: boat.group.visible
       ? { x: boat.pos.x, y: boat.pos.y, z: boat.pos.z, occupied: boat.occupied }
@@ -1703,6 +1748,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       stars.dispose();
       pickups.dispose();
       rings.dispose();
+      fleet.dispose();
       blobGeo.dispose();
       blobMat.dispose();
       scene.traverse((o) => {
