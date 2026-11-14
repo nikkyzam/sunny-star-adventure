@@ -520,7 +520,12 @@ function ring(n: number, r: number, cx: number, cz: number, y: number, phase = 0
 
 const SAND = 0xffe6a7;
 
-/** Adventure Island: the middle of the island is (0, -20); the beach ring is 28–36 from it. */
+/**
+ * Adventure Island: the middle of the main island is (0, -20); its beach ring is 28–36 from it.
+ * Coconut Cove is a second island to the north-east, middle (46, -66), joined by a sandy causeway.
+ * Pine Island is the big one to the north-west, middle (-70, -62), also joined by a causeway.
+ * Sunset Island lies to the south-east, middle (62, 22), and can only be reached by boat.
+ */
 const ADVENTURE_ISLAND: LevelDef = {
   name: "Adventure Island",
   sky: 0x8fd8ff, fog: 0xc4ecff,
@@ -551,6 +556,41 @@ const ADVENTURE_ISLAND: LevelDef = {
     { x: 54, z: -30, r: 6, y: 0.2, trees: 3, flowers: 4, color: SAND },  // Palm Cay
     { x: 6, z: -78, r: 5.5, y: 0.2, rocks: 2, color: SAND },             // Lighthouse Rock
     { x: 30, z: 15, r: 3, y: 0.1, color: SAND },                         // the sandbar
+    { x: -38, z: 36, r: 5.5, y: 0.2, trees: 2, rocks: 1, color: SAND },  // Shell Islet
+    // the causeway: overlapping sand discs, wide enough for the car
+    { x: 26.5, z: -46.5, r: 3.5, y: 0, color: SAND },
+    { x: 30, z: -50, r: 3.5, y: 0, color: SAND },
+    { x: 33.5, z: -53.5, r: 3.5, y: 0, color: SAND },
+    // Coconut Cove
+    { x: 46, z: -66, r: 17, y: 0, color: SAND },
+    { x: 46, z: -66, r: 12.5, y: 0.3, flowers: 12, rocks: 2 },
+    { x: 51, z: -71, r: 4.5, y: 0.34, trees: 5, flowers: 2 },
+    { x: 40, z: -72, r: 3.5, y: 0.34, trees: 3 },
+    { x: 50, z: -60, r: 4, y: 0.6, flowers: 2 },
+    { x: 50, z: -60, r: 2.6, y: 0.9 },
+    // the west causeway to Pine Island
+    { x: -32.2, z: -39.3, r: 3.5, y: 0, color: SAND },
+    { x: -36.4, z: -41.8, r: 3.5, y: 0, color: SAND },
+    { x: -40.6, z: -44.4, r: 3.5, y: 0, color: SAND },
+    { x: -44.8, z: -46.9, r: 3.5, y: 0, color: SAND },
+    { x: -49, z: -49.4, r: 3.5, y: 0, color: SAND },
+    // Pine Island: forests, a cabin, and Pine Peak (terraces you can walk up)
+    { x: -70, z: -62, r: 24, y: 0, color: SAND },
+    { x: -70, z: -62, r: 19, y: 0.3, flowers: 14, rocks: 4 },
+    { x: -78, z: -54, r: 6, y: 0.34, trees: 7, flowers: 3 },
+    { x: -60, z: -73, r: 4, y: 0.34, trees: 5, flowers: 2 },
+    { x: -81, z: -71, r: 4.5, y: 0.34, trees: 5 },
+    { x: -66, z: -60, r: 6.5, y: 0.6, flowers: 3 },
+    { x: -66, z: -60, r: 5.3, y: 0.9 },
+    { x: -66, z: -60, r: 4.2, y: 1.2, rocks: 1 },
+    { x: -66, z: -60, r: 3.2, y: 1.5 },
+    { x: -66, z: -60, r: 2.3, y: 1.8 },
+    { x: -66, z: -60, r: 1.5, y: 2.1 },
+    // Sunset Island (boat only)
+    { x: 62, z: 22, r: 18, y: 0, color: SAND },
+    { x: 62, z: 22, r: 13, y: 0.3, flowers: 12, rocks: 2 },
+    { x: 68, z: 27, r: 4.5, y: 0.34, trees: 5 },
+    { x: 56, z: 16, r: 4, y: 0.34, trees: 4, flowers: 2 },
   ],
   bridges: [{ x: 6, z: 19, w: 2.4, d: 8, y: 0.1 }], // the dock
   buildings: [
@@ -559,12 +599,18 @@ const ADVENTURE_ISLAND: LevelDef = {
     { x: 16, z: -27, w: 5, d: 4, h: 3.2, color: 0xffd93d },
     { x: 23, z: -27, w: 3.5, d: 3.5, h: 5, color: 0xb197fc },
     { x: 6, z: -78, w: 2.6, d: 2.6, h: 9, color: 0xfdf6ec }, // the lighthouse
+    { x: 42, z: -62, w: 4, d: 3.5, h: 3, color: 0xffa94d },  // the Coconut Cove snack hut
+    { x: -76, z: -63, w: 4, d: 4, h: 3.2, color: 0xc98a5b }, // the Pine Island cabin
+    { x: 64, z: 16, w: 3.5, d: 3.5, h: 6, color: 0xff9ecf }, // the Sunset Island tower
   ],
   springs: [
     { x: 20, z: -18, y: 0.3, power: 18 },   // → the blue house roof
     { x: 8.6, z: -78, y: 0.2, power: 25 },  // → the top of the lighthouse
+    { x: 42, z: -59, y: 0.3, power: 16 },   // → the snack hut roof
+    { x: -72.8, z: -63, y: 0.3, power: 16 }, // → the cabin roof
+    { x: 64, z: 19.2, y: 0.3, power: 21 },  // → the top of the tower
   ],
-  balloons: [[-12, 3.0, -32], [52, 1.6, -32]],
+  balloons: [[-12, 3.0, -32], [52, 1.6, -32], [-66, 3.3, -60]],
   stars: [
     [0, 1.2, 9], [20, 1.2, 6], [33, 1.2, -20], [-33, 1.2, -20], [0, 1.2, -54],   // around the beach
     [14, 1.5, -21], [23, 5.7, -18], [27, 1.5, -23],                               // the village
@@ -572,6 +618,11 @@ const ADVENTURE_ISLAND: LevelDef = {
     [-12, 3.0, -30.5], [-12, 9.5, -32],                                           // Lookout Hill and the sky above it
     [6, 1.3, 22],                                                                // the end of the dock
     [-56, 1.4, -14], [54, 1.4, -30], [56, 1.4, -27], [6, 10.6, -78], [30, 1.3, 15], // by boat
+    [-38, 1.4, 36],                                                              // Shell Islet (by boat)
+    [30, 1.2, -50], [46, 1.5, -66], [50, 2.1, -60], [42, 4.5, -62],              // the causeway and Coconut Cove
+    [-40.6, 1.2, -44.4], [-66, 3.0, -58], [-66, 10, -60], [-78, 1.6, -54],        // Pine Island
+    [-60, 1.6, -73], [-76, 4.7, -63], [-91, 1.2, -62],
+    [58, 1.5, 26], [64, 7.5, 16], [68, 1.6, 27], [77, 1.2, 22], [62, 1.2, 37],    // Sunset Island (by boat)
   ],
   coins: [
     ...ring(16, 32, 0, -20, 1.0, 0.2),
@@ -579,24 +630,33 @@ const ADVENTURE_ISLAND: LevelDef = {
     [10, 1.3, -18], [19, 1.3, -22], [20, 1.3, -14],
     [-8, 1.6, -28], [-10, 2.2, -30],
     [-55, 1.4, -16], [-57.5, 1.4, -12.5], [52.5, 1.4, -28], [4, 1.4, -75.5], [8, 1.4, -80.5],
+    [26.5, 1.2, -46.5], [33.5, 1.2, -53.5], [44, 1.5, -70], [48, 1.5, -68], [52, 1.5, -56],
+    [-37, 1.4, 34], [-39.5, 1.4, 37.5],
+    [-32.2, 1.2, -39.3], [-36.4, 1.2, -41.8], [-44.8, 1.2, -46.9], [-49, 1.2, -49.4],
+    ...ring(10, 21.5, -70, -62, 1.0),
+    ...ring(8, 15.5, 62, 22, 1.0),
   ],
-  chests: [[-57.5, 0.2, -15.5], [-54.5, 0.2, -11.5], [6, 0.34, -42], [3.5, 0.2, -80]],
-  hearts: [[55, 1.4, -32.5]],
+  chests: [[-57.5, 0.2, -15.5], [-54.5, 0.2, -11.5], [6, 0.34, -42], [3.5, 0.2, -80], [51, 0.34, -71], [-38, 0.2, 38],
+    [-81, 0.34, -71], [-60, 0.34, -73.8], [56, 0.34, 15]],
+  hearts: [[55, 1.4, -32.5], [70, 1.5, 18]],
   magnets: [[-24, 1.6, -18]],
   buddies: [],
   slimes: [
     { ax: -6, az: -14, bx: 6, bz: -14, y: 0.3, speed: 1.1 },
     { ax: -2, az: -47, bx: 9, bz: -47, y: 0.3, speed: 1.2 },
+    { ax: 42, az: -67.5, bx: 49, bz: -67.5, y: 0.3, speed: 1.1 },
+    { ax: -74, az: -50, bx: -66, bz: -50, y: 0.34, speed: 1.2 },
   ],
-  checkpoints: [[2.5, 0, 10.5], [12, 0.3, -15], [-6, 0.3, -24]],
+  checkpoints: [[2.5, 0, 10.5], [12, 0.3, -15], [-6, 0.3, -24], [35, 0, -55], [-49.5, 0, -48], [47.5, 0, 23]],
   portal: [0, 0.3, -20],
   props: {
     // the beach loop is the car's race track
-    cones: [[20.6, 0, 4.5], [22.6, 0, 2.6], [24.5, 0, 0.6], [-22, 0, 3], [-24, 0, 1]],
-    boxes: [[10, 0.3, -24], [-18, 0.3, -14], [30, 0, -34], [-30, 0, -34], [0, 0, -53], [-56, 0.2, -17]],
-    balls: [[3.5, 0, 9], [12, 0.3, -17]],
+    cones: [[20.6, 0, 4.5], [22.6, 0, 2.6], [24.5, 0, 0.6], [-22, 0, 3], [-24, 0, 1], [-52, 0, -58], [-53, 0, -61]],
+    boxes: [[10, 0.3, -24], [-18, 0.3, -14], [30, 0, -34], [-30, 0, -34], [0, 0, -53], [-56, 0.2, -17],
+      [48, 0.3, -63], [33, 0, -70], [-70, 0.3, -72], [-58, 0.3, -58], [62, 0.3, 28]],
+    balls: [[3.5, 0, 9], [12, 0.3, -17], [47, 0.3, -64.5], [-70, 0.3, -52], [58, 0.3, 20]],
     boosts: [[30.1, 0, -9.1, 2.79]],          // on the east beach, pointing north along the shore
-    ramps: [[0, 0, -52, -Math.PI / 2]],       // on the north beach
+    ramps: [[0, 0, -52, -Math.PI / 2], [-70, 0, -84.5, -Math.PI / 2]], // north beach; Pine Island's north beach
   },
   npcs: [
     {
@@ -604,15 +664,16 @@ const ADVENTURE_ISLAND: LevelDef = {
       lines: [
         "Ahoy! That's my sailboat by the dock. Hop in and sail away!",
         "Sail west to Treasure Rock. I hear there are chests full of treasure!",
-        "The lighthouse is far to the north. Just follow the coast!",
+        "Sunset Island is east of my dock. You can only get there by boat!",
+        "The lighthouse is far to the north. Sail all the way around Coconut Cove to reach it!",
       ],
     },
     {
       name: "Mayor Maple", x: 12.5, y: 0.3, z: -19, outfit: 4, hat: 3, skin: 3,
       lines: [
         "Welcome to Adventure Island! Find every star to open the portal in the meadow.",
-        "The red car on the beach is for everyone. Drive all the way around the island!",
-        "Six friends live on these islands. Can you say hello to all of us?",
+        "The red car is for everyone. Drive around the island, then over the causeways to Coconut Cove and Pine Island!",
+        "Thirteen friends live on these islands. Can you say hello to all of us?",
       ],
     },
     {
@@ -643,6 +704,55 @@ const ADVENTURE_ISLAND: LevelDef = {
       lines: [
         "You sailed all this way! Bounce on the spring to reach the top of my lighthouse.",
         "From the top you can see every island. There's a star up there too!",
+      ],
+    },
+    {
+      name: "Surfer Sky", x: 36, y: 0, z: -57, outfit: 1, hat: 4, skin: 2,
+      lines: [
+        "Welcome to Coconut Cove! You can walk or drive here over the sandy causeway.",
+        "Climb the little hill for a star, and look inside the forest for treasure!",
+      ],
+    },
+    {
+      name: "Chef Chili", x: 45.5, y: 0.3, z: -61, outfit: 0, hat: 1, skin: 4,
+      lines: [
+        "Hi! This is my snack hut. Bounce on the spring to reach the star on my roof!",
+        "Kick the big ball around the meadow. Your pet will chase after you!",
+      ],
+    },
+    {
+      name: "Explorer Eli", x: -51.5, y: 0, z: -51, outfit: 3, hat: 0, skin: 3,
+      lines: [
+        "This is Pine Island, the biggest forest around. Two treasure chests are hiding in the trees!",
+        "Walk up Pine Peak and grab the balloon. There's a star high in the sky!",
+      ],
+    },
+    {
+      name: "Camper Cleo", x: -72, y: 0.3, z: -66, outfit: 5, hat: 2, skin: 1,
+      lines: [
+        "Welcome to my cabin! The spring will bounce you up to the roof.",
+        "Drive the car over here and try the ramp on the north beach!",
+      ],
+    },
+    {
+      name: "Fisher Finn", x: 46.5, y: 0, z: 20, outfit: 1, hat: 0, skin: 4,
+      lines: [
+        "Ahoy, sailor! Welcome to Sunset Island. Nobody can drive here, only boats!",
+        "Stars hide on every beach of this island. Walk all the way around!",
+      ],
+    },
+    {
+      name: "Artist Ari", x: 60, y: 0.3, z: 24, outfit: 2, hat: 4, skin: 2,
+      lines: [
+        "Isn't the pink tower pretty? Bounce on the spring to get to the very top.",
+        "I love your outfit! You can change it any time from the title screen.",
+      ],
+    },
+    {
+      name: "Diver Dot", x: -36.5, y: 0.2, z: 34.5, outfit: 2, hat: 0, skin: 0,
+      lines: [
+        "You found Shell Islet! Not many sailors come this far south.",
+        "There's a treasure chest behind me. It's all yours!",
       ],
     },
   ],
@@ -736,7 +846,7 @@ export class World {
 
     scene.background = new THREE.Color(def.sky);
     // open-sea levels need to see far islets
-    scene.fog = def.sea !== undefined ? new THREE.Fog(def.fog, 70, 190) : new THREE.Fog(def.fog, 38, 110);
+    scene.fog = def.sea !== undefined ? new THREE.Fog(def.fog, 90, 270) : new THREE.Fog(def.fog, 38, 110);
 
     const grassMat = new THREE.MeshStandardMaterial({ color: def.grass, flatShading: true, roughness: 0.9 });
     const dirtMat = new THREE.MeshStandardMaterial({ color: def.dirt, flatShading: true, roughness: 1 });
@@ -1022,7 +1132,7 @@ export class World {
     if (def.ocean || def.sea !== undefined) {
       this.oceanY = def.sea ?? -7;
       this.ocean = new THREE.Mesh(
-        new THREE.CircleGeometry(160, 48),
+        new THREE.CircleGeometry(def.sea !== undefined ? 280 : 160, 48),
         new THREE.MeshStandardMaterial({ color: 0x3fa7e0, emissive: 0x0a3a5a, roughness: 0.25, metalness: 0.1, transparent: true, opacity: 0.92 }),
       );
       this.ocean.rotation.x = -Math.PI / 2;

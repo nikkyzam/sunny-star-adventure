@@ -127,7 +127,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 300);
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 600);
 
   const hemi = new THREE.HemisphereLight(0xffffff, 0x88aa66, 0.85);
   scene.add(hemi);

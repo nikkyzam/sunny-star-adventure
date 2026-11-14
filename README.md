@@ -24,16 +24,19 @@ data goes directly between the players' browsers, and nothing is stored on a ser
 The eighth world is one big open island you can reach straight from the title screen. It's also
 where friends meet when someone makes a room.
 
-- **Explore**: a village, a forest, Lookout Hill, a beach all the way around, and four small
-  islands far out at sea (Treasure Rock, Palm Cay, Lighthouse Rock and a sandbar).
+- **Explore**: a village, a forest, Lookout Hill and a beach all the way around. Sandy causeways
+  (wide enough for the car) lead to **Coconut Cove** (snack hut, little hill, forest) and to
+  **Pine Island** (big forests, a cabin and Pine Peak). **Sunset Island** (pink tower) can only be
+  reached by boat. Five small islands lie further out (Treasure Rock, Palm Cay, Lighthouse Rock,
+  Shell Islet and a sandbar).
 - **Sail the boat** ⛵: walk onto the dock and press `E` (or the Hop in button). The boat can't
   run aground, and the water is shallow everywhere, so nobody can drown or lose a heart at sea.
   Wading works too, it's just slow.
 - **Drive the car** 🚗 around the beach loop: cones to knock over, a boost pad and a ramp.
-- **Talk to the villagers** 💬: walk up to one and press `F` (or the Talk button). Six friends
+- **Talk to the villagers** 💬: walk up to one and press `F` (or the Talk button). Thirteen friends
   live on the islands; each has a few things to say and a small gift the first time you meet.
   Villagers only say fixed, friendly lines. There is no typed chat anywhere in the game.
-- 18 stars to find, including one on top of the lighthouse and one high in the sky.
+- 35 stars to find, including one on top of the lighthouse and one high in the sky.
 
 ## Driving 🚗
 

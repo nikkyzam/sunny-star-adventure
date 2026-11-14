@@ -4,6 +4,8 @@
  *   A3 the pet follows the kid                   A4 Talk button + F talks to Captain Coral (gift)
  *   A5 Hop in appears on the dock, E boards      A6 sailing moves the boat out to sea
  *   A7 the boat stops at land instead of driving onto it
+ *   A9 the car drives over the causeway to Pine Island
+ *   A8 the causeways, Coconut Cove, Pine Island, Sunset Island and Shell Islet are land
  */
 import { chromium } from "playwright";
 import { createServer } from "node:http";
@@ -120,6 +122,30 @@ try {
   check("A7 the boat stays on the water", under !== null && under < -0.9 && d4.boat.y < 0,
     `boat at (${d4.boat.x.toFixed(1)}, ${d4.boat.z.toFixed(1)}), ground under it ${under}`);
   await page.screenshot({ path: join(ROOT, "verification-shots/27-boat-at-shore.png") });
+
+  // the bigger world: the causeway and Coconut Cove are solid ground, Shell Islet exists
+  const land = await page.evaluate(() => {
+    const g = window.__gameDebug().groundAt;
+    return [g(30, -50), g(28.2, -48.2), g(46, -66), g(-38, 36), g(-40.6, -44.4), g(-34.3, -40.5), g(-47, -48.2), g(-70, -62), g(62, 22)];
+  });
+  check("A8 causeways and the new islands are land", land.every((y) => y !== null && y >= 0), JSON.stringify(land));
+  // A9: drive the car over the west causeway to Pine Island
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
+  await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
+  await page.click("[data-action=island]");
+  await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
+  await hold("KeyA", (d) => d.px < -4.2); // the car is parked at (-6, 11)
+  await page.keyboard.press("KeyE");
+  await page.waitForTimeout(300);
+  check("A9a E boards the car on the beach", (await dbg()).car.occupied === true);
+  // park at the start of the causeway, pointing along it (toward Pine Island)
+  await page.evaluate(() => window.__gameDebug().placeCar(-29, -37.4, Math.atan2(-0.858, -0.515)));
+  await page.waitForTimeout(400);
+  await hold("KeyW", (d) => d.car.x < -58, 9000);
+  const d9 = await dbg();
+  check("A9 the car drives over the causeway to Pine Island", d9.car.x < -55 && d9.car.y > -0.1 && d9.hearts === 3,
+    `car at (${d9.car.x.toFixed(1)}, ${d9.car.y.toFixed(2)}, ${d9.car.z.toFixed(1)})`);
+  await page.screenshot({ path: join(ROOT, "verification-shots/28-pine-island.png") });
 
   check("Z1 zero page errors", errors.length === 0, errors.join(" | "));
 } catch (e) {
