@@ -142,6 +142,9 @@ for (const leg of [[0, 0, 0], [0, 0.4, -12], [7, 1.0, -19], [0, 1.6, -27]]) {
   await steerTo(leg[0], leg[1], leg[2], 20_000, 1.8);
 }
 await steerTo(6, 1.9, -33, 20_000, 0.9);
+await page.waitForTimeout(700);
+// the kid often arrives mid-jump and can drift past the chest while landing: close in once more
+if ((await dbg()).chestsOpened < 1) await steerTo(6, 1.9, -33, 8_000, 0.5);
 await page.waitForTimeout(400);
 {
   const d = await dbg();

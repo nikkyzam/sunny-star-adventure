@@ -14,6 +14,8 @@ const MAX_REVERSE = 5;
 const DRAG = 7;           // passive slow-down per second
 const STEER = 2.3;
 const KILL_Y = -12;
+const BOOST_SPEED = 18;   // top speed while a boost pad is active
+const BOOST_TIME = 0.8;
 
 export class Car {
   readonly group = new THREE.Group();
@@ -27,6 +29,7 @@ export class Car {
   private spawnHeading = 0;
   private wheels: THREE.Mesh[] = [];
   private vy = 0;
+  private boostT = 0;
 
   constructor() {
     const red = new THREE.MeshStandardMaterial({ color: 0xff4757, flatShading: true, roughness: 0.6 });
@@ -76,7 +79,31 @@ export class Car {
     this.group.rotation.y = this.heading;
     this.speed = 0;
     this.vy = 0;
+    this.boostT = 0;
     this.fellOff = false;
+  }
+
+  /** Wheels off the ground (after a hop or a ramp). */
+  get airborne(): boolean {
+    return this.vy !== 0;
+  }
+
+  get boosting(): boolean {
+    return this.boostT > 0;
+  }
+
+  /** Boost pad: a burst of extra speed in the direction the car is facing. */
+  boost(): void {
+    this.boostT = BOOST_TIME;
+    this.speed = BOOST_SPEED;
+  }
+
+  /** Hop / ramp launch. Only from the ground. Returns whether the car took off. */
+  jump(v: number): boolean {
+    if (this.vy !== 0) return false;
+    this.vy = v;
+    this.pos.y += 0.06; // lift off the ground so the fall branch takes over
+    return true;
   }
 
   /** Board the car: first free seat wins. Returns the seat taken, or null when full. */
@@ -123,13 +150,17 @@ export class Car {
   /** One fixed step. axes = the driver's move input (z forward, x steer). */
   update(dt: number, axX: number, axZ: number, world: World): void {
     // speed toward target
-    if (axZ > 0.1) this.speed = Math.min(MAX_SPEED, this.speed + ACCEL * axZ * dt);
-    else if (axZ < -0.1) this.speed = Math.max(-MAX_REVERSE, this.speed - ACCEL * 0.8 * dt);
+    if (this.boostT > 0) this.boostT -= dt;
+    const max = this.boostT > 0 ? BOOST_SPEED : MAX_SPEED;
+    if (axZ > 0.1) {
+      if (this.speed < max) this.speed = Math.min(max, this.speed + ACCEL * axZ * dt);
+    } else if (axZ < -0.1) this.speed = Math.max(-MAX_REVERSE, this.speed - ACCEL * 0.8 * dt);
     else {
       const slow = DRAG * dt;
       if (Math.abs(this.speed) <= slow) this.speed = 0;
       else this.speed -= Math.sign(this.speed) * slow;
     }
+    if (this.speed > max) this.speed = Math.max(max, this.speed - 25 * dt); // ease out of a boost
     // steering (only meaningful while moving)
     const steerAuthority = Math.min(1, Math.abs(this.speed) / 4) * Math.sign(this.speed || 1);
     this.heading -= axX * STEER * steerAuthority * dt;

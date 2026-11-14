@@ -5,7 +5,7 @@
 
 export type HudAction =
   | "play" | "play2" | "continue" | "resume" | "retry" | "next" | "title" | "again" | "jump" | "mute"
-  | "online" | "host" | "join" | "back" | "reroll" | "easy";
+  | "online" | "host" | "join" | "back" | "reroll" | "easy" | "drive" | "car" | "honk";
 
 type OverlayName = "title" | "pause" | "gameover" | "clear" | "win" | "online";
 
@@ -22,6 +22,11 @@ function el<T extends HTMLElement = HTMLElement>(id: string): T {
   const e = document.getElementById(id);
   if (!e) throw new Error(`HUD element #${id} missing from Home.tsx`);
   return e as T;
+}
+
+/** A clicked button keeps keyboard focus, so the next Space / Enter would click it again. */
+function unfocus(e: Event): void {
+  (e.currentTarget as HTMLElement | null)?.blur();
 }
 
 export class Hud {
@@ -42,6 +47,9 @@ export class Hud {
   private jumpBtn = el("btn-jump");
   private muteBtn = el("btn-mute");
   private room = el("hud-room");
+  private carBtn = el("btn-car");
+  private honkBtn = el("btn-honk");
+  private carMode: "in" | "out" | null = null;
   private stickerBar = el("sticker-bar");
   private onStickerCb: ((i: number) => void) | null = null;
 
@@ -49,6 +57,7 @@ export class Hud {
     const bind = (elm: HTMLElement, action: HudAction) => {
       const fn = (e: Event) => {
         e.preventDefault();
+        unfocus(e);
         this.onActionCb?.(action);
       };
       elm.addEventListener("click", fn);
@@ -59,6 +68,8 @@ export class Hud {
     });
     bind(this.muteBtn, "mute");
     bind(this.jumpBtn, "jump");
+    bind(this.carBtn, "car");
+    bind(this.honkBtn, "honk");
   }
 
   dispose(): void {
@@ -116,6 +127,16 @@ export class Hud {
     this.topbar.style.display = playing ? "" : "none";
     this.jumpBtn.style.display = playing ? "" : "none";
     this.stickerBar.style.display = playing ? "" : "none";
+    if (!playing) this.setCarUi(null);
+  }
+
+  /** Car buttons: "in" = a kid is next to the car, "out" = riding, null = hidden. */
+  setCarUi(mode: "in" | "out" | null): void {
+    if (mode === this.carMode) return;
+    this.carMode = mode;
+    this.carBtn.style.display = mode ? "" : "none";
+    this.honkBtn.style.display = mode === "out" ? "" : "none";
+    if (mode) this.carBtn.textContent = mode === "in" ? "🚗 Hop in" : "🚪 Hop out";
   }
 
   /** Sticker buttons (built once from the preset list). */
@@ -127,7 +148,7 @@ export class Hud {
       b.className = "sticker-btn";
       b.textContent = label;
       b.setAttribute("aria-label", `Sticker ${i + 1}`);
-      const fn = (e: Event) => { e.preventDefault(); this.onStickerCb?.(i); };
+      const fn = (e: Event) => { e.preventDefault(); unfocus(e); this.onStickerCb?.(i); };
       b.addEventListener("click", fn);
       this.unsub.push(() => b.removeEventListener("click", fn));
       this.stickerBar.appendChild(b);
@@ -164,7 +185,7 @@ export class Hud {
       const b = document.createElement("button");
       b.className = "swatch" + (i === selected ? " on" : "");
       decorate(b, i);
-      const fn = (e: Event) => { e.preventDefault(); cb(i); };
+      const fn = (e: Event) => { e.preventDefault(); unfocus(e); cb(i); };
       b.addEventListener("click", fn);
       this.unsub.push(() => b.removeEventListener("click", fn));
       box.appendChild(b);

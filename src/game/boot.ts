@@ -31,6 +31,7 @@ import { Pickups } from "./pickups";
 import { Chests } from "./chests";
 import { Buddies, BUDDY_NAMES } from "./buddies";
 import { Car } from "./car";
+import { Props } from "./props";
 import { Particles } from "./particles";
 import { Hud } from "./hud";
 import { storage, highScore } from "./storage";
@@ -64,6 +65,10 @@ declare global {
       onGround: boolean;
       slimes: { x: number; z: number }[];
       remotes: number;
+      props: { cones: number; boxes: number };
+      carSpeed: number;
+      /** Test hook: park the car somewhere else. */
+      placeCar: (x: number, z: number, heading: number) => void;
       groundAt: (x: number, z: number) => number | null;
     };
   }
@@ -89,6 +94,8 @@ interface Remote {
   x: number; y: number; z: number;
   vx: number; vy: number; vz: number;
   g: boolean; gl: boolean; r: boolean; f: number; fl: boolean;
+  /** Shown under a friend who is driving (their car lives in their own game). */
+  car: Car | null;
 }
 
 /** Untrusted number from the network: finite and inside the play space, else 0. */
@@ -138,6 +145,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const chests = new Chests();
   const buddies = new Buddies();
   const car = new Car();
+  const props = new Props();
   const particles = new Particles();
   const hud = new Hud();
   const audio = new AudioSystem();
@@ -150,7 +158,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const blobGeo = new THREE.CircleGeometry(0.5, 20);
   const blobMat = new THREE.MeshBasicMaterial({ color: 0x1a2a1a, transparent: true, opacity: 0.28, depthWrite: false });
 
-  scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, particles.points);
+  scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, props.group, particles.points);
 
   // ── Run state ────────────────────────────────────────────────────────────
   let levelIdx = 0;
@@ -269,6 +277,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     pickups.build(world.def.coins ?? [], world.def.hearts ?? [], world.def.magnets ?? [], world.def.balloons ?? []);
     chests.build(world.def.chests ?? []);
     buddies.build(world.def.buddies ?? []);
+    props.build(world.def.props ?? {});
     world.setPortalUnlocked(false);
 
     maxHearts = computeMaxHearts();
@@ -459,6 +468,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
       case "play": startRun(requestedStartLevel(), false); break;
       case "play2": startRun(requestedStartLevel(), true); break;
       case "continue": if (sm.is("title")) startRun(unlockedLevel(), false); break;
+      case "drive":
+        if (!sm.is("title")) break;
+        startRun(LEVELS.findIndex((l) => l.carSpawn), false);
+        hud.showToast("🚗 Walk to the red car and hop in!");
+        break;
+      case "car": toggleCar(); break;
+      case "honk": honk(); break;
       case "again": playAgain(); break;
       case "next": nextLevel(); break;
       case "retry": retryLevel(); break;
@@ -524,6 +540,41 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
   }
 
+  // ── Car: hop in / out, honk ──────────────────────────────────────────────
+  function toggleCar(): void {
+    if (!sm.is("playing") || !car.group.visible) return;
+    const rider = players.find((p) => car.has(p));
+    if (rider) {
+      car.exit(rider);
+      if (!car.driver) audio.engineStop();
+      audio.sfx("ui");
+      return;
+    }
+    let nearest: Player | null = null;
+    let nearestD = 2.4 * 2.4;
+    for (const p of players) {
+      const d2 = car.pos.distanceToSquared(p.pos);
+      if (d2 < nearestD) { nearestD = d2; nearest = p; }
+    }
+    if (!nearest) return;
+    const seat = car.board(nearest);
+    if (seat === "driver") {
+      audio.sfx("honk");
+      audio.engineStart();
+      hud.showToast("🚗 Move keys to drive · Space hops · H honks · E hops out");
+    } else if (seat === "passenger") {
+      audio.sfx("ui");
+      hud.showToast("Enjoy the ride! 🚗");
+    }
+  }
+
+  function honk(): void {
+    if (!sm.is("playing") || !car.group.visible || !car.driver) return;
+    audio.sfx("honk");
+    particles.burst(car.pos.x, car.pos.y + 1.4, car.pos.z, 0xffe27a, 8, 2.5, 0.5, 3);
+    net?.send({ t: "hk", L: levelIdx });
+  }
+
   // ── Stickers & dancing ───────────────────────────────────────────────────
   function danceNow(): void {
     if (!sm.is("playing") || players[0].riding) return;
@@ -550,6 +601,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (!r) return;
     disposeSprite(r.tag);
     r.bubble.clear();
+    if (r.car) scene.remove(r.car.group);
     scene.remove(r.p.group);
     remotes.delete(id);
     roomPill();
@@ -580,7 +632,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
           p.group.add(tag);
           p.pos.set(num(m.x), num(m.y), num(m.z));
           scene.add(p.group);
-          r = { p, tag, bubble: new Bubble(p.group, 2.75), seen: elapsed, level: -1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, g: true, gl: false, r: false, f: 0, fl: false };
+          r = { p, tag, bubble: new Bubble(p.group, 2.75), seen: elapsed, level: -1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, g: true, gl: false, r: false, f: 0, fl: false, car: null };
           remotes.set(from, r);
           roomPill();
           hud.showToast(`${nameText(safeName(m.n))} is here! 👋`);
@@ -595,6 +647,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
       }
       case "d":
         remotes.get(from)?.p.dance();
+        break;
+      case "hk":
+        if (num(m.L) === levelIdx && sm.is("playing") && remotes.has(from)) audio.sfx("honk");
         break;
       case "e": {
         const k = num(m.k);
@@ -704,6 +759,20 @@ export function startGame(canvas: HTMLCanvasElement): void {
         continue;
       }
       r.p.group.visible = r.level === levelIdx && sm.is("playing", "paused");
+      // a driving friend gets a car under them
+      const driving = r.p.group.visible && r.r;
+      if (driving && !r.car) {
+        r.car = new Car();
+        scene.add(r.car.group);
+      }
+      if (r.car) {
+        r.car.group.visible = driving;
+        if (driving) {
+          // inverse of Car.seat(): the driver sits 0.35 ahead of and 0.62 above the car's origin
+          r.car.pos.set(r.p.pos.x - Math.sin(r.f) * 0.35, r.p.pos.y - 0.62, r.p.pos.z - Math.cos(r.f) * 0.35);
+          r.car.group.rotation.y = r.f;
+        }
+      }
       if (r.p.group.visible) r.p.applyRemote(dt, r.x, r.y, r.z, r.vx, r.vy, r.vz, r.g, r.gl, r.r, r.f, r.fl);
       r.bubble.update(dt);
     }
@@ -747,6 +816,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
       if (input.consumeAction(`Digit${k + 1}`)) sendSticker(k);
     }
     if (input.consumeAction(DANCE_KEY)) danceNow();
+    if (input.consumeAction("KeyE")) toggleCar();
+    if (input.consumeAction("KeyH")) honk();
 
     if (sm.is("paused")) return;
 
@@ -811,13 +882,18 @@ export function startGame(canvas: HTMLCanvasElement): void {
     // car: driver input, riders skip their own controller
     const driverIdx = car.driver ? players.indexOf(car.driver) : -1;
     if (car.group.visible && car.driver) {
+      // the driver's jump key makes the car hop
+      if ((driverIdx === 1 ? jump2Now : jumpNow) && car.jump(7.5)) audio.sfx("jump");
       const a = axesOf(Math.max(0, driverIdx));
       // camera-relative wish → car-local: forward component accelerates, lateral steers
       const cfX = Math.sin(car.heading), cfZ = Math.cos(car.heading);
       const crX = Math.cos(car.heading), crZ = -Math.sin(car.heading);
       const fwd = a.wishX * cfX + a.wishZ * cfZ;
       const lat = a.wishX * crX + a.wishZ * crZ;
-      car.update(dt, -lat, fwd, world);
+      // pushing sideways also drives forward, so the car turns toward where the kid points
+      // instead of sitting still; only pushing backwards reverses
+      const mag = Math.hypot(a.wishX, a.wishZ);
+      car.update(dt, -lat, fwd >= -0.5 * mag ? mag : fwd, world);
     } else if (car.group.visible) {
       car.update(dt, 0, 0, world);
     }
@@ -941,9 +1017,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
       }
     }
 
-    // treasure chests
+    // treasure chests (riders too: bump one with the car)
     for (const p of players) {
-      if (p.riding) continue;
       const chest = chests.tryOpen(p.pos);
       if (chest) {
         score += 150;
@@ -1031,7 +1106,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     // checkpoints
     for (const cp of world.checkpoints) {
       if (cp.taken) continue;
-      const near = players.some((p) => !p.riding && cp.pos.distanceToSquared(p.pos) < 1.8);
+      const near = players.some((p) => cp.pos.distanceToSquared(p.pos) < 1.8); // riders count: drive through a flag
       if (near) {
         cp.taken = true;
         respawn.copy(cp.pos);
@@ -1042,35 +1117,38 @@ export function startGame(canvas: HTMLCanvasElement): void {
       }
     }
 
-    // car: board / exit with E, engine sound, falling off the world
-    if (car.group.visible) {
-      if (input.consumeAction("KeyE")) {
-        const rider = players.find((p) => car.has(p));
-        if (rider) {
-          car.exit(rider);
-          if (!car.driver) audio.engineStop();
-          audio.sfx("ui");
-        } else {
-          let nearest: Player | null = null;
-          let nearestD = 2.4 * 2.4;
-          for (const p of players) {
-            if (p.riding) continue;
-            const d2 = car.pos.distanceToSquared(p.pos);
-            if (d2 < nearestD) { nearestD = d2; nearest = p; }
-          }
-          if (nearest) {
-            const seat = car.board(nearest);
-            if (seat === "driver") {
-              audio.sfx("honk");
-              audio.engineStart();
-              hud.showToast("🚗 Drive with your move keys! E to hop out");
-            } else if (seat === "passenger") {
-              audio.sfx("ui");
-              hud.showToast("Enjoy the ride! 🚗");
-            }
-          }
-        }
+    // things to bump into (cones, gift boxes, balls) and car boost pads / ramps
+    for (const e of props.update(dt, world, players, car.group.visible ? car : null)) {
+      if (e.type === "cone") {
+        score += 5;
+        hud.setScore(score);
+        audio.sfx("stomp");
+        particles.burst(e.x, e.y, e.z, 0xff7a1a, 8, 3, 0.5, 6);
+      } else if (e.type === "box") {
+        score += 20;
+        coinCount++;
+        hud.setScore(score);
+        hud.setCoins(coinCount);
+        audio.sfx("chest");
+        particles.burst(e.x, e.y, e.z, 0xff9ecf, 24, 5, 0.9, 6);
+      } else if (e.type === "ball") {
+        audio.sfx("land");
+      } else if (e.type === "boost") {
+        audio.sfx("powerup");
+        shake = Math.max(shake, 0.3);
+        hud.showToast("Zoom! 💨");
+        particles.burst(e.x, e.y + 0.3, e.z, 0x29d3a2, 18, 5, 0.7, 2);
+      } else {
+        audio.sfx("doublejump");
+        hud.showToast("Wheee! 🚗");
       }
+    }
+
+    // car: buttons, engine sound, falling off the world
+    const inCar = car.group.visible && players.some((p) => car.has(p));
+    const byCar = car.group.visible && !inCar && players.some((p) => car.pos.distanceToSquared(p.pos) < 2.4 * 2.4);
+    hud.setCarUi(inCar ? "out" : byCar ? "in" : null);
+    if (car.group.visible) {
       if (car.driver) audio.engineSet(Math.abs(car.speed) / 13);
       if (car.fellOff) {
         if (car.driver) car.exit(car.driver);
@@ -1252,6 +1330,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
     onGround: players[0].onGround,
     slimes: slimes.items.filter((s) => s.alive).map((s) => ({ x: s.group.position.x, z: s.group.position.z })),
     remotes: remotes.size,
+    props: { cones: props.conesKnocked, boxes: props.boxesSmashed },
+    carSpeed: car.speed,
+    placeCar: (x: number, z: number, heading: number) => {
+      car.pos.set(x, world.groundAt(x, z, 50)?.y ?? 0, z);
+      car.heading = heading;
+      car.speed = 0;
+    },
     groundAt: (x: number, z: number) => {
       const g = world.groundAt(x, z, players[0].pos.y + 0.4);
       return g ? g.y : null;

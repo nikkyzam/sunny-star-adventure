@@ -17,6 +17,7 @@
 
 import * as THREE from "three";
 import { mulberry32, pick } from "./rng";
+import type { PropDefs } from "./props";
 
 export interface Platform {
   kind: "disc" | "box";
@@ -80,6 +81,8 @@ export interface LevelDef {
   snow?: boolean;
   /** Sparkly sea far below the islands (decorative — falling in still costs a heart). */
   ocean?: boolean;
+  /** Bumpable things: cones, gift boxes, balls, and car boost pads / ramps (props.ts). */
+  props?: PropDefs;
   /** Party balloons: touch one to float up for a few seconds. */
   balloons?: [number, number, number][];
 }
@@ -131,6 +134,7 @@ export const LEVELS: LevelDef[] = [
     checkpoints: [[-2, 1.6, -25.5]],
     portal: [0, 2.8, -44],
     rainbow: true,
+    props: { balls: [[-3, 0, 1]] },
   },
   {
     name: "Candy Canyon",
@@ -309,6 +313,15 @@ export const LEVELS: LevelDef[] = [
     spawn: [0, 0, 18],
     freeGlide: true, // parachute town!
     carSpawn: [4, 0, 14, Math.PI],
+    props: {
+      cones: [[-3, 0, 6.8], [-1, 0, 5.2], [1, 0, 6.8], [3, 0, 5.2], [-4, 0, -18.6], [0, 0, -18], [4, 0, -17.4]],
+      boxes: [[-2, 0, 12], [-10, 0, -11], [8, 0, -14], [0, 0, -21.5], [18, 0, 5]],
+      balls: [[-3, 0, 15], [3, 0, -13]],
+      // the long east-bound lane: boost → ramp → fly into the cones → the pink house stops you
+      boosts: [[-16, 0, 6, Math.PI / 2]],
+      // the second ramp jumps the car into the fountain
+      ramps: [[-11, 0, 6, Math.PI / 2], [0, 0, 2, Math.PI]],
+    },
     discs: [
       { x: 0, z: 0, r: 24, y: 0, trees: 6, flowers: 14 },  // the city plaza
       { x: 0, z: -38, r: 8, y: 0.5, trees: 3, flowers: 8 }, // the park
@@ -429,6 +442,7 @@ export const LEVELS: LevelDef[] = [
     flowerColors: [0xff6b9d, 0xffd93d, 0xffffff, 0x5cb8ff],
     spawn: [0, 0, 5],
     ocean: true,
+    props: { balls: [[-3, 0, 1]], boxes: [[2, 1.4, -28]] },
     discs: [
       { x: 0, z: 0, r: 6, y: 0, trees: 2, flowers: 6 },
       { x: 0, z: -11, r: 3.5, y: 0.4, flowers: 3 },

@@ -42,6 +42,9 @@ export default function Home() {
 
         <button id="btn-mute" className="round-btn" aria-label="Mute">🔊</button>
         <button id="btn-jump" className="jump-btn" aria-label="Jump">⬆ JUMP</button>
+        {/* car controls: shown next to the car / while riding (touch-friendly E and H) */}
+        <button id="btn-car" className="car-btn" style={{ display: 'none' }} />
+        <button id="btn-honk" className="car-btn honk" aria-label="Honk" style={{ display: 'none' }}>📣</button>
 
         {/* preset stickers (no free-text chat): keys 1–6 or tap */}
         <div id="sticker-bar" className="sticker-bar" style={{ display: 'none' }} />
@@ -66,6 +69,7 @@ export default function Home() {
             <div className="btn-col">
               <button className="big-btn primary" data-action="play">▶ Play</button>
               <button className="big-btn primary2" data-action="online">🌐 Play with friends</button>
+              <button className="big-btn" data-action="drive">🚗 Drive in Toy City</button>
               <button className="big-btn" data-action="play2">👥 2 Players (same keyboard)</button>
               <button id="btn-continue" className="big-btn" data-action="continue" style={{ display: 'none' }}>▶ Continue</button>
             </div>
@@ -73,7 +77,7 @@ export default function Home() {
             <div className="controls-help">
               <span>🕹️ P1: WASD + Space (jump ×2, hold = glide)</span>
               <span>👥 P2: Arrows + Enter</span>
-              <span>🖱️ Drag — camera · E — car · T — teleport to friend</span>
+              <span>🖱️ Drag — camera · E — car (Space hop, H honk) · T — teleport to friend</span>
               <span>1–6 — stickers · 7 — dance 💃 · Esc — pause · M — mute</span>
             </div>
           </div>
