@@ -105,7 +105,12 @@ where friends meet when someone makes a room.
 | `7` / 💃 button | Dance |
 | `F` / 💬 Talk button | Talk to a villager |
 | `H` / 📣 button | Honk (while driving) |
-| Big ⬆ JUMP button | Jump (touch friendly) |
+| Big ⬆ JUMP button | Jump; keep holding to glide |
+
+**On a tablet or phone**: put your left thumb anywhere on the left half of the screen and a
+thumb-stick appears under it; drag to move. Tap **JUMP** with your other thumb (it works while
+you steer), drag on the right half to turn the camera, and use the on-screen Hop in, Talk, 📣
+and sticker buttons.
 
 In co-op both kids share hearts and must gather at the portal together — wander too far apart
 and the game teleports the straggler back.

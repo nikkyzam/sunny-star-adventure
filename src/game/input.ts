@@ -12,10 +12,16 @@
  *   Mouse moving up    => camera looks up (pitch increases)
  *   Touch left stick   = same directions as WASD; right-side drag = same as mouse
  *
+ * Touch uses Pointer Events (not Touch Events): they behave the same on iPad Safari, Android and
+ * touch laptops, each finger is captured so it keeps steering when it slides off the canvas, and
+ * a thumb-stick is drawn where the left thumb lands so kids can see what they are doing.
+ *
  * When changing these conventions you must also update the direction assertions in scripts/verify-game.mjs.
  */
 
 import { INPUT_CONFIG } from "./config";
+
+const STICK_RADIUS = 56; // px of thumb travel for full speed
 
 const KEYMAP_WASD: Record<string, [axis: "moveX" | "moveZ", dir: 1 | -1]> = {
   KeyW: ["moveZ", 1], KeyS: ["moveZ", -1], KeyA: ["moveX", -1], KeyD: ["moveX", 1],
@@ -41,6 +47,8 @@ export class Input {
   private touchAimId: number | null = null;
   private touchMoveOrigin = { x: 0, y: 0 };
   private touchAimOrigin = { x: 0, y: 0 };
+  private stickBase: HTMLElement | null = null;
+  private stickKnob: HTMLElement | null = null;
 
   /** Listener teardown — collected at construction so dispose() can unwind every subscription. */
   private unsubscribe: Array<() => void> = [];
@@ -81,10 +89,16 @@ export class Input {
         this.pitchDelta += -e.movementY * sy;
       }
     });
-    on<TouchEvent>(target, "touchstart", (e) => this.onTouch(e, true), { passive: true });
-    on<TouchEvent>(target, "touchmove", (e) => this.onTouch(e, false), { passive: true });
-    on<TouchEvent>(target, "touchend", (e) => this.onTouchEnd(e), { passive: true });
-    on<TouchEvent>(target, "touchcancel", (e) => this.onTouchEnd(e), { passive: true });
+    on<PointerEvent>(target, "pointerdown", (e) => this.onFingerDown(e));
+    on<PointerEvent>(target, "pointermove", (e) => this.onFingerMove(e));
+    on<PointerEvent>(target, "pointerup", (e) => this.onFingerUp(e));
+    on<PointerEvent>(target, "pointercancel", (e) => this.onFingerUp(e));
+    // iOS: stop the long-press menu / magnifier and pinch-zoom from hijacking a held thumb
+    on(target, "contextmenu", (e) => e.preventDefault());
+    on(document, "gesturestart", (e) => e.preventDefault());
+    this.stickBase = document.getElementById("stick-base");
+    this.stickKnob = document.getElementById("stick-knob");
+    if (window.matchMedia?.("(pointer: coarse)").matches) document.body.classList.add("touch");
   }
 
   /** Detach every listener and zero the axes — call it when the game is unmounted (see src/game/boot.ts). */
@@ -95,47 +109,79 @@ export class Input {
     this.resetAll();
   }
 
-  private onTouch(e: TouchEvent, start: boolean): void {
-    const w = window.innerWidth;
-    for (const t of Array.from(e.changedTouches)) {
-      if (start) {
-        if (t.clientX < w / 2 && this.touchMoveId === null) {
-          this.touchMoveId = t.identifier;
-          this.touchMoveOrigin = { x: t.clientX, y: t.clientY };
-        } else if (t.clientX >= w / 2 && this.touchAimId === null) {
-          this.touchAimId = t.identifier;
-          this.touchAimOrigin = { x: t.clientX, y: t.clientY };
-        }
-      } else if (t.identifier === this.touchMoveId) {
-        // left stick: push up = forward (+moveZ), push right = right (+moveX), exactly matching WASD
-        this.moveX = clamp((t.clientX - this.touchMoveOrigin.x) / 60, -1, 1);
-        this.moveZ = clamp(-(t.clientY - this.touchMoveOrigin.y) / 60, -1, 1);
-      } else if (t.identifier === this.touchAimId) {
-        const sx = INPUT_CONFIG.MOUSE_SENS_X * (INPUT_CONFIG.INVERT_X ? -1 : 1);
-        const sy = INPUT_CONFIG.MOUSE_SENS_Y * (INPUT_CONFIG.INVERT_Y ? -1 : 1);
-        this.yawDelta -= (t.clientX - this.touchAimOrigin.x) * sx * 0.5;
-        this.pitchDelta += -(t.clientY - this.touchAimOrigin.y) * sy * 0.5;
-        this.touchAimOrigin = { x: t.clientX, y: t.clientY };
+  private onFingerDown(e: PointerEvent): void {
+    if (e.pointerType === "mouse") return; // the mouse orbits the camera through mousemove
+    document.body.classList.add("touch"); // show the touch controls from the first touch on
+    if (e.clientX < window.innerWidth / 2 && this.touchMoveId === null) {
+      this.touchMoveId = e.pointerId;
+      this.touchMoveOrigin = { x: e.clientX, y: e.clientY };
+      this.drawStick(0, 0, true);
+    } else if (this.touchAimId === null) {
+      this.touchAimId = e.pointerId;
+      this.touchAimOrigin = { x: e.clientX, y: e.clientY };
+    } else {
+      return;
+    }
+    // keep getting this finger's moves even if it slides over a button or off the canvas
+    try { this.target.setPointerCapture(e.pointerId); } catch { /* not capturable: still works */ }
+  }
+
+  private onFingerMove(e: PointerEvent): void {
+    if (e.pointerId === this.touchMoveId) {
+      // left stick: push up = forward (+moveZ), push right = right (+moveX), exactly matching WASD
+      let dx = e.clientX - this.touchMoveOrigin.x;
+      let dy = e.clientY - this.touchMoveOrigin.y;
+      const len = Math.hypot(dx, dy);
+      if (len > STICK_RADIUS) {
+        // the stick follows a thumb that drags past its edge, so reversing is always quick
+        this.touchMoveOrigin.x += dx * (1 - STICK_RADIUS / len);
+        this.touchMoveOrigin.y += dy * (1 - STICK_RADIUS / len);
+        dx *= STICK_RADIUS / len;
+        dy *= STICK_RADIUS / len;
       }
+      this.moveX = dx / STICK_RADIUS;
+      this.moveZ = -dy / STICK_RADIUS;
+      this.drawStick(dx, dy, true);
+    } else if (e.pointerId === this.touchAimId) {
+      const sx = INPUT_CONFIG.MOUSE_SENS_X * (INPUT_CONFIG.INVERT_X ? -1 : 1);
+      const sy = INPUT_CONFIG.MOUSE_SENS_Y * (INPUT_CONFIG.INVERT_Y ? -1 : 1);
+      this.yawDelta -= (e.clientX - this.touchAimOrigin.x) * sx * 0.5;
+      this.pitchDelta += -(e.clientY - this.touchAimOrigin.y) * sy * 0.5;
+      this.touchAimOrigin = { x: e.clientX, y: e.clientY };
     }
   }
 
-  private onTouchEnd(e: TouchEvent): void {
+  private onFingerUp(e: PointerEvent): void {
     // Each lifted finger releases only its own stick — lifting the aim hand must not kill movement.
-    for (const t of Array.from(e.changedTouches)) {
-      if (t.identifier === this.touchMoveId) {
-        this.touchMoveId = null;
-        this.recomputeAxes(); // fall back to whatever the keyboard still holds (usually nothing)
-      } else if (t.identifier === this.touchAimId) {
-        this.touchAimId = null;
-      }
+    if (e.pointerId === this.touchMoveId) {
+      this.touchMoveId = null;
+      this.drawStick(0, 0, false);
+      this.recomputeAxes(); // fall back to whatever the keyboard still holds (usually nothing)
+    } else if (e.pointerId === this.touchAimId) {
+      this.touchAimId = null;
     }
+  }
+
+  /** Move the on-screen thumb-stick: under the thumb while held, back to its corner when let go. */
+  private drawStick(dx: number, dy: number, held: boolean): void {
+    const base = this.stickBase, knob = this.stickKnob;
+    if (!base || !knob) return;
+    base.classList.toggle("held", held);
+    if (held) {
+      base.style.left = `${this.touchMoveOrigin.x}px`;
+      base.style.top = `${this.touchMoveOrigin.y}px`;
+    } else {
+      base.style.left = "";
+      base.style.top = "";
+    }
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
   }
 
   private resetAll(): void {
     this.held.clear();
     this.touchMoveId = null;
     this.touchAimId = null;
+    this.drawStick(0, 0, false);
     this.yawDelta = 0;
     this.pitchDelta = 0;
     this.recomputeAxes();

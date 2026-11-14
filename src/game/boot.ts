@@ -633,6 +633,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   // ── Car: hop in / out, honk ──────────────────────────────────────────────
+  /** Playing with fingers (tablet / phone): hints talk about the stick and buttons, not keys. */
+  function onTouch(): boolean {
+    return document.body.classList.contains("touch");
+  }
+
   function toggleCar(): void {
     if (!sm.is("playing")) return;
     for (const v of rides) {
@@ -650,11 +655,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (seat === "driver" && near.ride.kind === "boat") {
       audio.sfx("powerup");
       audio.sfx("splash");
-      hud.showToast("⛵ Move keys to sail · E hops out. Look for far-away islands!");
+      hud.showToast(onTouch() ? "⛵ Use the stick to sail. Look for far-away islands!" : "⛵ Move keys to sail · E hops out. Look for far-away islands!");
     } else if (seat === "driver") {
       audio.sfx("honk");
       audio.engineStart();
-      hud.showToast("🚗 Move keys to drive · Space hops · H honks · E hops out");
+      hud.showToast(onTouch() ? "🚗 Use the stick to drive · JUMP hops · 📣 honks" : "🚗 Move keys to drive · Space hops · H honks · E hops out");
     } else if (seat === "passenger") {
       audio.sfx("ui");
       hud.showToast("Enjoy the ride!");
@@ -1070,7 +1075,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       if (p.riding) continue;
       const a = axesOf(i);
       const wantJump = i === 0 ? jumpNow : jump2Now;
-      const glideHeld = i === 0 ? input.isHeld("Space") : input.isHeld(P2_JUMP);
+      const glideHeld = i === 0 ? input.isHeld("Space") || hud.jumpHeld : input.isHeld(P2_JUMP);
       // wading through the sea is slow (the boat is the fast way across)
       const wading = world.def.sea !== undefined && p.onGround && p.pos.y < world.def.sea - 0.2;
       const pace = wading ? 0.55 : 1;

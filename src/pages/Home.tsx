@@ -41,6 +41,8 @@ export default function Home() {
         </div>
 
         <button id="btn-mute" className="round-btn" aria-label="Mute">🔊</button>
+        {/* touch thumb-stick: drawn where the left thumb lands (src/game/input.ts moves it) */}
+        <div id="stick-base" className="stick-base"><div id="stick-knob" className="stick-knob" /></div>
         <button id="btn-jump" className="jump-btn" aria-label="Jump">⬆ JUMP</button>
         {/* car controls: shown next to the car / while riding (touch-friendly E and H) */}
         <button id="btn-car" className="car-btn" style={{ display: 'none' }} />

@@ -58,6 +58,8 @@ export class Hud {
   private dialogTimer: number | null = null;
   private stickerBar = el("sticker-bar");
   private onStickerCb: ((i: number) => void) | null = null;
+  /** True while a finger is holding the on-screen jump button (hold = glide). */
+  jumpHeld = false;
 
   constructor() {
     const bind = (elm: HTMLElement, action: HudAction) => {
@@ -73,10 +75,38 @@ export class Hud {
       bind(b, b.dataset.action as HudAction);
     });
     bind(this.muteBtn, "mute");
-    bind(this.jumpBtn, "jump");
-    bind(this.carBtn, "car");
-    bind(this.honkBtn, "honk");
-    bind(this.talkBtn, "talk");
+    // In-game buttons act on press, not on click: iPad sends no click for a second finger while
+    // the other thumb is steering, and a click waits for the finger to lift.
+    const press = (elm: HTMLElement, action: HudAction) => {
+      const fn = (e: Event) => {
+        e.preventDefault();
+        this.onActionCb?.(action);
+      };
+      elm.addEventListener("pointerdown", fn);
+      this.unsub.push(() => elm.removeEventListener("pointerdown", fn));
+    };
+    press(this.carBtn, "car");
+    press(this.honkBtn, "honk");
+    press(this.talkBtn, "talk");
+    // jump: press to jump, keep holding to glide
+    const jumpDown = (e: PointerEvent) => {
+      e.preventDefault();
+      this.jumpHeld = true;
+      try { this.jumpBtn.setPointerCapture(e.pointerId); } catch { /* fine without capture */ }
+      this.onActionCb?.("jump");
+    };
+    const jumpUp = () => { this.jumpHeld = false; };
+    this.jumpBtn.addEventListener("pointerdown", jumpDown);
+    this.jumpBtn.addEventListener("pointerup", jumpUp);
+    this.jumpBtn.addEventListener("pointercancel", jumpUp);
+    this.unsub.push(() => {
+      this.jumpBtn.removeEventListener("pointerdown", jumpDown);
+      this.jumpBtn.removeEventListener("pointerup", jumpUp);
+      this.jumpBtn.removeEventListener("pointercancel", jumpUp);
+    });
+    const noMenu = (e: Event) => e.preventDefault(); // iOS long-press menu on a held button
+    document.addEventListener("contextmenu", noMenu);
+    this.unsub.push(() => document.removeEventListener("contextmenu", noMenu));
   }
 
   dispose(): void {
@@ -134,6 +164,8 @@ export class Hud {
   setPlayingUi(playing: boolean): void {
     this.topbar.style.display = playing ? "" : "none";
     this.jumpBtn.style.display = playing ? "" : "none";
+    document.body.classList.toggle("playing", playing);
+    if (!playing) this.jumpHeld = false;
     this.stickerBar.style.display = playing ? "" : "none";
     if (!playing) {
       this.setCarUi(null);
@@ -177,9 +209,9 @@ export class Hud {
       b.className = "sticker-btn";
       b.textContent = label;
       b.setAttribute("aria-label", `Sticker ${i + 1}`);
-      const fn = (e: Event) => { e.preventDefault(); unfocus(e); this.onStickerCb?.(i); };
-      b.addEventListener("click", fn);
-      this.unsub.push(() => b.removeEventListener("click", fn));
+      const fn = (e: Event) => { e.preventDefault(); this.onStickerCb?.(i); };
+      b.addEventListener("pointerdown", fn);
+      this.unsub.push(() => b.removeEventListener("pointerdown", fn));
       this.stickerBar.appendChild(b);
     });
   }

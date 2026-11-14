@@ -143,12 +143,17 @@ export class AudioSystem {
 
   constructor() {
     this.muted = readMuted();
+    // iOS only lets sound start from the end of a touch, so listen for that too
     window.addEventListener("pointerdown", this.unlock);
+    window.addEventListener("touchend", this.unlock);
+    window.addEventListener("click", this.unlock);
     window.addEventListener("keydown", this.unlock);
   }
 
   private detachUnlock(): void {
     window.removeEventListener("pointerdown", this.unlock);
+    window.removeEventListener("touchend", this.unlock);
+    window.removeEventListener("click", this.unlock);
     window.removeEventListener("keydown", this.unlock);
   }
 
