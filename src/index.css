@@ -1,0 +1,269 @@
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #8fd8ff;
+  font-family: "Comic Sans MS", "Chalkboard SE", "Baloo 2", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#game-root {
+  position: fixed;
+  inset: 0;
+}
+
+#game-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+#ui-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+#ui-overlay button {
+  pointer-events: auto;
+}
+
+/* ── top status bar ─────────────────────────────────────────────── */
+#hud-top {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  pointer-events: none;
+}
+
+.hud-pill {
+  background: rgba(255, 255, 255, 0.92);
+  border: 3px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.15);
+  padding: 4px 14px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #4a3b6b;
+  white-space: nowrap;
+}
+
+.hud-pill.hearts { color: #ff4d6d; letter-spacing: 2px; }
+.hud-pill.stars { color: #e8a100; }
+.hud-pill.coins { color: #c98a00; }
+.hud-pill.buddies { font-size: 20px; }
+.hud-pill.magnet { color: #e0564b; }
+.hud-pill.level { color: #6c5ce7; }
+.hud-pill.score { color: #0984e3; min-width: 60px; text-align: center; }
+
+/* ── corner buttons ─────────────────────────────────────────────── */
+.round-btn {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.15);
+  font-size: 22px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.round-btn:active { transform: scale(0.9); }
+
+.jump-btn {
+  position: absolute;
+  right: 18px;
+  bottom: 24px;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  border: 5px solid #fff;
+  background: linear-gradient(180deg, #ffd93d, #ffb347);
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.2);
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 800;
+  color: #7a4a00;
+  cursor: pointer;
+  transition: transform 0.08s;
+}
+.jump-btn:active { transform: scale(0.92); }
+
+/* ── toast ──────────────────────────────────────────────────────── */
+#toast {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%) scale(0.8);
+  background: rgba(255, 255, 255, 0.95);
+  border: 3px solid #ffd93d;
+  border-radius: 999px;
+  padding: 10px 26px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #7a4a00;
+  opacity: 0;
+  transition: opacity 0.25s, transform 0.25s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+#toast.show {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+/* ── hurt flash ─────────────────────────────────────────────────── */
+#hurt-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 60, 60, 0.55) 100%);
+}
+#hurt-flash.show {
+  animation: hurt-pulse 0.5s ease-out;
+}
+@keyframes hurt-pulse {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── overlays ───────────────────────────────────────────────────── */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(70, 50, 120, 0.25);
+  backdrop-filter: blur(2px);
+  pointer-events: auto;
+}
+
+.panel {
+  background: rgba(255, 255, 255, 0.94);
+  border: 5px solid #fff;
+  border-radius: 32px;
+  box-shadow: 0 14px 40px rgba(60, 30, 120, 0.35);
+  padding: 34px 48px;
+  text-align: center;
+  max-width: min(92vw, 560px);
+  animation: pop-in 0.35s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+@keyframes pop-in {
+  from { transform: scale(0.7); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.game-title {
+  margin: 0 0 8px;
+  font-size: clamp(30px, 6vw, 52px);
+  font-weight: 900;
+  background: linear-gradient(90deg, #ff5f6d, #ffa94d, #e8a100, #3fa34d, #5cb8ff, #b197fc);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.12));
+}
+
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: clamp(26px, 5vw, 40px);
+  color: #4a3b6b;
+}
+
+.rainbow-text {
+  background: linear-gradient(90deg, #ff5f6d, #ffa94d, #3fa34d, #5cb8ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+}
+
+.tagline {
+  color: #6b6390;
+  font-size: 17px;
+  margin: 6px 0 18px;
+}
+
+.btn-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  margin: 10px 0;
+}
+
+.big-btn {
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 800;
+  color: #5b4a86;
+  background: #fff;
+  border: 4px solid #d9d2f5;
+  border-radius: 999px;
+  padding: 12px 38px;
+  min-width: 260px;
+  cursor: pointer;
+  box-shadow: 0 5px 0 rgba(90, 70, 160, 0.25);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.big-btn:hover { transform: translateY(-2px) scale(1.03); }
+.big-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(90, 70, 160, 0.25); }
+.big-btn.primary {
+  background: linear-gradient(180deg, #ffd93d, #ffb347);
+  border-color: #fff;
+  color: #7a4a00;
+  font-size: 26px;
+}
+.big-btn.primary2 {
+  background: linear-gradient(180deg, #7ed9ff, #5cb8ff);
+  border-color: #fff;
+  color: #0a4a7a;
+  font-size: 24px;
+}
+
+.best {
+  color: #b197fc;
+  font-weight: 700;
+  min-height: 20px;
+  margin: 4px 0;
+}
+
+.controls-help {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  justify-content: center;
+  color: #8a83ad;
+  font-size: 14px;
+  margin-top: 8px;
+}
+
+.stat-line {
+  font-size: 20px;
+  color: #6b6390;
+  font-weight: 700;
+  margin: 4px 0;
+}
+.stat-line.bonus { color: #3fa34d; }
+.stat-line.total { font-size: 26px; color: #4a3b6b; }
+.stat-line span { color: #e8a100; }
+
+@media (max-width: 640px) {
+  .hud-pill { font-size: 14px; padding: 3px 10px; }
+  .jump-btn { width: 92px; height: 92px; font-size: 16px; }
+  .panel { padding: 22px 26px; }
+}
