@@ -36,10 +36,36 @@ where friends meet when someone makes a room.
 - **Go inside the houses** 🏠: the four village houses, the Pine Island cabin and the snack hut
   have open doors. Walk in and the house opens up like a dollhouse so you can see the room:
   a bed, a bookshelf, a rug, and sometimes a star, coins or someone to talk to.
-- **Talk to the villagers** 💬: walk up to one and press `F` (or the Talk button). Fourteen friends
+- **Talk to the villagers** 💬: walk up to one and press `F` (or the Talk button). Sixteen friends
   live on the islands; each has a few things to say and a small gift the first time you meet.
   Villagers only say fixed, friendly lines. There is no typed chat anywhere in the game.
-- 38 stars to find, including one on top of the lighthouse and one high in the sky.
+- 40 stars to find, including one on top of the lighthouse and one high in the sky.
+
+## Flying and space 🚁✈️🚀
+
+- **Helicopter** (by the dock on Adventure Island): hop in, hold jump to go up, let go to float
+  back down. It can hover, land anywhere, and floats on the sea.
+- **Jet** (west beach): fast. Get some speed, then hold jump to take off.
+- **Sky rings**: ten golden hoops to fly through, with a prize for all ten.
+- **Cloud Island**: a little island high in the sky with stars and a chest. Only flyers reach it.
+- **Rocket** (Pine Island): hop in to blast off to **Moon Base**, the ninth world. Gravity is low,
+  so every jump is huge: floating rocks to climb, a moon buggy with a ramp, a moon base to walk
+  into, and two aliens to talk to. The Moon's rocket flies you home.
+- Friends online see your helicopter or jet, and come along when someone takes the rocket.
+
+## Food 🍕
+
+Snacks float around every world. Walk into one to eat it:
+
+| Snack | What it does (for 8 seconds) |
+| --- | --- |
+| 🍎 Apple | +1 heart |
+| 🍦 Ice cream | Super speed |
+| 🧁 Cupcake | Mega jumps |
+| 🍕 Pizza | You grow giant |
+
+Snacks grow back after 20 seconds, and your pet cheers when you eat. Chef Chili's snack hut on
+Coconut Cove has one of each out front.
 
 ## Driving 🚗
 
@@ -67,10 +93,10 @@ where friends meet when someone makes a room.
 ## How to play
 
 - **Objective**: collect all ★ in each world to unlock the golden portal, then jump into it.
-  8 worlds: Sunny Meadow → Candy Canyon → Rainbow Peak → Castle in the Clouds → **Toy City** →
+  9 worlds: Sunny Meadow → Candy Canyon → Rainbow Peak → Castle in the Clouds → **Toy City** →
   **Frosty Mountain** (falling snow, a sliding ice floe and a spring-launch climb) →
   **Bubbly Beach** (sandy islands over a sparkly sea, with secret sky islands) →
-  **Adventure Island** (the big open world, see above).
+  **Adventure Island** (the big open world, see above) → **Moon Base** (by rocket).
 - **Party balloons** 🎈 (Bubbly Beach, and one on Frosty Mountain): touch one to float up for a
   few seconds, then steer to a secret island. Balloons grow back, so you can ride again.
 - **Hearts**: you have 3 ♥ per level. Falling off an island or bumping an enemy from the side
@@ -154,4 +180,5 @@ Every push to `main` deploys to **GitHub Pages** through `.github/workflows/depl
 (`npm run verify`, Playwright). `?level=N` in the URL starts directly on level N+1.
 `node scripts/playtest-online.mjs` plays two browsers together through a real room code
 (needs internet). `node scripts/playtest-fun.mjs` checks hats, dancing, balloons and Bubbly Beach;
-`playtest-drive.mjs` checks the car; `playtest-island.mjs` checks dress-up, pets, villagers and the boat.
+`playtest-drive.mjs` checks the car; `playtest-fly.mjs` the helicopter, rings and rocket;
+`playtest-touch.mjs` tablet controls with real multi-touch; `playtest-island.mjs` checks dress-up, pets, villagers and the boat.

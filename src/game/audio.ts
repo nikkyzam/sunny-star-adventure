@@ -10,7 +10,7 @@
 export type SfxId =
   | "jump" | "doublejump" | "land" | "boing" | "stomp" | "star" | "hurt"
   | "portal" | "checkpoint" | "ui" | "win" | "lose" | "unlock" | "fall"
-  | "coin" | "chest" | "buddy" | "powerup" | "honk" | "splash" | "talk" | "pet";
+  | "coin" | "chest" | "buddy" | "powerup" | "honk" | "splash" | "talk" | "pet" | "munch";
 
 export type TrackId = "meadow" | "island" | "city" | "snow";
 
@@ -317,6 +317,10 @@ export class AudioSystem {
           const f = 380 + Math.random() * 320;
           this.blip("triangle", f, f * (0.9 + Math.random() * 0.25), t + i * 0.075, 0.06, 0.13);
         }
+        break;
+      case "munch":
+        for (let i = 0; i < 3; i++) this.blip("square", 190 - i * 20, 120, t + i * 0.09, 0.06, 0.14);
+        this.blip("triangle", 520, 880, t + 0.3, 0.12, 0.16);
         break;
       case "pet":
         this.blip("triangle", 720, 1150, t, 0.09, 0.16);

@@ -87,6 +87,7 @@ export default function Home() {
               <span>👥 P2: Arrows + Enter</span>
               <span>🖱️ Drag — camera · E — car / boat (Space hop, H honk) · F — talk</span>
               <span>T — teleport to friend</span>
+              <span>📱 Tablet: left thumb moves, tap JUMP, drag right side to look</span>
               <span>1–6 — stickers · 7 — dance 💃 · Esc — pause · M — mute</span>
             </div>
           </div>

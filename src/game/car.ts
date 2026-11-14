@@ -1,5 +1,9 @@
 /**
- * car.ts — things kids ride: the Toy City car and the Adventure Island sailboat.
+ * car.ts — things kids ride: the car, the sailboat, the helicopter and the jet (plus the rocket
+ * model, which boot.ts launches).
+ *
+ * Aircraft: hold jump to climb, let go to sink gently and land anywhere (they float on the sea).
+ * The helicopter can hover and turn on the spot; the jet is fast and keeps moving in the air.
  *
  * Both share seats (one driver, one passenger — perfect for co-op), boarding with E, and the
  * driver's normal move keys. The car has arcade driving with wall bumps (world.resolveSolids),
@@ -26,7 +30,15 @@ const BOAT_REVERSE = 3;
 const BOAT_DRAG = 2.5;    // boats glide
 const BOAT_STEER = 1.7;
 
-export type RideKind = "car" | "boat";
+const SKY_LIMIT = 48;      // how high aircraft can climb
+
+export type RideKind = "car" | "boat" | "heli" | "jet";
+
+/** Per-aircraft handling. */
+const FLIGHT = {
+  heli: { max: 12, reverse: 4, accel: 10, turn: 1.9, climb: 7, sink: 3.2, minAir: 0, bank: 0.25 },
+  jet: { max: 26, reverse: 0, accel: 14, turn: 1.25, climb: 8, sink: 2.6, minAir: 11, bank: 0.6 },
+} as const;
 
 export class Car {
   readonly group = new THREE.Group();
@@ -50,12 +62,23 @@ export class Car {
   private vy = 0;
   private boostT = 0;
   private bob = 0;
+  private rotors: THREE.Object3D[] = [];
+  /** Aircraft: the driver is holding "up" this step (set by boot before update). */
+  lift = false;
 
   constructor(readonly kind: RideKind = "car") {
     if (kind === "boat") {
       this.seatZ = 0.1;
       this.seatY = 0.18;
       this.buildBoat();
+    } else if (kind === "heli") {
+      this.seatZ = 0.35;
+      this.seatY = 0.5;
+      this.buildHeli();
+    } else if (kind === "jet") {
+      this.seatZ = 0.5;
+      this.seatY = 0.55;
+      this.buildJet();
     } else {
       this.seatZ = 0.35;
       this.seatY = 0.62;
@@ -144,6 +167,76 @@ export class Car {
     flag.position.set(0, 3.45, 0.5);
     this.group.add(flag);
   }
+
+  private buildHeli(): void {
+    const flat = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.6 });
+    const yellow = flat(0xffc93c), dark = flat(0x33323e), white = flat(0xffffff);
+    const glass = new THREE.MeshStandardMaterial({ color: 0xbfefff, roughness: 0.2, transparent: true, opacity: 0.55 });
+    const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = this.group) => {
+      const mesh = new THREE.Mesh(geo, m);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      parent.add(mesh);
+      return mesh;
+    };
+    add(new THREE.SphereGeometry(0.9, 14, 10), yellow, 0, 1.05, -0.1).scale.set(0.95, 0.85, 1.35);   // cabin
+    add(new THREE.SphereGeometry(0.78, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), glass, 0, 1.12, 0.45).rotation.x = Math.PI / 2.4; // bubble
+    add(new THREE.CylinderGeometry(0.16, 0.08, 2.4, 8), yellow, 0, 1.2, -2.1).rotation.x = Math.PI / 2; // tail boom
+    add(new THREE.BoxGeometry(0.08, 0.7, 0.45), white, 0, 1.5, -3.15);                                  // tail fin
+    add(new THREE.BoxGeometry(1.3, 0.1, 0.5), white, 0, 0.72, -0.1);                                    // stripe
+    for (const sx of [-1, 1]) {
+      add(new THREE.CylinderGeometry(0.05, 0.05, 2.2, 6), dark, 0.62 * sx, 0.12, 0).rotation.x = Math.PI / 2; // skid
+      add(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6), dark, 0.55 * sx, 0.38, 0.5);
+      add(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6), dark, 0.55 * sx, 0.38, -0.6);
+    }
+    add(new THREE.CylinderGeometry(0.07, 0.07, 0.5, 8), dark, 0, 2.0, -0.1);                            // mast
+    const rotor = new THREE.Group();
+    rotor.position.set(0, 2.25, -0.1);
+    add(new THREE.BoxGeometry(5.2, 0.05, 0.28), dark, 0, 0, 0, rotor);
+    add(new THREE.BoxGeometry(0.28, 0.05, 5.2), dark, 0, 0, 0, rotor);
+    this.group.add(rotor);
+    const tail = new THREE.Group();
+    tail.position.set(0.12, 1.5, -3.15);
+    add(new THREE.BoxGeometry(0.04, 0.9, 0.12), dark, 0, 0, 0, tail);
+    add(new THREE.BoxGeometry(0.04, 0.12, 0.9), dark, 0, 0, 0, tail);
+    this.group.add(tail);
+    this.rotors = [rotor, tail];
+  }
+
+  private buildJet(): void {
+    const flat = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.5 });
+    const white = flat(0xf4f6fb), blue = flat(0x4a69bd), red = flat(0xff4757), dark = flat(0x33323e);
+    const glass = new THREE.MeshStandardMaterial({ color: 0xbfefff, roughness: 0.2, transparent: true, opacity: 0.55 });
+    const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number) => {
+      const mesh = new THREE.Mesh(geo, m);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      this.group.add(mesh);
+      return mesh;
+    };
+    add(new THREE.CapsuleGeometry(0.55, 3.4, 6, 12), white, 0, 0.95, 0).rotation.x = Math.PI / 2;        // fuselage
+    add(new THREE.ConeGeometry(0.42, 1.1, 12), red, 0, 0.95, 2.7).rotation.x = Math.PI / 2;              // nose
+    add(new THREE.SphereGeometry(0.5, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), glass, 0, 1.25, 0.7).scale.set(0.9, 1, 1.7); // canopy
+    add(new THREE.BoxGeometry(6.2, 0.1, 1.3), blue, 0, 0.85, -0.1);                                      // wings
+    add(new THREE.BoxGeometry(2.4, 0.08, 0.7), blue, 0, 1.0, -2.0);                                      // tailplane
+    add(new THREE.BoxGeometry(0.1, 1.1, 0.9), red, 0, 1.6, -2.0);                                        // fin
+    for (const sx of [-1, 1]) {
+      add(new THREE.CylinderGeometry(0.22, 0.26, 1.1, 10), dark, 1.5 * sx, 0.62, 0.1).rotation.x = Math.PI / 2; // engine
+      add(new THREE.BoxGeometry(0.3, 0.12, 1.3), red, 3.0 * sx, 0.9, -0.1);                              // wingtip
+      add(new THREE.CylinderGeometry(0.18, 0.18, 0.12, 10), dark, 0.9 * sx, 0.18, -0.4).rotation.z = Math.PI / 2; // wheel
+    }
+    add(new THREE.CylinderGeometry(0.16, 0.16, 0.12, 10), dark, 0, 0.16, 1.6).rotation.z = Math.PI / 2;
+  }
+
+  get flies(): boolean {
+    return this.kind === "heli" || this.kind === "jet";
+  }
+
+  /** Off the ground (aircraft) or mid-hop (car). */
+  get inAir(): boolean {
+    return this.flying;
+  }
+  private flying = false;
 
   get pos(): THREE.Vector3 {
     return this.group.position;
@@ -249,6 +342,10 @@ export class Car {
       this.updateBoat(dt, axX, axZ, world);
       return;
     }
+    if (this.kind === "heli" || this.kind === "jet") {
+      this.updateFlight(dt, axX, axZ, world, FLIGHT[this.kind]);
+      return;
+    }
     // speed toward target
     if (this.boostT > 0) this.boostT -= dt;
     const max = this.boostT > 0 ? BOOST_SPEED : MAX_SPEED;
@@ -290,7 +387,7 @@ export class Car {
       this.pos.y = g.y;
       this.vy = 0;
     } else if (!g || this.pos.y > g.y + 0.02) {
-      this.vy -= 30 * dt;
+      this.vy -= 30 * world.gravity * dt;
       this.pos.y += this.vy * dt;
     }
     if (this.pos.y < KILL_Y) this.fellOff = true;
@@ -332,6 +429,55 @@ export class Car {
     this.seat(this.passenger, -0.8);
   }
 
+  private updateFlight(dt: number, axX: number, axZ: number, world: World, f: typeof FLIGHT[keyof typeof FLIGHT]): void {
+    // where it can rest: the ground under it, or the sea's surface (aircraft float)
+    const g = world.groundAt(this.pos.x, this.pos.z, this.pos.y + 0.6);
+    const sea = world.def.sea;
+    const floor = Math.max(g ? g.y : -Infinity, sea !== undefined ? sea : -Infinity);
+    const grounded = floor > -Infinity && this.pos.y <= floor + 0.02;
+
+    // speed: the jet never stops in the air
+    if (axZ > 0.1) this.speed = Math.min(f.max, this.speed + f.accel * axZ * dt);
+    else if (axZ < -0.1) this.speed = Math.max(-f.reverse, this.speed - f.accel * dt);
+    else {
+      const slow = (grounded ? 9 : 4) * dt;
+      if (Math.abs(this.speed) <= slow) this.speed = 0;
+      else this.speed -= Math.sign(this.speed) * slow;
+    }
+    if (!grounded && this.speed < f.minAir) this.speed = Math.min(f.minAir, this.speed + f.accel * dt);
+
+    // turning: aircraft turn freely in the air, like a car on the ground
+    const authority = grounded ? Math.min(1, Math.abs(this.speed) / 4) * Math.sign(this.speed || 1) : 1;
+    this.heading -= axX * f.turn * authority * dt;
+
+    // climb while "up" is held (the jet needs some speed first); otherwise sink gently
+    const canClimb = this.driver !== null && this.lift && (this.kind === "heli" || this.speed > 7);
+    const targetVy = canClimb ? f.climb : grounded ? 0 : -f.sink;
+    this.vy += (targetVy - this.vy) * Math.min(1, dt * 3);
+
+    this.pos.x += Math.sin(this.heading) * this.speed * dt;
+    this.pos.z += Math.cos(this.heading) * this.speed * dt;
+    this.pos.y = Math.min(SKY_LIMIT, this.pos.y + this.vy * dt);
+    world.resolveSolids(this.pos, 1.2);
+    if (floor > -Infinity && this.pos.y <= floor) {
+      this.pos.y = floor;
+      if (this.vy < 0) this.vy = 0;
+    }
+    if (this.pos.y < KILL_Y) this.fellOff = true;
+    this.flying = !grounded;
+
+    // lean into turns and forward speed
+    const spin = this.driver ? (this.flying || this.lift ? 28 : 12) : 0;
+    if (this.rotors[0]) this.rotors[0].rotation.y += spin * dt;
+    if (this.rotors[1]) this.rotors[1].rotation.x += spin * dt;
+    const roll = this.flying ? -axX * f.bank : 0;
+    const pitch = this.flying ? (this.kind === "heli" ? this.speed * 0.02 : -this.vy * 0.04) : 0;
+    this.group.rotation.set(pitch, this.heading, roll, "YXZ");
+
+    this.seat(this.driver, this.seatZ);
+    this.seat(this.passenger, this.kind === "jet" ? -0.5 : -0.45);
+  }
+
   /** Is there land under the point `along` meters ahead of the boat's middle? */
   private onLand(world: World, along: number): boolean {
     const x = this.pos.x + Math.sin(this.heading) * along;
@@ -351,4 +497,30 @@ export class Car {
     p.facing = this.heading;
     p.group.rotation.y = this.heading;
   }
+}
+
+/** The rocket (a model only — boot.ts handles boarding and blast-off). Stands 5 tall on its fins. */
+export function makeRocket(): THREE.Group {
+  const g = new THREE.Group();
+  const flat = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.5 });
+  const white = flat(0xf4f6fb), red = flat(0xff4757), dark = flat(0x33323e);
+  const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number) => {
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    g.add(mesh);
+    return mesh;
+  };
+  add(new THREE.CylinderGeometry(0.85, 0.95, 3.2, 14), white, 0, 2.3, 0);
+  add(new THREE.ConeGeometry(0.85, 1.6, 14), red, 0, 4.7, 0);
+  add(new THREE.CylinderGeometry(0.87, 0.87, 0.3, 14), red, 0, 1.5, 0);
+  add(new THREE.CylinderGeometry(0.5, 0.75, 0.6, 12), dark, 0, 0.45, 0);
+  const win = add(new THREE.SphereGeometry(0.36, 12, 10), new THREE.MeshStandardMaterial({ color: 0x9df2ff, emissive: 0x1a5a6a, roughness: 0.2 }), 0, 3.1, 0.72);
+  win.scale.z = 0.4;
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + Math.PI / 3;
+    const fin = add(new THREE.BoxGeometry(0.12, 1.5, 1.0), red, Math.sin(a) * 1.15, 0.9, Math.cos(a) * 1.15);
+    fin.rotation.y = a;
+  }
+  return g;
 }

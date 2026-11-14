@@ -119,6 +119,10 @@ export class Player {
   floatT = 0;
   /** Seconds of dance left. */
   danceT = 0;
+  /** Snack effects (seconds left): ice cream = fast, cupcake = big jumps, pizza = giant. */
+  speedT = 0;
+  jumpT = 0;
+  bigT = 0;
 
   private body = new THREE.Group();
   private armL!: THREE.Group;
@@ -290,6 +294,9 @@ export class Player {
     this.glideActive = false;
     this.floatT = 0;
     this.danceT = 0;
+    this.speedT = 0;
+    this.jumpT = 0;
+    this.bigT = 0;
     this.coyote = 0;
     this.jumpBuffer = 0;
     this.facing = Math.PI;
@@ -309,8 +316,12 @@ export class Player {
 
     // horizontal: accelerate toward wish velocity
     const accel = this.onGround ? ACCEL_GROUND : ACCEL_AIR;
-    this.vel.x += (wishX * SPEED - this.vel.x) * Math.min(1, accel * dt / SPEED);
-    this.vel.z += (wishZ * SPEED - this.vel.z) * Math.min(1, accel * dt / SPEED);
+    if (this.speedT > 0) this.speedT -= dt;
+    if (this.jumpT > 0) this.jumpT -= dt;
+    if (this.bigT > 0) this.bigT -= dt;
+    const speed = SPEED * (this.speedT > 0 ? 1.6 : 1);
+    this.vel.x += (wishX * speed - this.vel.x) * Math.min(1, accel * dt / SPEED);
+    this.vel.z += (wishZ * speed - this.vel.z) * Math.min(1, accel * dt / SPEED);
 
     // gravity (+ balloon float / glide / parachute)
     if (this.floatT > 0) {
@@ -318,7 +329,7 @@ export class Player {
       this.vel.y += (FLOAT_RISE - this.vel.y) * Math.min(1, dt * 3);
       if (this.floatT <= 0) this.jumpsLeft = Math.max(this.jumpsLeft, 1); // let go: one air jump to steer
     } else {
-      this.vel.y -= GRAVITY * dt;
+      this.vel.y -= GRAVITY * world.gravity * dt;
     }
     this.glideActive = this.glideEnabled && glideHeld && !this.onGround && this.vel.y < -GLIDE_FALL;
     if (this.glideActive) this.vel.y = -GLIDE_FALL;
@@ -376,7 +387,7 @@ export class Player {
     else this.jumpBuffer -= dt;
     if (this.jumpBuffer > 0) {
       if (this.onGround || this.coyote > 0) {
-        this.vel.y = JUMP_VEL;
+        this.vel.y = JUMP_VEL * (this.jumpT > 0 ? 1.4 : 1);
         this.jumpsLeft = 1;
         this.onGround = false;
         this.coyote = 0;
@@ -384,7 +395,7 @@ export class Player {
         this.squashT = 0;
         e.jumped = true;
       } else if (this.jumpsLeft > 0) {
-        this.vel.y = DOUBLE_JUMP_VEL;
+        this.vel.y = DOUBLE_JUMP_VEL * (this.jumpT > 0 ? 1.4 : 1);
         this.jumpsLeft = 0;
         this.jumpBuffer = 0;
         e.doubleJumped = true;
@@ -400,8 +411,9 @@ export class Player {
    * The position eases toward the target so 15 Hz updates still look smooth.
    */
   applyRemote(dt: number, x: number, y: number, z: number, vx: number, vy: number, vz: number,
-    onGround: boolean, glide: boolean, riding: boolean, facing: number, floating: boolean): void {
+    onGround: boolean, glide: boolean, riding: boolean, facing: number, floating: boolean, big = false): void {
     this.floatT = floating ? 1 : 0;
+    this.bigT = big ? 1 : 0;
     const dx = x - this.pos.x, dy = y - this.pos.y, dz = z - this.pos.z;
     if (dx * dx + dy * dy + dz * dz > 36) this.pos.set(x, y, z); // teleport / respawn: snap
     else {
@@ -504,6 +516,10 @@ export class Player {
       this.legR.rotation.x = -w * 0.4;
       this.body.position.y = Math.abs(w) * 0.15;
     }
+
+    // pizza: grow giant, then shrink back
+    const size = this.group.scale.x + ((this.bigT > 0 ? 1.7 : 1) - this.group.scale.x) * Math.min(1, dt * 5);
+    this.group.scale.setScalar(size);
 
     this.balloon.visible = this.floatT > 0;
     if (this.balloon.visible && this.danceT <= 0) this.armR.rotation.set(0, 0, -2.8); // holding the string

@@ -1,6 +1,7 @@
 /**
  * playtest-fun.mjs — the "more fun" features: hats, dance, balloon float, Bubbly Beach.
  *   F1 hat choice persists and the kid wears it    F2 dance key runs without errors
+ *   F5 pizza makes the kid giant                    F6 a cupcake gives mega jumps
  *   F3 Bubbly Beach (level 7) loads with its ocean  F4 a balloon lifts the kid well above the island
  */
 import { chromium } from "playwright";
@@ -86,6 +87,20 @@ try {
     await page.waitForTimeout(100);
   }
   check("F4 balloon lifts the kid", maxY > 5, `max height ${maxY.toFixed(1)}`);
+  // snacks (Bubbly Beach): the pizza at (0, -24) makes the kid giant; the cupcake at (-3.5, 3) gives mega jumps
+  const snacks = await page.evaluate(() => window.__gameDebug().food);
+  await page.evaluate(() => window.__gameDebug().warp(0, -24));
+  await page.waitForTimeout(1200);
+  const fed = await page.evaluate(() => { const d = window.__gameDebug(); return { food: d.food, big: d.big }; });
+  check("F5 eating pizza makes the kid giant", fed.food === snacks - 1 && fed.big > 1.4, `snacks ${snacks} → ${fed.food}, size ${fed.big.toFixed(2)}`);
+  await page.screenshot({ path: join(ROOT, "verification-shots/35-giant.png") });
+  await page.evaluate(() => window.__gameDebug().warp(-3.5, 3));
+  await page.waitForTimeout(500);
+  const y0 = (await page.evaluate(() => window.__gameDebug())).py;
+  await page.keyboard.press("Space");
+  let top = y0;
+  for (let i = 0; i < 12; i++) { await page.waitForTimeout(60); top = Math.max(top, (await page.evaluate(() => window.__gameDebug().py))); }
+  check("F6 a cupcake gives mega jumps", top - y0 > 2.6, `jumped ${(top - y0).toFixed(2)} (normal is about 1.8)`);
   check("Z1 zero page errors", errors.length === 0, errors.join(" | "));
 } catch (e) {
   console.error(e);

@@ -1,7 +1,7 @@
 /**
  * world.ts — floating-island level construction + collision queries + ambient animation.
  *
- * Eight hand-designed worlds (geometry is parametric, placed from level data):
+ * Nine hand-designed worlds (geometry is parametric, placed from level data):
  *   1. Sunny Meadow        — gentle gaps, teaches jump / stars / stomp (+ bunny buddy)
  *   2. Candy Canyon        — bridges, a moving platform (+ birdie buddy, circling bird)
  *   3. Rainbow Peak        — vertical climb, springs (+ hedgehogs, turtle buddy)
@@ -10,6 +10,8 @@
  *                            and a parachute tower (free glide in this world)
  *   6. Frosty Mountain     — falling snow, a sliding ice bridge, a spring-launch climb
  *   7. Bubbly Beach        — sandy islands over the sea; party balloons float you to secret islands
+ *   9. Moon Base           — low gravity, floating rocks, a moon buggy, aliens to talk to; reached by
+ *                            rocket from Adventure Island
  *   8. Adventure Island    — one big open island to explore: village, forest, lookout hill, a beach
  *                            loop for the car, a sailboat to reach far islets, villagers to talk to
  *
@@ -20,6 +22,7 @@
 import * as THREE from "three";
 import { mulberry32, pick } from "./rng";
 import type { PropDefs } from "./props";
+import type { FoodDef } from "./food";
 
 export interface Platform {
   kind: "disc" | "box";
@@ -100,6 +103,18 @@ export interface LevelDef {
    */
   sea?: number;
   boatSpawn?: [number, number, number]; // x, z, heading
+  heliSpawn?: [number, number, number, number]; // x, y, z, heading
+  jetSpawn?: [number, number, number, number];
+  /** A rocket to board: it flies to the Moon (or back to the island from a space level). */
+  rocket?: [number, number, number];
+  /** Golden hoops in the sky: x, y, z, heading. */
+  rings?: [number, number, number, number][];
+  /** Snacks to eat (food.ts). */
+  food?: FoodDef[];
+  /** Gravity multiplier (1 = normal; the Moon is 0.3). */
+  gravity?: number;
+  /** Outer space: black sky, stars, the Earth overhead, no clouds. */
+  space?: boolean;
   npcs?: NpcDef[];
   /** Bumpable things: cones, gift boxes, balls, and car boost pads / ramps (props.ts). */
   props?: PropDefs;
@@ -155,9 +170,11 @@ export const LEVELS: LevelDef[] = [
     portal: [0, 2.8, -44],
     rainbow: true,
     props: { balls: [[-3, 0, 1]] },
+    food: [["apple", 12.5, 0.8, 1]],
   },
   {
     name: "Candy Canyon",
+    food: [["cupcake", -9.5, 1.3, 2], ["icecream", 13, 2.8, -27]],
     sky: 0xffd6ec, fog: 0xffe4f3,
     grass: 0xff9ecf, dirt: 0xc96b9e, foliage: 0xff5fa2,
     flowerColors: [0xffffff, 0xfff06b, 0x9df2ff, 0xffb3ff],
@@ -333,6 +350,7 @@ export const LEVELS: LevelDef[] = [
     spawn: [0, 0, 18],
     freeGlide: true, // parachute town!
     carSpawn: [4, 0, 14, Math.PI],
+    food: [["pizza", -10, 1.0, -1], ["icecream", 17, 1.0, 8], ["cupcake", 0, 1.5, -36], ["apple", -16, 1.0, -4]],
     props: {
       cones: [[-3, 0, 6.8], [-1, 0, 5.2], [1, 0, 6.8], [3, 0, 5.2], [-4, 0, -18.6], [0, 0, -18], [4, 0, -17.4]],
       boxes: [[-2, 0, 12], [-10, 0, -11], [8, 0, -14], [0, 0, -21.5], [18, 0, 5]],
@@ -402,6 +420,7 @@ export const LEVELS: LevelDef[] = [
   },
   {
     name: "Frosty Mountain",
+    food: [["icecream", 3, 1.0, 2], ["apple", 9.6, 1.2, -11], ["cupcake", 2, 8.4, -57]],
     sky: 0xcfe8ff, fog: 0xe6f3ff,
     grass: 0xf7fbff, dirt: 0x9fb8d6, foliage: 0x2f7d5b,
     flowerColors: [0x9df2ff, 0xffffff, 0xb197fc, 0xff9ecf],
@@ -463,6 +482,7 @@ export const LEVELS: LevelDef[] = [
     spawn: [0, 0, 5],
     ocean: true,
     props: { balls: [[-3, 0, 1]], boxes: [[2, 1.4, -28]] },
+    food: [["cupcake", -3.5, 1.0, 3], ["pizza", 0, 2.4, -24], ["apple", 9, 1.6, -13]],
     discs: [
       { x: 0, z: 0, r: 6, y: 0, trees: 2, flowers: 6 },
       { x: 0, z: -11, r: 3.5, y: 0.4, flowers: 3 },
@@ -539,6 +559,18 @@ const ADVENTURE_ISLAND: LevelDef = {
   sea: -0.5,
   boatSpawn: [9.4, 21, 0],
   carSpawn: [-6, 0, 11, Math.PI / 2],
+  food: [
+    ["pizza", 40.5, 1.3, -58.2], ["icecream", 43.5, 1.3, -58.2], ["cupcake", 47, 1.3, -59],   // the snack hut
+    ["cupcake", -3, 1.0, 6], ["apple", -14, 1.3, -6], ["apple", 6, 1.3, -38], ["icecream", 28, 1.0, -22],
+    ["apple", -78, 1.3, -57], ["icecream", -70, 1.3, -67], ["pizza", 60, 1.3, 20], ["cupcake", 30, 31, 3],
+  ],
+  heliSpawn: [13, 0, 10, Math.PI],
+  jetSpawn: [-31, 0, -12, Math.PI],
+  rocket: [-70, 0, -40.5],
+  rings: [
+    [0, 10, -20, 0], [20, 14, -40, 0.8], [46, 18, -66, 0], [6, 16, -72, 0], [-30, 20, -50, 0.8],
+    [-66, 17, -60, 0], [-56, 9, -14, 1.57], [62, 14, 22, 0], [0, 24, 22, 1.57], [22, 31, 0, 1.57],
+  ],
   rainbow: true,
   discs: [
     { x: 0, z: -20, r: 36, y: 0, color: SAND },                      // the beach
@@ -560,6 +592,7 @@ const ADVENTURE_ISLAND: LevelDef = {
     { x: 54, z: -30, r: 6, y: 0.2, trees: 3, flowers: 4, color: SAND },  // Palm Cay
     { x: 6, z: -78, r: 5.5, y: 0.2, rocks: 2, color: SAND },             // Lighthouse Rock
     { x: 30, z: 15, r: 3, y: 0.1, color: SAND },                         // the sandbar
+    { x: 30, z: 0, r: 7, y: 30, trees: 1, flowers: 5, color: 0xffffff }, // Cloud Island, high in the sky: fly there!
     { x: -38, z: 36, r: 5.5, y: 0.2, trees: 2, rocks: 1, color: SAND },  // Shell Islet
     // the causeway: overlapping sand discs, wide enough for the car
     { x: 26.5, z: -46.5, r: 3.5, y: 0, color: SAND },
@@ -629,6 +662,7 @@ const ADVENTURE_ISLAND: LevelDef = {
     [-60, 1.6, -73], [-76, 4.7, -63], [-91, 1.2, -62],
     [58, 1.5, 26], [64, 7.5, 16], [68, 1.6, 27], [77, 1.2, 22], [62, 1.2, 37],    // Sunset Island (by boat)
     [17, 1.5, -12.2], [23, 1.5, -27.2], [-76, 1.5, -63.3],                        // inside houses
+    [30, 31.2, -1], [33.5, 31.2, 3],                                              // Cloud Island (fly there)
   ],
   coins: [
     ...ring(16, 32, 0, -20, 1.0, 0.2),
@@ -644,7 +678,7 @@ const ADVENTURE_ISLAND: LevelDef = {
     [15.2, 1.4, -26.6], [17, 1.4, -26.6], [42, 1.4, -61.8],                       // inside houses
   ],
   chests: [[-57.5, 0.2, -15.5], [-54.5, 0.2, -11.5], [6, 0.34, -42], [3.5, 0.2, -80], [51, 0.34, -71], [-38, 0.2, 38],
-    [-81, 0.34, -71], [-60, 0.34, -73.8], [56, 0.34, 15]],
+    [-81, 0.34, -71], [-60, 0.34, -73.8], [56, 0.34, 15], [27, 30, 2.5]],
   hearts: [[55, 1.4, -32.5], [70, 1.5, 18]],
   magnets: [[-24, 1.6, -18]],
   buddies: [],
@@ -681,7 +715,7 @@ const ADVENTURE_ISLAND: LevelDef = {
         "Welcome to Adventure Island! Find every star to open the portal in the meadow.",
         "Every house in the village is open. Walk in through the door and look around!",
         "The red car is for everyone. Drive around the island, then over the causeways to Coconut Cove and Pine Island!",
-        "Fourteen friends live on these islands. Can you say hello to all of us?",
+        "Sixteen friends live on these islands. Can you say hello to all of us?",
       ],
     },
     {
@@ -732,7 +766,9 @@ const ADVENTURE_ISLAND: LevelDef = {
     {
       name: "Chef Chili", x: 45.5, y: 0.3, z: -61, outfit: 0, hat: 1, skin: 4,
       lines: [
-        "Hi! This is my snack hut. Bounce on the spring to reach the star on my roof!",
+        "Hi! This is my snack hut. Grab a snack out front. Pizza makes you GIANT!",
+        "Ice cream makes you super fast, and cupcakes give you mega jumps. Snacks grow back!",
+        "Bounce on the spring to reach the star on my roof!",
         "Kick the big ball around the meadow. Your pet will chase after you!",
       ],
     },
@@ -765,6 +801,21 @@ const ADVENTURE_ISLAND: LevelDef = {
       ],
     },
     {
+      name: "Pilot Piper", x: 15.5, y: 0, z: 12.5, outfit: 4, hat: 0, skin: 2,
+      lines: [
+        "That's my helicopter! Hop in, then hold JUMP to go up. Let go to float back down.",
+        "Fly through the golden rings in the sky. There are ten of them!",
+        "There's an island up in the clouds. And a jet on the west beach, if you like going FAST.",
+      ],
+    },
+    {
+      name: "Astronaut Ada", x: -66.5, y: 0, z: -41.5, outfit: 1, hat: 0, skin: 3,
+      lines: [
+        "Ready for space? Hop in the rocket and blast off to the Moon!",
+        "On the Moon you can jump super high. Everything is floaty up there!",
+      ],
+    },
+    {
       name: "Diver Dot", x: -36.5, y: 0.2, z: 34.5, outfit: 2, hat: 0, skin: 0,
       lines: [
         "You found Shell Islet! Not many sailors come this far south.",
@@ -774,6 +825,76 @@ const ADVENTURE_ISLAND: LevelDef = {
   ],
 };
 LEVELS.push(ADVENTURE_ISLAND);
+
+/** Moon Base: reached by rocket. Low gravity, so every jump is huge. */
+const MOON: LevelDef = {
+  name: "Moon Base",
+  sky: 0x05061a, fog: 0x05061a,
+  grass: 0xc3c8d4, dirt: 0x8a90a0, foliage: 0x8a90a0,
+  flowerColors: [0xffffff],
+  spawn: [0, 0, 8],
+  gravity: 0.3,
+  space: true,
+  carSpawn: [5, 0, 8, Math.PI], // the moon buggy
+  food: [["cupcake", 3, 1.0, -5], ["icecream", -10, 1.0, -9], ["pizza", 14, 1.0, -14]],
+  rocket: [-7, 0, 9],
+  discs: [
+    { x: 0, z: -14, r: 30, y: 0, rocks: 12 },
+    // crater mounds
+    { x: -12, z: -18, r: 6, y: 0.5 }, { x: -12, z: -18, r: 4, y: 1.0 }, { x: -12, z: -18, r: 2.4, y: 1.5 },
+    { x: 12, z: -26, r: 7, y: 0.6 }, { x: 12, z: -26, r: 5, y: 1.2 }, { x: 12, z: -26, r: 3, y: 1.8, rocks: 1 },
+    // floating rocks: easy to reach with moon jumps
+    { x: 0, z: -22, r: 2.5, y: 4 },
+    { x: 5, z: -28, r: 2.2, y: 8 },
+    { x: -2, z: -34, r: 2.5, y: 12 },
+    { x: 22, z: -6, r: 2.5, y: 5 },
+  ],
+  bridges: [],
+  springs: [{ x: -18, z: -4, y: 0, power: 14 }], // a trampoline on the Moon goes a LONG way up
+  buildings: [
+    { x: -8, z: -30, w: 5, d: 4, h: 3.4, color: 0xf4f6fb, enter: true },
+    { x: 10, z: -8, w: 4, d: 4, h: 3.4, color: 0xdfe6ee, enter: true },
+  ],
+  stars: [
+    [0, 1.2, 2], [0, 1.2, -8],
+    [-12, 2.9, -18], [12, 3.2, -26],
+    [0, 5.4, -22], [5, 9.4, -28], [-2, 13.4, -34], [22, 6.4, -6],
+    [-18, 10, -4],
+    [-8, 1.5, -30.2], [10, 1.5, -8.2],
+    [20, 1.2, -30], [-22, 1.2, -26], [0, 1.2, -38],
+  ],
+  coins: [...ring(12, 20, 0, -14, 1.0), [0, 1.2, -3], [0, 1.2, -13], [-18, 4, -4], [-18, 7, -4]],
+  chests: [[13.5, 1.8, -27]],
+  hearts: [[22, 6.4, -7]],
+  magnets: [[-2, 13.4, -33]],
+  buddies: [],
+  slimes: [{ ax: -6, az: -12, bx: 6, bz: -12, y: 0, speed: 1.0 }],
+  checkpoints: [[2.5, 0, -10]],
+  portal: [0, 0, -41],
+  props: {
+    balls: [[4, 0, -2]],
+    boxes: [[-4, 0, -16], [16, 0, -16], [-20, 0, -14]],
+    ramps: [[0, 0, -28, Math.PI]],
+  },
+  npcs: [
+    {
+      name: "Zib", x: 3.2, y: 0, z: 3.5, outfit: 3, hat: 2, skin: 5,
+      lines: [
+        "Greetings, Earth kid! Welcome to the Moon. Try a jump. Whee!",
+        "Hop up the floating rocks. The highest star is waaay up there.",
+        "The moon buggy is fun on the ramp. It flies for ages!",
+      ],
+    },
+    {
+      name: "Blorp", x: -3.5, y: 0, z: -24, outfit: 5, hat: 1, skin: 5,
+      lines: [
+        "Blorp says hi! Our moon base doors are open. Come inside!",
+        "That blue ball in the sky is your home. Pretty, isn't it?",
+      ],
+    },
+  ],
+};
+LEVELS.push(MOON);
 
 const RAINBOW_COLORS = [0xff5f6d, 0xffa94d, 0xffe066, 0x7ed957, 0x5cb8ff, 0xb197fc];
 
@@ -817,6 +938,10 @@ export class World {
   /** Height of the sea's surface above its resting level at world (x, z) — the boat rides this. */
   waveAt(x: number, z: number): number {
     return this.ocean ? this.waveAmp * swell(x - this.ocean.position.x, z - this.ocean.position.z, this.time) : 0;
+  }
+
+  get gravity(): number {
+    return this.def.gravity ?? 1;
   }
 
   /** Highest platform top under (x,z) that is not above refY + step allowance. */
@@ -1024,7 +1149,7 @@ export class World {
 
     scene.background = new THREE.Color(def.sky);
     // open-sea levels need to see far islets
-    scene.fog = def.sea !== undefined ? new THREE.Fog(def.fog, 90, 270) : new THREE.Fog(def.fog, 38, 110);
+    scene.fog = def.space ? new THREE.Fog(def.fog, 70, 220) : def.sea !== undefined ? new THREE.Fog(def.fog, 90, 270) : new THREE.Fog(def.fog, 38, 110);
 
     const grassMat = new THREE.MeshStandardMaterial({ color: def.grass, flatShading: true, roughness: 0.9 });
     const dirtMat = new THREE.MeshStandardMaterial({ color: def.dirt, flatShading: true, roughness: 1 });
@@ -1278,7 +1403,7 @@ export class World {
 
     // ── Clouds ──
     const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 1 });
-    const cloudCount = def.buildings ? 10 : 6;
+    const cloudCount = def.space ? 0 : def.buildings ? 10 : 6;
     for (let i = 0; i < cloudCount; i++) {
       const cloud = new THREE.Group();
       const puffs = 3 + Math.floor(rng() * 3);
@@ -1339,6 +1464,41 @@ export class World {
         kind: "box", x: 0, z: -25, r: 0, hw: 400, hd: 400, topY: def.sea - 0.5, spring: 0,
         baseX: 0, baseZ: -25, dx: 0, dz: 0, mesh: new THREE.Object3D(), squashT: 0,
       });
+    }
+
+    // ── Space: stars all around and the Earth overhead ──
+    if (def.space) {
+      const count = 1400;
+      const pos = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        // random points on a big sphere (upper part only: below is the ground)
+        const a = rng() * Math.PI * 2;
+        const y = rng() * 1.1 - 0.1;
+        const r = Math.sqrt(Math.max(0, 1 - y * y));
+        pos[i * 3] = Math.cos(a) * r * 260;
+        pos[i * 3 + 1] = y * 260;
+        pos[i * 3 + 2] = Math.sin(a) * r * 260 - 14;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      this.group.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, fog: false })));
+      const earth = new THREE.Mesh(
+        new THREE.SphereGeometry(22, 20, 14),
+        new THREE.MeshBasicMaterial({ color: 0x3f8fe0, fog: false }),
+      );
+      earth.position.set(70, 85, -150);
+      this.group.add(earth);
+      for (let i = 0; i < 7; i++) {
+        const land = new THREE.Mesh(
+          new THREE.SphereGeometry(5 + rng() * 5, 8, 6),
+          new THREE.MeshBasicMaterial({ color: i % 3 === 0 ? 0xffffff : 0x5ed48a, fog: false }),
+        );
+        // a blob lying on the Earth's near side
+        const a = rng() * Math.PI * 2, e = 0.3 + rng() * 0.9;
+        land.position.set(70 + Math.cos(a) * Math.sin(e) * 19.5, 85 + Math.sin(a) * Math.sin(e) * 19.5, -150 + Math.cos(e) * 19.5);
+        land.scale.setScalar(0.6);
+        this.group.add(land);
+      }
     }
 
     // ── Rainbow (big, far, decorative) ──
