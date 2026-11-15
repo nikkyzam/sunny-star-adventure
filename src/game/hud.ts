@@ -6,9 +6,9 @@
 export type HudAction =
   | "play" | "play2" | "continue" | "resume" | "retry" | "next" | "title" | "again" | "jump" | "mute"
   | "online" | "host" | "join" | "back" | "reroll" | "easy" | "drive" | "car" | "honk"
-  | "dress" | "island" | "talk";
+  | "dress" | "island" | "talk" | "verse-ready" | "verse-check" | "verse-peek";
 
-type OverlayName = "title" | "pause" | "gameover" | "clear" | "win" | "online" | "dress";
+type OverlayName = "title" | "pause" | "gameover" | "clear" | "win" | "online" | "dress" | "verse";
 
 const OVERLAY_IDS: Record<OverlayName, string> = {
   title: "ov-title",
@@ -18,6 +18,7 @@ const OVERLAY_IDS: Record<OverlayName, string> = {
   win: "ov-win",
   online: "ov-online",
   dress: "ov-dress",
+  verse: "ov-verse",
 };
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -197,6 +198,43 @@ export class Hud {
     this.talkBtn.style.display = show ? "" : "none";
   }
 
+  /** Memory verse screen: show the verse to learn. */
+  showVerse(ref: string, text: string): void {
+    el("verse-ref").textContent = ref;
+    el("verse-text").textContent = text;
+    el<HTMLTextAreaElement>("verse-input").value = "";
+    el("verse-feedback").textContent = "";
+    this.verseStage(false);
+  }
+
+  /** typing = true hides the verse and shows the box to type it in; false shows the verse again. */
+  verseStage(typing: boolean): void {
+    el("verse-text").style.display = typing ? "none" : "";
+    el("verse-learn").style.display = typing ? "none" : "";
+    el("verse-type").style.display = typing ? "" : "none";
+    if (typing) el<HTMLTextAreaElement>("verse-input").focus();
+  }
+
+  verseInput(): string {
+    return el<HTMLTextAreaElement>("verse-input").value;
+  }
+
+  /** After a wrong try: the verse with the words they got in green and the rest as blanks. */
+  setVerseFeedback(note: string, words: { word: string; ok: boolean }[]): void {
+    const box = el("verse-feedback");
+    box.textContent = "";
+    for (const w of words) {
+      const span = document.createElement("span");
+      span.className = w.ok ? "got" : "miss";
+      span.textContent = w.ok ? w.word : "_".repeat(Math.max(3, w.word.length));
+      box.append(span, " ");
+    }
+    const p = document.createElement("span");
+    p.className = "note";
+    p.textContent = note;
+    box.append(p);
+  }
+
   /** A villager's speech box (hides itself after a few seconds). */
   showDialog(name: string, text: string): void {
     el("dialog-name").textContent = name;
@@ -253,6 +291,23 @@ export class Hud {
       b.textContent = labels[i];
       b.classList.add("hat");
       b.setAttribute("aria-label", i === 0 ? "No pet" : `Pet ${i}`);
+    });
+  }
+
+  /** A row of color swatches (hair colors). */
+  buildColors(boxId: string, colors: number[], selected: number, cb: (i: number) => void): void {
+    this.buildChoices(boxId, colors.length, selected, cb, (b, i) => {
+      b.style.background = `#${colors[i].toString(16).padStart(6, "0")}`;
+      b.setAttribute("aria-label", `Color ${i + 1}`);
+    });
+  }
+
+  /** A row of emoji or word buttons (clothes, glasses, hair styles). */
+  buildLabels(boxId: string, labels: string[], selected: number, cb: (i: number) => void, wordy = false): void {
+    this.buildChoices(boxId, labels.length, selected, cb, (b, i) => {
+      b.textContent = labels[i];
+      b.classList.add(wordy ? "word" : "hat");
+      b.setAttribute("aria-label", labels[i]);
     });
   }
 

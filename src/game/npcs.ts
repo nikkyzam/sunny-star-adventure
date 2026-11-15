@@ -6,7 +6,7 @@
 
 import * as THREE from "three";
 import { Player } from "./player";
-import { lookOf, safeHat, safeOutfit, safeSkin } from "./profile";
+import { lookOf, safeHat, safeLook } from "./profile";
 import { makeTextSprite, disposeSprite } from "./social";
 import type { NpcDef } from "./world";
 
@@ -20,30 +20,59 @@ interface Npc {
   met: boolean;
 }
 
+function makeVillager(def: NpcDef): { p: Player; tag: THREE.Sprite } {
+  // villagers get a mix of hair, glasses and clothes from their other choices
+  const p = new Player(lookOf(safeLook({
+    body: (def.outfit + def.skin + def.hat) % 2,
+    outfit: def.outfit, skin: def.skin, hair: def.outfit + def.hat, hairColor: def.skin * 2 + def.outfit,
+    glasses: (def.outfit + def.skin) % 3 === 0 ? 1 : 0, clothes: def.hat + def.skin,
+  })));
+  p.setHat(safeHat(def.hat));
+  p.pos.set(def.x, def.y, def.z);
+  p.facing = 0;
+  const tag = makeTextSprite(def.name, { bg: "rgba(255,169,77,0.92)", fg: "#ffffff", size: 44, height: 0.4 });
+  tag.position.y = 2.3;
+  p.group.add(tag);
+  return { p, tag };
+}
+
 export class Npcs {
   readonly group = new THREE.Group();
   items: Npc[] = [];
 
   build(defs: NpcDef[]): void {
+    this.clear();
+    this.items = defs.map((def) => ({ def, ...makeVillager(def), nextLine: 0, met: false }));
+    for (const n of this.items) this.group.add(n.p.group);
+  }
+
+  /** New models for the same villagers (e.g. once the human models have loaded): who has been
+   *  met, what they say next and any job pointing at them all stay. */
+  refreshLooks(): void {
+    const kept = this.items;
+    this.clear();
+    for (const n of kept) {
+      const facing = n.p.facing;
+      Object.assign(n, makeVillager(n.def));
+      n.p.facing = facing;
+      this.group.add(n.p.group);
+    }
+    this.items = kept;
+  }
+
+  private clear(): void {
     for (const n of this.items) disposeSprite(n.tag);
-    this.group.traverse((o) => {
+    // free the cartoon kids' meshes (human models share their geometry, so skip those)
+    const free = (o: THREE.Object3D) => {
+      if (o.userData.shared) return;
       if (o instanceof THREE.Mesh) {
         o.geometry.dispose();
         (o.material as THREE.Material).dispose();
       }
-    });
+      for (const c of o.children) free(c);
+    };
+    free(this.group);
     this.group.clear();
-    this.items = defs.map((def) => {
-      const p = new Player(lookOf(safeOutfit(def.outfit), safeSkin(def.skin)));
-      p.setHat(safeHat(def.hat));
-      p.pos.set(def.x, def.y, def.z);
-      p.facing = 0;
-      const tag = makeTextSprite(def.name, { bg: "rgba(255,169,77,0.92)", fg: "#ffffff", size: 44, height: 0.4 });
-      tag.position.y = 2.3;
-      p.group.add(tag);
-      this.group.add(p.group);
-      return { def, p, tag, nextLine: 0, met: false };
-    });
   }
 
   get metCount(): number {
@@ -87,6 +116,7 @@ export class Npcs {
   update(dt: number, look: THREE.Vector3): void {
     for (const n of this.items) {
       const dx = look.x - n.p.pos.x, dz = look.z - n.p.pos.z;
+      n.p.near = dx * dx + dz * dz < 45 * 45; // far-away villagers animate less often
       if (dx * dx + dz * dz < 64) {
         let d = Math.atan2(dx, dz) - n.p.facing;
         while (d > Math.PI) d -= Math.PI * 2;

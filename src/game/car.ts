@@ -87,34 +87,62 @@ export class Car {
   }
 
   private buildCar(): void {
-    const red = new THREE.MeshStandardMaterial({ color: 0xff4757, flatShading: true, roughness: 0.6 });
-    const glass = new THREE.MeshStandardMaterial({ color: 0xbfefff, flatShading: true, roughness: 0.25 });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x33323e, roughness: 0.5 });
-    const light = new THREE.MeshStandardMaterial({ color: 0xfff6b8, emissive: 0x8a7a20, roughness: 0.4 });
-
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.5, 2.2), red);
-    body.position.y = 0.55;
-    body.castShadow = true;
-    this.group.add(body);
-
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.45, 1.0), glass);
-    cabin.position.set(0, 1.0, -0.25);
-    cabin.castShadow = true;
-    this.group.add(cabin);
-
-    const wheelGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.24, 14);
-    for (const [sx, sz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]] as const) {
-      const w = new THREE.Mesh(wheelGeo, dark);
-      w.rotation.z = Math.PI / 2;
-      w.position.set(0.62 * sx, 0.32, 0.72 * sz);
-      w.castShadow = true;
-      this.group.add(w);
-      this.wheels.push(w);
-    }
+    // an open-top car: body, bonnet, boot, doors, windscreen, seats, bumpers, lights, spoked wheels
+    const paint = new THREE.MeshStandardMaterial({ color: 0xff4757, roughness: 0.35, metalness: 0.25 });
+    const trim = new THREE.MeshStandardMaterial({ color: 0xe9edf3, roughness: 0.3, metalness: 0.6 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x26252d, roughness: 0.7 });
+    const seat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.9 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0xbfefff, roughness: 0.1, transparent: true, opacity: 0.45 });
+    const lamp = new THREE.MeshStandardMaterial({ color: 0xfff6b8, emissive: 0xffe680, emissiveIntensity: 0.7, roughness: 0.3 });
+    const brake = new THREE.MeshStandardMaterial({ color: 0xff2b3a, emissive: 0x8a0a12, roughness: 0.4 });
+    const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = this.group) => {
+      const mesh = new THREE.Mesh(geo, m);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      parent.add(mesh);
+      return mesh;
+    };
+    add(new THREE.BoxGeometry(1.24, 0.34, 2.36), paint, 0, 0.5, 0);                      // floor pan
+    add(new THREE.BoxGeometry(1.2, 0.26, 0.62), paint, 0, 0.78, 0.86);                   // bonnet
+    add(new THREE.BoxGeometry(1.2, 0.26, 0.42), paint, 0, 0.78, -0.96);                  // boot
+    const nose = add(new THREE.CylinderGeometry(0.13, 0.13, 1.2, 12), paint, 0, 0.78, 1.17);
+    nose.rotation.z = Math.PI / 2;                                                       // rounded front edge
     for (const sx of [-1, 1]) {
-      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), light);
-      lamp.position.set(0.32 * sx, 0.55, 1.11);
-      this.group.add(lamp);
+      add(new THREE.BoxGeometry(0.1, 0.34, 1.22), paint, 0.57 * sx, 0.82, -0.14);        // door
+      add(new THREE.BoxGeometry(0.03, 0.03, 0.14), trim, 0.63 * sx, 0.86, -0.1);         // door handle
+      add(new THREE.BoxGeometry(0.12, 0.08, 0.14), paint, 0.68 * sx, 1.02, 0.5);         // wing mirror
+      add(new THREE.SphereGeometry(0.11, 12, 10), lamp, 0.42 * sx, 0.74, 1.2).scale.z = 0.5;
+      add(new THREE.BoxGeometry(0.26, 0.1, 0.05), brake, 0.42 * sx, 0.76, -1.18);
+      add(new THREE.BoxGeometry(0.2, 0.012, 0.6), trim, 0.22 * sx, 0.915, 0.86);         // bonnet stripes
+    }
+    add(new THREE.BoxGeometry(1.32, 0.13, 0.14), trim, 0, 0.42, 1.2);                    // bumpers
+    add(new THREE.BoxGeometry(1.32, 0.13, 0.14), trim, 0, 0.42, -1.2);
+    add(new THREE.BoxGeometry(0.56, 0.12, 0.04), dark, 0, 0.62, 1.245);                  // grille
+    add(new THREE.BoxGeometry(0.4, 0.13, 0.03), trim, 0, 0.6, -1.215);                   // number plate
+    const screen = add(new THREE.BoxGeometry(1.1, 0.4, 0.04), glass, 0, 1.08, 0.6);
+    screen.rotation.x = -0.32;
+    screen.castShadow = false;
+    add(new THREE.BoxGeometry(1.16, 0.04, 0.05), trim, 0, 1.275, 0.537);                 // windscreen frame
+    for (const sx of [-1, 1]) add(new THREE.BoxGeometry(0.04, 0.44, 0.05), trim, 0.56 * sx, 1.08, 0.6).rotation.x = -0.32;
+    add(new THREE.BoxGeometry(0.9, 0.5, 0.12), seat, 0, 0.98, 0.06);                     // driver's seat back
+    add(new THREE.BoxGeometry(0.9, 0.5, 0.12), seat, 0, 0.98, -0.98);                    // back seat
+    add(new THREE.BoxGeometry(1.02, 0.1, 1.2), seat, 0, 0.7, -0.4);                      // seat cushions
+    const wheel = add(new THREE.TorusGeometry(0.13, 0.025, 8, 16), dark, 0, 1.0, 0.44);  // steering wheel
+    wheel.rotation.x = -0.9;
+
+    const tyreGeo = new THREE.CylinderGeometry(0.33, 0.33, 0.24, 18);
+    const hubGeo = new THREE.CylinderGeometry(0.17, 0.17, 0.26, 12);
+    for (const [sx, sz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]] as const) {
+      const w = add(tyreGeo, dark, 0.64 * sx, 0.33, 0.74 * sz);
+      w.rotation.z = Math.PI / 2;
+      add(hubGeo, trim, 0, 0, 0, w).castShadow = false;
+      for (let k = 0; k < 4; k++) {
+        // spokes, so you can see the wheels turn
+        const spoke = add(new THREE.BoxGeometry(0.05, 0.27, 0.3), dark, 0, 0, 0, w);
+        spoke.rotation.y = (k / 4) * Math.PI;
+        spoke.castShadow = false;
+      }
+      this.wheels.push(w);
     }
   }
 

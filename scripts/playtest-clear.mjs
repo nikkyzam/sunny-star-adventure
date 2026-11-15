@@ -231,9 +231,27 @@ if (d.stars.length === 0 && d.state === "playing") {
 
   if (d.state === "levelclear") {
     await page.click('#ov-clear [data-action="next"]');
+    await page.waitForTimeout(300);
+    // the memory verse gate: read, then type it from memory
+    const verse = await page.textContent("#verse-text");
+    const ref = await page.textContent("#verse-ref");
+    check("V1 a memory verse is shown after the level", ref === "Genesis 1:1" && verse.startsWith("In the beginning"), `${ref}: ${verse}`);
+    await page.click('[data-action="verse-ready"]');
+    const hidden = await page.evaluate(() => document.getElementById("verse-text").style.display === "none");
+    check("V2 the verse is hidden while typing", hidden);
+    await page.fill("#verse-input", "In the beginning God made the sky");
+    await page.click('[data-action="verse-check"]');
+    await page.waitForTimeout(200);
+    let lvl = await page.evaluate(() => document.getElementById("hud-level")?.textContent ?? "");
+    const fb = await page.textContent("#verse-feedback");
+    check("V3 a wrong verse does not open the next level", lvl.includes("Sunny Meadow") && fb.includes("In the beginning God") && fb.includes("___"), fb);
+    await page.screenshot({ path: join(SHOTS, "38-verse-feedback.png") });
+    // capitals and punctuation don't matter, and one slip in a long word is forgiven
+    await page.fill("#verse-input", "in the begining god created the heaven and the earth");
+    await page.click('[data-action="verse-check"]');
     await page.waitForTimeout(500);
-    const lvl = await page.evaluate(() => document.getElementById("hud-level")?.textContent ?? "");
-    check("D4 Next button starts level 2", lvl.includes("Candy Canyon"), lvl);
+    lvl = await page.evaluate(() => document.getElementById("hud-level")?.textContent ?? "");
+    check("D4 typing the verse starts level 2", lvl.includes("Candy Canyon"), lvl);
   }
 }
 

@@ -1,7 +1,7 @@
 /**
  * world.ts — floating-island level construction + collision queries + ambient animation.
  *
- * Nine hand-designed worlds (geometry is parametric, placed from level data):
+ * Eleven hand-designed worlds (geometry is parametric, placed from level data):
  *   1. Sunny Meadow        — gentle gaps, teaches jump / stars / stomp (+ bunny buddy)
  *   2. Candy Canyon        — bridges, a moving platform (+ birdie buddy, circling bird)
  *   3. Rainbow Peak        — vertical climb, springs (+ hedgehogs, turtle buddy)
@@ -10,9 +10,11 @@
  *                            and a parachute tower (free glide in this world)
  *   6. Frosty Mountain     — falling snow, a sliding ice bridge, a spring-launch climb
  *   7. Bubbly Beach        — sandy islands over the sea; party balloons float you to secret islands
- *   9. Moon Base           — low gravity, floating rocks, a moon buggy, aliens to talk to; reached by
+ *  11. Moon Base           — low gravity, floating rocks, a moon buggy, aliens to talk to; reached by
  *                            rocket from Adventure Island
- *   8. Adventure Island    — one big open island to explore: village, forest, lookout hill, a beach
+ *   8. Jungle Vines        — leafy climb with a sliding platform and a balloon to a treetop island
+ *   9. Starlight Peak      — a night-time climb on springs under the stars
+ *  10. Adventure Island    — one big open island to explore: village, forest, lookout hill, a beach
  *                            loop for the car, a sailboat to reach far islets, villagers to talk to
  *
  * Colliders are analytic (disc / box footprints with a top surface height) plus solid
@@ -125,6 +127,8 @@ export interface LevelDef {
   gravity?: number;
   /** Outer space: black sky, stars, the Earth overhead, no clouds. */
   space?: boolean;
+  /** Night-time: stars in the sky. */
+  night?: boolean;
   npcs?: NpcDef[];
   /** Bumpable things: cones, gift boxes, balls, and car boost pads / ramps (props.ts). */
   props?: PropDefs;
@@ -543,6 +547,120 @@ export const LEVELS: LevelDef[] = [
     rainbow: true,
   },
 ];
+
+/** Two more sky worlds, played after Bubbly Beach. */
+LEVELS.push(
+  {
+    name: "Jungle Vines",
+    sky: 0xbff0c8, fog: 0xd4f5da,
+    grass: 0x4fbf5a, dirt: 0x7a5a3a, foliage: 0x1f8a4c,
+    flowerColors: [0xff4757, 0xffd93d, 0xff9ecf, 0xffffff],
+    spawn: [0, 0, 4.5],
+    discs: [
+      { x: 0, z: 0, r: 6, y: 0, trees: 5, flowers: 8 },
+      { x: 0, z: -11, r: 3.5, y: 0.6, trees: 2, flowers: 3 },
+      { x: -7, z: -18, r: 3.5, y: 1.2, trees: 2, flowers: 3 },
+      { x: 0, z: -26, r: 4.5, y: 1.8, trees: 3, flowers: 4, rocks: 1 },
+      { x: 0, z: -41, r: 4, y: 2.6, trees: 2, flowers: 3 },
+      { x: 8, z: -47, r: 3.5, y: 3.4, trees: 2, flowers: 3 },
+      { x: 0, z: -55, r: 6, y: 4.0, trees: 4, flowers: 7 },
+      { x: 9, z: -11, r: 2.5, y: 0.4, flowers: 2 },      // snack island
+      { x: -8, z: -40, r: 3, y: 9, trees: 1, flowers: 3 }, // treetop island (ride the balloon)
+    ],
+    bridges: [{ x: 0, z: -33.5, w: 3, d: 3, y: 2.2, move: { axis: "x", amp: 3, speed: 0.9 } }],
+    springs: [{ x: 2.5, z: -27.5, y: 1.8, power: 16 }],
+    balloons: [[-2.5, 3.8, -41.5]],
+    stars: [
+      [0, 1.2, 0], [0, 1.2, -3.5],
+      [0, 1.8, -11],
+      [-7, 2.4, -18],
+      [0, 3.0, -25], [2.5, 5.6, -27.5],
+      [0, 3.4, -33.5],
+      [1.5, 3.8, -41],
+      [8, 4.6, -47],
+      [-8, 10.2, -40],
+      [-2, 5.2, -54], [2, 5.2, -56],
+    ],
+    coins: [
+      [0, 1.2, -6], [0, 1.8, -9.5],
+      [-3.5, 2.2, -14.5], [-7, 2.4, -19.5], [-3.5, 2.8, -22],
+      [1.5, 3.0, -27], [0, 3.8, -39.5],
+      [4, 4.2, -44], [8, 4.6, -48.5], [4, 5.0, -51],
+      [9, 1.6, -10], [9.8, 1.6, -12],
+      [-8.8, 10.2, -40.8], [0, 5.2, -52],
+    ],
+    chests: [[9, 0.4, -11.6], [-8, 9, -39]],
+    hearts: [[-7, 2.4, -17]],
+    magnets: [[8, 4.6, -46]],
+    food: [["apple", 9, 1.4, -10.4], ["cupcake", -1.5, 3.0, -26]],
+    buddies: [],
+    slimes: [
+      { ax: -2.5, az: -26, bx: 2.5, bz: -26, y: 1.8, speed: 1.3 },
+      { ax: -3, az: -55, bx: 3, bz: -55, y: 4.0, speed: 1.5 },
+    ],
+    hedgehogs: [{ ax: -2, az: -41, bx: 2, bz: -41, y: 2.6, speed: 0.9 }],
+    birds: [{ cx: 0, cy: 3.6, cz: -33.5, r: 3, speed: 1.2 }],
+    checkpoints: [[-2, 1.8, -24], [-1.5, 2.6, -39.5]],
+    portal: [0, 4.0, -58],
+    props: { balls: [[-3, 0, 1]] },
+  },
+  {
+    // the Rainbow Peak route mirrored, at night
+    name: "Starlight Peak",
+    sky: 0x1b1f4a, fog: 0x2a2f6a,
+    grass: 0x6d5bd0, dirt: 0x3d3580, foliage: 0x9df2ff,
+    flowerColors: [0xffe066, 0xffffff, 0x9df2ff, 0xff9ecf],
+    spawn: [0, 0, 4.5],
+    night: true,
+    discs: [
+      { x: 0, z: 0, r: 6, y: 0, trees: 2, flowers: 7 },
+      { x: 0, z: -10, r: 3.5, y: 0.8, flowers: 3 },
+      { x: 0, z: -16, r: 4, y: 4.2, flowers: 4, rocks: 1 },
+      { x: -12, z: -24, r: 4.5, y: 5.8, trees: 1, flowers: 4 },
+      { x: -6, z: -31, r: 3.5, y: 6.6, flowers: 3 },
+      { x: 0, z: -46, r: 6, y: 10.8, trees: 2, flowers: 6 },
+      { x: 7, z: -17, r: 2.5, y: 4.0, flowers: 2 },    // treasure island
+      { x: -9, z: -49, r: 2.5, y: 10.4, flowers: 2 },  // ice cream island
+    ],
+    bridges: [{ x: -6, z: -20, w: 3, d: 3, y: 5.0, move: { axis: "z", amp: 3.5, speed: 1.0 } }],
+    springs: [
+      { x: 0, z: -11.5, y: 0.8, power: 18 },
+      { x: -6, z: -32.5, y: 6.6, power: 18 },
+    ],
+    stars: [
+      [0, 1.2, 0], [0, 1.2, -3],
+      [0, 2.0, -10],
+      [0, 5.8, -13],
+      [0, 5.4, -16], [-2, 5.4, -18],
+      [-6, 6.2, -20],
+      [-10.5, 7.0, -22], [-14, 7.0, -25.5],
+      [-6, 7.8, -31],
+      [-6, 11.6, -32.5],
+      [2, 12.0, -44],
+    ],
+    coins: [
+      [0, 1.2, -1.5], [-1.5, 1.2, -5],
+      [-0.5, 5.4, -14], [1.5, 5.4, -17.5],
+      [7, 5.2, -17], [7.8, 5.2, -16.2],
+      [-11, 7.0, -23], [-13, 7.0, -25],
+      [-6, 7.8, -29.5],
+      [-9, 11.6, -49], [-9.8, 11.6, -48.2],
+      [-2, 12.0, -45],
+    ],
+    chests: [[7, 4.0, -17]],
+    hearts: [[-12, 7.0, -21.5]],
+    magnets: [[-6, 7.8, -29.5]],
+    food: [["icecream", -9, 11.4, -49.6], ["apple", 7.6, 5.0, -17.8]],
+    buddies: [],
+    slimes: [{ ax: -2.5, az: -16, bx: 2.5, bz: -16, y: 4.2, speed: 1.4 }],
+    hedgehogs: [
+      { ax: -14, az: -24, bx: -10.5, bz: -24, y: 5.8, speed: 0.9 },
+      { ax: -3, az: -46, bx: 3, bz: -46, y: 10.8, speed: 1.1 },
+    ],
+    checkpoints: [[-1.5, 4.2, -14.5], [-12, 5.8, -26]],
+    portal: [0, 10.8, -48],
+  },
+);
 
 /** `n` points on a circle (for coin trails around the big island's beach). */
 function ring(n: number, r: number, cx: number, cz: number, y: number, phase = 0): [number, number, number][] {
@@ -1256,7 +1374,10 @@ export class World {
       for (let i = 0; i < treeCount; i++) {
         const a = rng() * Math.PI * 2;
         const rr = d.r * (0.45 + rng() * 0.35);
-        const tree = makeTree(trunkMat, foliageMat, 0.8 + rng() * 0.5);
+        // sandy islands grow palms; elsewhere a mix of pines and leafy trees (snow and space keep pines)
+        const scale = 0.8 + rng() * 0.5;
+        const kind = d.color === SAND ? 2 : def.snow || def.space || rng() < 0.55 ? 0 : 1;
+        const tree = makeTree(trunkMat, foliageMat, kind === 2 ? scale * 1.5 : scale, kind);
         tree.position.set(d.x + Math.cos(a) * rr, d.y, d.z + Math.sin(a) * rr);
         tree.rotation.y = rng() * Math.PI * 2;
         this.group.add(tree);
@@ -1536,7 +1657,7 @@ export class World {
     }
 
     // ── Space: stars all around and the Earth overhead ──
-    if (def.space) {
+    if (def.space || def.night) {
       const count = 1400;
       const pos = new Float32Array(count * 3);
       for (let i = 0; i < count; i++) {
@@ -1551,13 +1672,15 @@ export class World {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
       this.group.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, fog: false })));
-      const earth = new THREE.Mesh(
+      const earth = !def.space ? null : new THREE.Mesh(
         new THREE.SphereGeometry(22, 20, 14),
         new THREE.MeshBasicMaterial({ color: 0x3f8fe0, fog: false }),
       );
-      earth.position.set(70, 85, -150);
-      this.group.add(earth);
-      for (let i = 0; i < 7; i++) {
+      if (earth) {
+        earth.position.set(70, 85, -150);
+        this.group.add(earth);
+      }
+      for (let i = 0; earth && i < 7; i++) {
         const land = new THREE.Mesh(
           new THREE.SphereGeometry(5 + rng() * 5, 8, 6),
           new THREE.MeshBasicMaterial({ color: i % 3 === 0 ? 0xffffff : 0x5ed48a, fog: false }),
@@ -1568,6 +1691,25 @@ export class World {
         land.scale.setScalar(0.6);
         this.group.add(land);
       }
+    }
+
+    // ── Sky: deeper blue overhead, fading to the horizon color ──
+    if (!def.space && !def.night) {
+      const skyGeo = new THREE.SphereGeometry(520, 24, 12);
+      const horizon = new THREE.Color(def.sky).lerp(new THREE.Color(0xffffff), 0.35);
+      const zenith = new THREE.Color(def.sky).multiplyScalar(0.62);
+      const pos = skyGeo.getAttribute("position");
+      const colors = new Float32Array(pos.count * 3);
+      const c = new THREE.Color();
+      for (let i = 0; i < pos.count; i++) {
+        c.copy(horizon).lerp(zenith, Math.min(1, Math.max(0, pos.getY(i) / 380)));
+        colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+      }
+      skyGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      const sky = new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+      sky.position.set(0, -20, -25);
+      sky.renderOrder = -1;
+      this.group.add(sky);
     }
 
     // ── Rainbow (big, far, decorative) ──
@@ -1685,20 +1827,51 @@ function swell(x: number, z: number, t: number): number {
   return Math.sin(x * 0.33 + t * 1.5) + 0.7 * Math.sin(z * 0.27 - t * 1.2) + 0.5 * Math.sin((x + z) * 0.14 + t * 1.9);
 }
 
-function makeTree(trunkMat: THREE.Material, foliageMat: THREE.Material, s: number): THREE.Group {
+/**
+ * A tree. `kind` picks the shape: 0 = pine (stacked cones), 1 = leafy (round crown on a forked
+ * trunk), 2 = palm (curved trunk, drooping fronds, coconuts).
+ */
+function makeTree(trunkMat: THREE.Material, foliageMat: THREE.Material, s: number, kind = 0): THREE.Group {
   const g = new THREE.Group();
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12 * s, 0.16 * s, 0.8 * s, 8), trunkMat);
-  trunk.position.y = 0.4 * s;
-  trunk.castShadow = true;
-  g.add(trunk);
-  const c1 = new THREE.Mesh(new THREE.ConeGeometry(0.75 * s, 1.1 * s, 10), foliageMat);
-  c1.position.y = 1.15 * s;
-  c1.castShadow = true;
-  g.add(c1);
-  const c2 = new THREE.Mesh(new THREE.ConeGeometry(0.55 * s, 0.9 * s, 10), foliageMat);
-  c2.position.y = 1.75 * s;
-  c2.castShadow = true;
-  g.add(c2);
+  const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number) => {
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    g.add(mesh);
+    return mesh;
+  };
+  if (kind === 1) {
+    add(new THREE.CylinderGeometry(0.11 * s, 0.19 * s, 1.1 * s, 8), trunkMat, 0, 0.55 * s, 0);
+    for (const [bx, bz] of [[0.22, 0.05], [-0.18, 0.12]]) {
+      const branch = add(new THREE.CylinderGeometry(0.05 * s, 0.08 * s, 0.6 * s, 6), trunkMat, bx * s, 1.2 * s, bz * s);
+      branch.rotation.z = -bx * 2.4;
+    }
+    for (const [x, y, z, r] of [[0, 1.75, 0, 0.72], [0.45, 1.5, 0.1, 0.5], [-0.42, 1.55, -0.12, 0.52], [0.05, 1.5, 0.45, 0.46], [0, 2.2, -0.1, 0.48]]) {
+      add(new THREE.IcosahedronGeometry(r * s, 1), foliageMat, x * s, y * s, z * s);
+    }
+  } else if (kind === 2) {
+    // palm: a trunk in three leaning pieces
+    let x = 0, y = 0;
+    for (let k = 0; k < 3; k++) {
+      const piece = add(new THREE.CylinderGeometry((0.1 - k * 0.012) * s, (0.13 - k * 0.012) * s, 0.75 * s, 7), trunkMat, x + 0.07 * s, y + 0.36 * s, 0);
+      piece.rotation.z = -0.2;
+      x += 0.15 * s;
+      y += 0.72 * s;
+    }
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      const frond = add(new THREE.ConeGeometry(0.2 * s, 1.4 * s, 4), foliageMat, x + Math.cos(a) * 0.55 * s, y - 0.12 * s, Math.sin(a) * 0.55 * s);
+      frond.scale.z = 0.3;
+      frond.rotation.set(0, -a, -Math.PI / 2 - 0.35, "YXZ");
+    }
+    const nut = new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.9 });
+    for (const a of [0.5, 2.6, 4.4]) add(new THREE.SphereGeometry(0.1 * s, 8, 6), nut, x + Math.cos(a) * 0.14 * s, y - 0.12 * s, Math.sin(a) * 0.14 * s);
+  } else {
+    add(new THREE.CylinderGeometry(0.12 * s, 0.16 * s, 0.8 * s, 8), trunkMat, 0, 0.4 * s, 0);
+    add(new THREE.ConeGeometry(0.78 * s, 1.0 * s, 10), foliageMat, 0, 1.1 * s, 0);
+    add(new THREE.ConeGeometry(0.6 * s, 0.9 * s, 10), foliageMat, 0, 1.65 * s, 0);
+    add(new THREE.ConeGeometry(0.4 * s, 0.8 * s, 10), foliageMat, 0, 2.15 * s, 0);
+  }
   return g;
 }
 

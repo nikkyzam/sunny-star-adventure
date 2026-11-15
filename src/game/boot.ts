@@ -34,13 +34,15 @@ import { Car, makeRocket, type RideKind } from "./car";
 import { Rings } from "./rings";
 import { Foods } from "./food";
 import { Fleet } from "./ships";
+import { verseFor, grade } from "./verses";
+import { loadHumanKit } from "./humans";
 import { Props } from "./props";
 import { Particles } from "./particles";
 import { Hud } from "./hud";
 import { storage, highScore } from "./storage";
 import {
-  OUTFITS, HATS, SKINS, PETS, loadProfile, saveProfile, rerollName, nameText, lookOf,
-  safeName, safeOutfit, safeHat, safeSkin, safePet,
+  OUTFITS, HATS, SKINS, PETS, HAIR_COLORS, HAIR_STYLES, GLASSES, CLOTHES, BODIES, loadProfile, saveProfile, rerollName, nameText,
+  lookOf, safeLook, safeName, safeHat, safePet,
 } from "./profile";
 import { Pet } from "./pets";
 import { Npcs } from "./npcs";
@@ -74,6 +76,7 @@ declare global {
       heli: { x: number; y: number; z: number; occupied: boolean } | null;
       rings: number;
       food: number;
+      verse: { ref: string; text: string };
       bank: number;
       owned: string[];
       jobTarget: { name: string; x: number; z: number } | null;
@@ -245,6 +248,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   let connecting = false;
   let onlineMenuOpen = false;
   let dressOpen = false;
+  let humansPending = false;
   let sendTick = 0;
   const remotes = new Map<string, Remote>();
   const respawn = new THREE.Vector3();
@@ -277,6 +281,19 @@ export function startGame(canvas: HTMLCanvasElement): void {
     previewKid();
     audio.sfx("ui");
   });
+  // the rest of the wardrobe: each row saves its choice and rebuilds the preview kid
+  const wardrobe = (box: string, key: "body" | "hair" | "hairColor" | "glasses" | "clothes") => (i: number) => {
+    profile[key] = i;
+    saveProfile(profile);
+    hud.setChoice(box, i);
+    previewKid();
+    audio.sfx("ui");
+  };
+  hud.buildLabels("bodies", BODIES, profile.body, wardrobe("bodies", "body"));
+  hud.buildLabels("clothes", CLOTHES, profile.clothes, wardrobe("clothes", "clothes"));
+  hud.buildLabels("hairstyles", HAIR_STYLES, profile.hair, wardrobe("hairstyles", "hair"), true);
+  hud.buildColors("haircolors", HAIR_COLORS, profile.hairColor, wardrobe("haircolors", "hairColor"));
+  hud.buildLabels("glasses", GLASSES, profile.glasses, wardrobe("glasses", "glasses"));
   hud.buildPets(PETS, profile.pet, (i) => {
     profile.pet = i;
     saveProfile(profile);
@@ -325,6 +342,35 @@ export function startGame(canvas: HTMLCanvasElement): void {
     return world.def.sea !== undefined ? Math.max(g, world.def.sea - 0.2) : g;
   }
 
+  // human-looking characters: load the model files, then swap them in for the cartoon kids
+  loadHumanKit().then((ok) => {
+    if (!ok || disposed) return;
+    swapInHumans();
+  });
+
+  /** Rebuild every character with the human models, keeping where everyone is. */
+  function swapInHumans(): void {
+    if (players.some((p) => p.riding) || launchT >= 0) {
+      humansPending = true; // never pull a kid out of a ride; this runs again on the next level
+      return;
+    }
+    humansPending = false;
+    const kept = players.map((p) => ({ pos: p.pos.clone(), vel: p.vel.clone(), facing: p.facing, glide: p.glideEnabled }));
+    makePlayers(players.length === 2);
+    players.forEach((p, i) => {
+      const k = kept[i];
+      if (!k) return;
+      p.pos.copy(k.pos);
+      p.vel.copy(k.vel);
+      p.facing = k.facing;
+      p.group.rotation.y = k.facing;
+      p.glideEnabled = k.glide;
+      p.invuln = 0;
+    });
+    npcs.refreshLooks();
+    for (const id of [...remotes.keys()]) removeRemote(id); // they come straight back on their next packet
+  }
+
   /** Easy mode and online play refill hearts instead of ending the game. */
   function forgiving(): boolean {
     return profile.easy || net !== null;
@@ -361,8 +407,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
     blobs.length = 0;
     bubbles.length = 0;
     const palettes = coop
-      ? [lookOf(profile.outfit, profile.skin), lookOf((profile.outfit + 1) % OUTFITS.length, (profile.skin + 2) % SKINS.length)]
-      : [lookOf(profile.outfit, profile.skin)];
+      ? [lookOf(safeLook(profile)), lookOf(safeLook({
+        body: profile.body + 1, outfit: profile.outfit + 1, skin: profile.skin + 2, hair: profile.hair + 1, hairColor: profile.hairColor + 2,
+        glasses: profile.glasses + 1, clothes: profile.clothes + 1,
+      }))]
+      : [lookOf(safeLook(profile))];
     for (const pal of palettes) {
       const p = new Player(pal);
       if (players.length === 0) p.setHat(profile.hat);
@@ -440,6 +489,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     foods.build(world.def.food ?? []);
     fleet.build(world.def.pirates ?? [], world.def.sea ?? 0);
 
+    if (humansPending) swapInHumans();
     npcs.build(world.def.npcs ?? []);
     job = null;
     beacon.visible = false;
@@ -489,12 +539,22 @@ export function startGame(canvas: HTMLCanvasElement): void {
     audio.sfx("portal");
     particles.burst(world.portalPos.x, world.portalPos.y + 1.8, world.portalPos.z, 0xffd93d, 40, 6, 1.1, 4);
     const last = levelIdx + 1 >= LEVELS.length;
-    if (net) net.send(last ? { t: "win" } : { t: "level", i: levelIdx + 1 });
     if (last) {
+      net?.send({ t: "win" });
       showWin();
     } else if (net) {
-      // online: everyone hops to the next level together, no overlay in between
-      friendsGoTo(levelIdx + 1, `🎉 Level clear! On to ${LEVELS[levelIdx + 1].name}!`);
+      // online: the kid who reached the portal says the memory verse, then everyone hops to the
+      // next level together
+      hud.setPlayingUi(false);
+      sm.transition("levelclear");
+      audio.sfx("win");
+      const to = levelIdx + 1;
+      openVerse(() => {
+        net?.send({ t: "level", i: to });
+        loadLevel(to);
+        backToPlay();
+        hud.showToast(`🎉 Level clear! On to ${LEVELS[to].name}!`);
+      });
     } else {
       hud.fillClear(stars.takenCount, stars.total, timer, timeBonus, score);
       hud.setPlayingUi(false);
@@ -578,14 +638,48 @@ export function startGame(canvas: HTMLCanvasElement): void {
     backToPlay();
   }
 
+  /** The next level opens once the kid has typed this level's memory verse. */
   function nextLevel(): void {
     if (!sm.is("levelclear")) return;
-    loadLevel(levelIdx + 1);
-    backToPlay();
+    const to = levelIdx + 1;
+    openVerse(() => {
+      loadLevel(to);
+      backToPlay();
+    });
+  }
+
+  // ── Memory verse gate ────────────────────────────────────────────────────
+  let verseThen: (() => void) | null = null;
+
+  function openVerse(then: () => void): void {
+    if (verseThen) return; // already showing
+    verseThen = then;
+    const v = verseFor(levelIdx);
+    hud.showVerse(v.ref, v.text);
+    hud.showOverlay("verse");
+  }
+
+  function checkVerse(): void {
+    if (!verseThen || !sm.is("levelclear")) return;
+    const result = grade(hud.verseInput(), verseFor(levelIdx));
+    if (!result.ok) {
+      audio.sfx("ui");
+      hud.setVerseFeedback("Almost! The green words are right. Peek, then try again.", result.words);
+      return;
+    }
+    const then = verseThen;
+    verseThen = null;
+    score += 100;
+    saveProgress();
+    audio.sfx("win");
+    then();
+    hud.setScore(score);
+    hud.showToast("📖 Well done! You remembered the verse! +100");
   }
 
   function toTitle(): void {
     if (!sm.is("paused", "gameover", "levelclear", "win")) return;
+    verseThen = null;
     leaveOnline();
     sm.transition("title");
     makePlayers(false);
@@ -621,6 +715,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
         audio.sfx("ui");
         break;
       case "talk": talk(); break;
+      case "verse-ready": if (verseThen) hud.verseStage(true); break;
+      case "verse-peek": if (verseThen) hud.verseStage(false); break;
+      case "verse-check": checkVerse(); break;
       case "drive":
         if (!sm.is("title")) break;
         startRun(LEVELS.findIndex((l) => l.carSpawn), false);
@@ -887,7 +984,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
         let r = remotes.get(from);
         if (!r) {
           if (remotes.size >= MAX_KIDS - 1 || !from) return;
-          const p = new Player(lookOf(safeOutfit(m.o), safeSkin(m.sk)));
+          const p = new Player(lookOf(safeLook({ body: m.bd, outfit: m.o, skin: m.sk, hair: m.hs, hairColor: m.hc, glasses: m.gs, clothes: m.cs })));
           p.setHat(safeHat(m.h));
           const tag = makeTextSprite(nameText(safeName(m.n)), { bg: "rgba(108,92,231,0.88)", fg: "#ffffff", size: 44, height: 0.4 });
           tag.position.y = 2.25;
@@ -948,6 +1045,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
           hud.showToast(`Joined room ${net?.code ?? ""}! Say hi with the 👋 sticker`);
         } else if (i !== levelIdx) {
           if (sm.is("paused")) resumePlay();
+          if (sm.is("levelclear")) {
+            // a friend finished their verse first: go along with them
+            verseThen = null;
+            backToPlay();
+          }
           if (sm.is("playing")) friendsGoTo(i, `🎉 A friend opened the portal! On to ${LEVELS[i].name}!`);
         }
         if (Array.isArray(m.taken)) {
@@ -1015,7 +1117,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (!net) return;
     const p = players[0];
     net.send({
-      t: "s", L: levelIdx, n: profile.name, o: profile.outfit, sk: profile.skin, pt: profile.pet, rk: rideOf(p)?.kind ?? "",
+      t: "s", L: levelIdx, n: profile.name, o: profile.outfit, bd: profile.body, sk: profile.skin, hs: profile.hair, hc: profile.hairColor, gs: profile.glasses, cs: profile.clothes, pt: profile.pet, rk: rideOf(p)?.kind ?? "",
       x: p.pos.x, y: p.pos.y, z: p.pos.z, vx: p.vel.x, vy: p.vel.y, vz: p.vel.z,
       g: p.onGround, gl: p.glideActive, r: p.riding, f: p.facing, fl: p.floatT > 0, bg: p.bigT > 0, h: profile.hat,
     });
@@ -1123,9 +1225,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
       const k = players[0];
       k.applyRemote(dt, k.pos.x, k.pos.y, k.pos.z, 0, 0, 0, true, false, false, k.facing, false);
       const a = Math.PI + Math.sin(elapsed * 0.6) * 0.45; // the kid faces -Z: look from that side
-      camDesired.set(k.pos.x + Math.sin(a) * 4.6, k.pos.y + 1.5, k.pos.z + Math.cos(a) * 4.6);
+      camDesired.set(k.pos.x + Math.sin(a) * 3.7, k.pos.y + 1.45, k.pos.z + Math.cos(a) * 3.7);
       camera.position.lerp(camDesired, Math.min(1, dt * 4));
-      camTarget.set(k.pos.x, k.pos.y - 0.1, k.pos.z);
+      // wide screens: the wardrobe is on the right, so the kid is centered; phones: it is along
+      // the bottom, so aim low to lift the kid into the top half
+      camTarget.set(k.pos.x, k.pos.y + (window.innerWidth > 640 ? 0.95 : -0.3), k.pos.z);
       camera.lookAt(camTarget);
       return;
     }
@@ -1691,6 +1795,12 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
     camera.lookAt(camTarget);
 
+    // the sun follows the action, so there are shadows everywhere in the big worlds
+    // (snapped to whole units: sliding it smoothly makes shadow edges shimmer)
+    const sx = Math.round(camTarget.x / 4) * 4, sz = Math.round(camTarget.z / 4) * 4, sy = Math.round(camTarget.y / 4) * 4;
+    sun.target.position.set(sx, sy, sz);
+    sun.position.set(sx + 18, sy + 30, sz + 28);
+
     if (net && ++sendTick % NET_SEND_EVERY === 0) sendState();
   }
 
@@ -1759,6 +1869,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     heli: heli.group.visible ? { x: heli.pos.x, y: heli.pos.y, z: heli.pos.z, occupied: heli.occupied } : null,
     rings: rings.passed,
     food: foods.items.filter((f) => !f.taken).length,
+    verse: verseFor(levelIdx),
     bank,
     owned: [...owned],
     jobTarget: job ? { name: job.target.def.name, x: job.target.p.pos.x, z: job.target.p.pos.z } : null,

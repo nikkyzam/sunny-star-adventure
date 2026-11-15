@@ -364,8 +364,10 @@ body.touch.playing .stick-base { display: flex; }
 .overlay.clear {
   background: none;
   backdrop-filter: none;
-  align-items: flex-end;
-  padding-bottom: 14px;
+  /* the wardrobe sits on the right; the kid stands in the space to its left */
+  justify-content: flex-end;
+  align-items: center;
+  padding-right: 16px;
 }
 .dress-panel {
   display: flex;
@@ -375,7 +377,19 @@ body.touch.playing .stick-base { display: flex; }
   padding: 16px 26px;
 }
 .choice-row { display: flex; align-items: center; gap: 12px; }
-.choice-row > span { width: 54px; text-align: right; font-weight: 800; color: #6b6390; font-size: 15px; }
+.dress-panel .swatch { width: 30px; height: 30px; border-width: 3px; }
+.swatch.word {
+  width: auto !important;
+  border-radius: 999px;
+  padding: 0 9px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  color: #5b4a86;
+}
+.dress-panel .outfits { gap: 6px; flex-wrap: wrap; max-width: 250px; }
+.choice-row > span { width: 62px; text-align: right; font-weight: 800; color: #6b6390; font-size: 15px; }
 .big-btn.island {
   background: linear-gradient(180deg, #9af0c0, #3fbf6b);
   border-color: #fff;
@@ -391,6 +405,29 @@ body.touch.playing .stick-base { display: flex; }
 .title-panel .big-btn.primary { font-size: 22px; padding: 9px 24px; }
 .title-panel .kid-setup { gap: 6px; }
 .title-panel .controls-help { font-size: 12px; gap: 2px 14px; margin-top: 4px; }
+
+/* ── memory verse ───────────────────────────────────────────────── */
+.verse-panel { max-width: min(92vw, 620px); }
+.verse-ref { font-weight: 900; color: #6c5ce7; font-size: 20px; margin: 0 0 6px; }
+.verse-text { font-size: clamp(20px, 3.4vw, 28px); font-weight: 800; color: #4a3b6b; line-height: 1.35; margin: 6px 0 12px; }
+.verse-input {
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  color: #4a3b6b;
+  width: min(80vw, 520px);
+  padding: 10px 14px;
+  border: 4px solid #d9d2f5;
+  border-radius: 18px;
+  resize: none;
+  pointer-events: auto;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.verse-feedback { font-size: 17px; font-weight: 800; line-height: 1.5; margin: 0; min-height: 24px; }
+.verse-feedback .got { color: #2f9e55; }
+.verse-feedback .miss { color: #b9b3d6; letter-spacing: 1px; }
+.verse-feedback .note { display: block; color: #e8760a; margin-top: 4px; }
 
 /* ── kid setup (title) ───────────────────────────────────────────── */
 .kid-setup {
@@ -470,6 +507,10 @@ body.touch.playing .stick-base { display: flex; }
   .sticker-btn { width: 42px; height: 42px; font-size: 20px; }
   .swatch { width: 32px; height: 32px; }
   .dialog { bottom: 12px; font-size: 15px; max-width: 58vw; }
+  /* phones: the wardrobe goes along the bottom and the kid stands above it */
+  .overlay.clear { justify-content: center; align-items: flex-end; padding: 0 0 8px; }
+  .dress-panel { padding: 10px 12px; gap: 5px; max-height: 56vh; }
+  .dress-panel .swatch { width: 26px; height: 26px; }
   /* phones: stickers go in a row under the status bar, clear of the stick and the buttons */
   .sticker-bar { bottom: auto; top: 96px; gap: 5px; }
   .car-btn { bottom: 130px; }

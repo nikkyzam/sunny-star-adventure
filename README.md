@@ -53,6 +53,20 @@ where friends meet when someone makes a room.
   into, and two aliens to talk to. The Moon's rocket flies you home.
 - Friends online see your helicopter or jet, and come along when someone takes the rocket.
 
+## Memory verses 📖
+
+After each level, a Bible verse appears. The kid reads it, taps **I know it!**, the verse hides,
+and they type it from memory. The next level opens only when the verse is right.
+
+- Capitals and punctuation don't matter, and one slip in a long word is forgiven.
+- After a wrong try, the words they got turn green and the rest show as blanks.
+- **Peek at the verse** shows it again, as often as needed.
+- Playing online, the kid who reaches the portal says the verse, then everyone moves on together.
+- Verses are from the King James Version (public domain) and live in `src/game/verses.ts`, one
+  per level. Edit that file to change verses or use another translation.
+- The title-screen shortcuts (Adventure Island, Drive in Toy City), Continue and the rocket are
+  not gated; only finishing a level through its portal is.
+
 ## Coins, a job and a mansion 💰
 
 - **Coins are saved** in this browser between play sessions (the ◉ number at the top is your
@@ -95,6 +109,20 @@ Coconut Cove has one of each out front.
   ramps. Balls and gift boxes can be bumped on foot too.
 - Friends online see your car or boat and hear your honk.
 
+## Human characters 🧍
+
+Kids, friends and villagers are human models with real walking, running, jumping, dancing,
+driving and swimming animations. Everyone is always fully dressed: outfits are fitted over the
+body so they move with it.
+
+- Dress-up choices: girl or boy body, clothes (jacket and trousers, dress, T-shirt and shorts,
+  dungarees), outfit color, skin tone, five hairstyles, hair color, glasses, hats and a pet.
+- The models load in the background. Until then (or if they can't load) the game shows its
+  cartoon kids.
+- Models and animations: Quaternius, *Universal Base Characters* and *Universal Animation
+  Library* (free versions, CC0). `scripts/build-characters.mjs` turns the downloaded packs into
+  the small files in `public/models/`.
+
 ## Make it yours
 
 - **Dress up** 🎨 on the title screen: outfit colors, skin tone, hats, and a pet.
@@ -111,9 +139,11 @@ Coconut Cove has one of each out front.
 ## How to play
 
 - **Objective**: collect all ★ in each world to unlock the golden portal, then jump into it.
-  9 worlds: Sunny Meadow → Candy Canyon → Rainbow Peak → Castle in the Clouds → **Toy City** →
+  11 worlds: Sunny Meadow → Candy Canyon → Rainbow Peak → Castle in the Clouds → **Toy City** →
   **Frosty Mountain** (falling snow, a sliding ice floe and a spring-launch climb) →
   **Bubbly Beach** (sandy islands over a sparkly sea, with secret sky islands) →
+  **Jungle Vines** (leafy climb, a balloon to a treetop island) → **Starlight Peak** (a climb on
+  springs at night) →
   **Adventure Island** (the big open world, see above) → **Moon Base** (by rocket).
 - **Party balloons** 🎈 (Bubbly Beach, and one on Frosty Mountain): touch one to float up for a
   few seconds, then steer to a secret island. Balloons grow back, so you can ride again.

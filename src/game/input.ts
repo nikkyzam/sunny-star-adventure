@@ -67,7 +67,8 @@ export class Input {
 
     on<KeyboardEvent>(window, "keydown", (e) => {
       if (e.repeat) return;
-      if (e.target instanceof HTMLInputElement) return; // typing a room code is not gameplay
+      // typing a room code or a memory verse is not gameplay
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       this.held.add(e.code); // all codes held (Space/Enter too — glide checks isHeld)
       this.actions.add(e.code); // e.g. "KeyE" / "Escape" / "Space" are consumed directly by code
       this.recomputeAxes();

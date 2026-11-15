@@ -12,6 +12,7 @@
 
 import * as THREE from "three";
 import type { World, Platform } from "./world";
+import { makeHuman, type Human, type Move } from "./humans";
 
 const SPEED = 7;
 const ACCEL_GROUND = 70;
@@ -89,6 +90,45 @@ function makeHat(i: number): THREE.Group | null {
   return g;
 }
 
+/** Glasses in the cartoon head's coordinates (0 = none, 1 round, 2 sunglasses, 3 red). */
+function makeGlasses(kind: number): THREE.Group | null {
+  if (kind <= 0) return null;
+  const g = new THREE.Group();
+  const frame = new THREE.MeshStandardMaterial({ color: kind === 2 ? 0x1b1b22 : kind === 3 ? 0xff4d6d : 0x33323e, roughness: 0.4 });
+  const lens = kind === 2
+    ? new THREE.MeshStandardMaterial({ color: 0x1b1b22, roughness: 0.2 })
+    : new THREE.MeshStandardMaterial({ color: 0xcfefff, roughness: 0.1, transparent: true, opacity: 0.35 });
+  const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number) => {
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.position.set(x, y, z);
+    g.add(mesh);
+    return mesh;
+  };
+  for (const sx of [-1, 1]) {
+    add(new THREE.TorusGeometry(0.068, 0.012, 6, 18), frame, 0.1 * sx, 1.53, 0.265);
+    add(new THREE.CircleGeometry(0.066, 16), lens, 0.1 * sx, 1.53, 0.266);
+    add(new THREE.BoxGeometry(0.012, 0.012, 0.26), frame, 0.172 * sx, 1.535, 0.14);
+  }
+  add(new THREE.BoxGeometry(0.07, 0.012, 0.012), frame, 0, 1.535, 0.268);
+  return g;
+}
+
+/** The baseball cap (worn when no other hat is chosen), in the cartoon head's coordinates. */
+function makeCap(color: number): THREE.Group {
+  const g = new THREE.Group();
+  const m = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.283, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), m);
+  dome.position.y = 1.56;
+  dome.castShadow = true;
+  g.add(dome);
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.04, 16, 1, false, -Math.PI / 2.6, Math.PI / 1.3), m);
+  brim.position.set(0, 1.58, 0.13);
+  brim.scale.set(1, 1, 1.25);
+  brim.castShadow = true;
+  g.add(brim);
+  return g;
+}
+
 export interface PlayerEvents {
   jumped: boolean;
   doubleJumped: boolean;
@@ -101,6 +141,15 @@ export interface KidPalette {
   cap: number;
   pants: number;
   skin?: number;
+  /** Hair color and style (0 short, 1 ponytail, 2 pigtails, 3 curly, 4 long). */
+  hair?: number;
+  hairStyle?: number;
+  /** 0 none, 1 round glasses, 2 sunglasses, 3 red glasses. */
+  glasses?: number;
+  /** Clothes: 0 jacket & trousers, 1 dress, 2 T-shirt & shorts, 3 dungarees. */
+  style?: number;
+  /** Human body (0 girl, 1 boy), used when human characters are loaded. */
+  body?: number;
 }
 
 export class Player {
@@ -132,6 +181,15 @@ export class Player {
   private canopy!: THREE.Mesh;
   private balloon!: THREE.Group;
   private hat: THREE.Group | null = null;
+  /** The human-looking model (humans.ts), or null for the code-built cartoon kid. */
+  private human: Human | null = null;
+  /** Where hats, glasses and the cap go: the cartoon body, or the human's head. */
+  private headParent: THREE.Object3D = this.body;
+  /** Far from the camera: animate less often. */
+  near = true;
+  private cap = new THREE.Group();
+  private lids: THREE.Mesh[] = [];
+  private blinkT = 1 + Math.random() * 3;
   private hatIndex = 0;
   private groundPlat: Platform | null = null;
   private coyote = 0;
@@ -142,82 +200,28 @@ export class Player {
   private wasAirborne = false;
 
   constructor(palette: KidPalette = { jacket: 0xff8c42, cap: 0xff4757, pants: 0x4a69bd }) {
-    const skin = new THREE.MeshStandardMaterial({ color: palette.skin ?? 0xffd9b3, flatShading: true, roughness: 0.8 });
-    const jacket = new THREE.MeshStandardMaterial({ color: palette.jacket, flatShading: true, roughness: 0.8 });
-    const pants = new THREE.MeshStandardMaterial({ color: palette.pants, flatShading: true, roughness: 0.85 });
-    const capMat = new THREE.MeshStandardMaterial({ color: palette.cap, flatShading: true, roughness: 0.7 });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x33323e, roughness: 0.4 });
-    const shoeMat = new THREE.MeshStandardMaterial({ color: 0x7a4a2b, flatShading: true, roughness: 0.9 });
-    const packMat = new THREE.MeshStandardMaterial({ color: 0x3fa34d, flatShading: true, roughness: 0.85 });
-
-    const add = (m: THREE.Mesh, parent: THREE.Object3D = this.body) => {
-      m.castShadow = true;
-      parent.add(m);
-      return m;
-    };
-
-    // legs (pivot at the hip so they can swing)
-    const legGeo = new THREE.CapsuleGeometry(0.09, 0.3, 4, 8);
-    for (const sx of [-1, 1]) {
-      const hip = new THREE.Group();
-      hip.position.set(0.13 * sx, 0.62, 0);
-      add(new THREE.Mesh(legGeo, pants), hip).position.y = -0.22;
-      const shoe = add(new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), shoeMat), hip);
-      shoe.scale.set(1, 0.6, 1.4);
-      shoe.position.set(0, -0.44, 0.05);
-      this.body.add(hip);
-      if (sx < 0) this.legL = hip; else this.legR = hip;
+    this.human = makeHuman({
+      body: palette.body ?? 0, skinColor: palette.skin ?? 0xffd9b3, hair: palette.hairStyle ?? 0, hairColor: palette.hair ?? 0x5a3a22,
+      top: palette.style === 3 ? palette.cap : palette.jacket, bottom: palette.pants, accent: palette.cap, style: palette.style ?? 0,
+    });
+    if (this.human) {
+      this.body.add(this.human.root);
+      this.headParent = this.human.headAcc;
+      const glasses = makeGlasses(palette.glasses ?? 0);
+      if (glasses) this.headParent.add(glasses);
+      this.cap.add(makeCap(palette.cap));
+      this.cap.position.y = 0.07; // sits higher on the human head, clear of the eyes
+      this.headParent.add(this.cap);
+    } else {
+      this.buildToy(palette);
     }
-
-    // torso
-    const torso = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.36, 4, 12), jacket));
-    torso.position.y = 0.92;
-
-    // arms (pivot at the shoulder)
-    const armGeo = new THREE.CapsuleGeometry(0.07, 0.3, 4, 8);
-    for (const sx of [-1, 1]) {
-      const shoulder = new THREE.Group();
-      shoulder.position.set(0.31 * sx, 1.12, 0);
-      add(new THREE.Mesh(armGeo, jacket), shoulder).position.y = -0.2;
-      add(new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 8), skin), shoulder).position.y = -0.4;
-      this.body.add(shoulder);
-      if (sx < 0) this.armL = shoulder; else this.armR = shoulder;
-    }
-
-    // backpack
-    const pack = add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.36, 0.16), packMat));
-    pack.position.set(0, 0.98, -0.3);
-
-    // head
-    const head = add(new THREE.Mesh(new THREE.SphereGeometry(0.26, 16, 12), skin));
-    head.position.y = 1.5;
-
-    // cap: dome + brim
-    const dome = add(new THREE.Mesh(new THREE.SphereGeometry(0.27, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), capMat));
-    dome.position.y = 1.56;
-    const brim = add(new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.04, 16, 1, false, -Math.PI / 2.6, Math.PI / 1.3), capMat));
-    brim.position.set(0, 1.58, 0.12);
-    brim.scale.set(1, 1, 1.25);
-
-    // face
-    for (const sx of [-1, 1]) {
-      const eye = add(new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), dark));
-      eye.position.set(0.1 * sx, 1.52, 0.235);
-      const cheek = add(new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8),
-        new THREE.MeshStandardMaterial({ color: 0xffb3c6, roughness: 0.7 })));
-      cheek.scale.set(1, 0.6, 0.6);
-      cheek.position.set(0.17 * sx, 1.43, 0.2);
-    }
-    const nose = add(new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8),
-      new THREE.MeshStandardMaterial({ color: 0xffb98a, roughness: 0.7 })));
-    nose.position.set(0, 1.47, 0.26);
 
     // parachute canopy (hidden unless gliding)
     this.canopy = new THREE.Mesh(
       new THREE.SphereGeometry(0.85, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2),
       new THREE.MeshStandardMaterial({ color: 0xffd93d, flatShading: true, roughness: 0.7, side: THREE.DoubleSide }),
     );
-    this.canopy.position.y = 2.0; // just above the raised hands, reads as "holding the chute"
+    this.canopy.position.y = this.human ? 2.45 : 2.0; // just above the raised hands, reads as "holding the chute"
     this.canopy.visible = false;
     this.body.add(this.canopy);
 
@@ -231,11 +235,183 @@ export class Player {
     string.position.set(0.15, 1.9, 0);
     string.rotation.z = 0.15;
     this.balloon.add(string);
-    this.balloon.position.x = 0.2;
+    this.balloon.position.set(0.2, this.human ? 0.35 : 0, 0);
     this.balloon.visible = false;
     this.body.add(this.balloon);
 
     this.group.add(this.body);
+  }
+
+  /** The code-built cartoon kid (used until / unless the human models load). */
+  private buildToy(palette: KidPalette): void {
+    // smooth-shaded so faces and clothes look soft rather than faceted
+    const soft = (color: number, roughness = 0.8) => new THREE.MeshStandardMaterial({ color, roughness });
+    const skin = soft(palette.skin ?? 0xffd9b3, 0.7);
+    const jacket = soft(palette.jacket);
+    const pants = soft(palette.pants, 0.85);
+    const capMat = soft(palette.cap, 0.7);
+    const hairMat = soft(palette.hair ?? 0x5a3a22, 0.9);
+    const dark = soft(0x2b2a33, 0.4);
+    const white = soft(0xffffff, 0.5);
+    const shoeMat = soft(0x7a4a2b, 0.9);
+    const packMat = soft(0x3fa34d, 0.85);
+    const style = palette.style ?? 0;        // 0 jacket & trousers, 1 dress, 2 T-shirt & shorts, 3 dungarees
+    const bareLegs = style === 1 || style === 2;
+    const bareArms = style === 1 || style === 2;
+    const top = style === 3 ? capMat : jacket; // dungarees show the shirt underneath
+
+    const add = (m: THREE.Mesh, parent: THREE.Object3D = this.body) => {
+      m.castShadow = true;
+      parent.add(m);
+      return m;
+    };
+    const orb = (r: number, m: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = this.body) => {
+      const mesh = add(new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), m), parent);
+      mesh.position.set(x, y, z);
+      return mesh;
+    };
+
+    // legs (pivot at the hip so they can swing)
+    const legGeo = new THREE.CapsuleGeometry(0.09, 0.3, 4, 10);
+    for (const sx of [-1, 1]) {
+      const hip = new THREE.Group();
+      hip.position.set(0.13 * sx, 0.62, 0);
+      add(new THREE.Mesh(legGeo, bareLegs ? skin : pants), hip).position.y = -0.22;
+      if (style === 2) add(new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.12, 0.24, 12), pants), hip).position.y = -0.08; // shorts
+      if (bareLegs) add(new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.095, 0.1, 10), white), hip).position.y = -0.36;      // sock
+      const shoe = orb(0.11, shoeMat, 0, -0.44, 0.05, hip);
+      shoe.scale.set(1, 0.6, 1.45);
+      const sole = add(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.04, 0.33), white), hip);
+      sole.position.set(0, -0.5, 0.05);
+      this.body.add(hip);
+      if (sx < 0) this.legL = hip; else this.legR = hip;
+    }
+
+    // torso, collar and neck
+    const torso = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.36, 6, 16), top));
+    torso.position.y = 0.92;
+    const neck = add(new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.095, 0.12, 12), skin));
+    neck.position.y = 1.27;
+    const collar = add(new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.04, 8, 16), top));
+    collar.rotation.x = Math.PI / 2;
+    collar.position.y = 1.2;
+    if (style === 0) {
+      // zip and pockets on the jacket
+      const zip = add(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.46, 0.02), white));
+      zip.position.set(0, 0.95, 0.238);
+      for (const sx of [-1, 1]) {
+        const pocket = add(new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.09, 0.02), capMat));
+        pocket.position.set(0.12 * sx, 0.8, 0.225);
+      }
+    } else if (style === 1) {
+      // dress: a flared skirt and a ribbon belt
+      const skirt = add(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.46, 0.5, 18), jacket));
+      skirt.position.y = 0.58;
+      const belt = add(new THREE.Mesh(new THREE.CylinderGeometry(0.245, 0.245, 0.07, 18), capMat));
+      belt.position.y = 0.82;
+      const bow = orb(0.06, capMat, 0, 0.82, 0.25);
+      bow.scale.set(1.8, 1, 0.6);
+    } else if (style === 2) {
+      // T-shirt: a star on the front
+      const badge = orb(0.07, capMat, 0, 1.0, 0.225);
+      badge.scale.z = 0.3;
+    } else {
+      // dungarees: bib, straps and a waistband
+      const bib = add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.05), pants));
+      bib.position.set(0, 0.98, 0.215);
+      const waist = add(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.2, 16), pants));
+      waist.position.y = 0.72;
+      for (const sx of [-1, 1]) {
+        const strap = add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.26, 0.04), pants));
+        strap.position.set(0.11 * sx, 1.17, 0.19);
+        orb(0.025, white, 0.11 * sx, 1.09, 0.245);
+      }
+    }
+
+    // arms (pivot at the shoulder): sleeve, cuff, hand and thumb
+    const armGeo = new THREE.CapsuleGeometry(0.07, 0.3, 4, 10);
+    for (const sx of [-1, 1]) {
+      const shoulder = new THREE.Group();
+      shoulder.position.set(0.31 * sx, 1.12, 0);
+      add(new THREE.Mesh(armGeo, bareArms ? skin : top), shoulder).position.y = -0.2;
+      if (bareArms) orb(0.095, top, 0, -0.04, 0, shoulder).scale.y = 1.2; // short sleeve
+      else add(new THREE.Mesh(new THREE.CylinderGeometry(0.078, 0.078, 0.05, 10), white), shoulder).position.y = -0.36;
+      orb(0.075, skin, 0, -0.42, 0, shoulder);
+      orb(0.03, skin, 0, -0.41, 0.07, shoulder);
+      this.body.add(shoulder);
+      if (sx < 0) this.armL = shoulder; else this.armR = shoulder;
+    }
+
+    // backpack
+    const pack = add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.36, 0.16), packMat));
+    pack.position.set(0, 0.98, -0.3);
+    const flap = add(new THREE.Mesh(new THREE.BoxGeometry(0.31, 0.12, 0.17), soft(0x2f8a3d)));
+    flap.position.set(0, 1.11, -0.3);
+
+    // head: ears, eyes that blink, eyebrows, nose, a smile and rosy cheeks
+    const head = orb(0.26, skin, 0, 1.5, 0);
+    head.scale.y = 1.04;
+    for (const sx of [-1, 1]) {
+      orb(0.06, skin, 0.255 * sx, 1.49, -0.01).scale.set(0.5, 1, 0.8);
+      const eyeX = 0.1 * sx;
+      orb(0.062, white, eyeX, 1.53, 0.215).scale.set(1, 1.15, 0.5);
+      orb(0.036, soft(0x4a3222, 0.4), eyeX, 1.53, 0.243).scale.z = 0.4;
+      orb(0.02, dark, eyeX, 1.53, 0.256).scale.z = 0.4;
+      orb(0.01, white, eyeX + 0.012, 1.545, 0.262);
+      const lid = orb(0.066, skin, eyeX, 1.53, 0.218);
+      lid.scale.set(1, 1.15, 0.55);
+      lid.castShadow = false;
+      lid.visible = false;
+      this.lids.push(lid);
+      const brow = add(new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.022, 0.02), hairMat));
+      brow.position.set(eyeX, 1.625, 0.232);
+      brow.rotation.z = -0.12 * sx;
+      const cheek = orb(0.045, soft(0xffb3c6, 0.7), 0.17 * sx, 1.43, 0.2);
+      cheek.scale.set(1, 0.6, 0.6);
+    }
+    orb(0.035, soft(new THREE.Color(palette.skin ?? 0xffd9b3).multiplyScalar(0.92).getHex(), 0.7), 0, 1.47, 0.26);
+    const smile = add(new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.013, 6, 14, Math.PI), soft(0xb5524a, 0.6)));
+    smile.rotation.set(-0.2, 0, Math.PI);
+    smile.position.set(0, 1.42, 0.235);
+
+    // hair: a dome over the top and back of the head, plus the chosen style
+    const dome = add(new THREE.Mesh(new THREE.SphereGeometry(0.275, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.58), hairMat));
+    dome.position.y = 1.535;
+    dome.rotation.x = -0.32; // tilted back so the forehead shows
+    // human hairstyles: short, long, buns, buzz, pixie → cartoon shapes
+    const hairStyle = [0, 4, 2, 0, 3][palette.hairStyle ?? 0] ?? 0;
+    if (hairStyle === 1) {
+      // ponytail
+      orb(0.1, hairMat, 0, 1.56, -0.29);
+      const tail = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.24, 4, 8), hairMat));
+      tail.position.set(0, 1.38, -0.36);
+      tail.rotation.x = 0.35;
+    } else if (hairStyle === 2) {
+      // pigtails
+      for (const sx of [-1, 1]) {
+        orb(0.095, hairMat, 0.28 * sx, 1.48, -0.06);
+        const tail = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.2, 4, 8), hairMat));
+        tail.position.set(0.31 * sx, 1.3, -0.06);
+        tail.rotation.z = 0.25 * sx;
+      }
+    } else if (hairStyle === 3) {
+      // curly: puffs all around the sides and back
+      for (let k = 0; k < 9; k++) {
+        const a = Math.PI * 0.15 + (k / 8) * Math.PI * 1.7; // skips the face
+        orb(0.115, hairMat, Math.sin(a) * 0.24, 1.56 + (k % 2) * 0.07, -Math.cos(a) * 0.24 - 0.02);
+      }
+    } else if (hairStyle === 4) {
+      // long hair down the back
+      const long = orb(0.27, hairMat, 0, 1.33, -0.11);
+      long.scale.set(1.02, 1.3, 0.72);
+    }
+
+    const glasses = makeGlasses(palette.glasses ?? 0);
+    if (glasses) this.body.add(glasses);
+
+    // cap (worn when no other hat is chosen)
+    this.cap.add(makeCap(palette.cap));
+    this.body.add(this.cap);
   }
 
   /** Swap the hat (0 = cap only). */
@@ -248,11 +424,13 @@ export class Player {
           (o.material as THREE.Material).dispose();
         }
       });
-      this.body.remove(this.hat);
+      this.hat.removeFromParent();
     }
     this.hatIndex = i;
     this.hat = makeHat(i);
-    if (this.hat) this.body.add(this.hat);
+    if (this.hat) this.headParent.add(this.hat);
+    // the cap comes off for a crown, wizard hat or bunny ears; a flower tucks onto it
+    this.cap.visible = i === 0 || i === 4;
   }
 
   /** Grab a balloon: rise gently for a few seconds. */
@@ -431,6 +609,41 @@ export class Player {
     this.animate(dt);
   }
 
+  /** Pick the human's animation from what the kid is doing. */
+  private animateHuman(dt: number, hSpeed: number): void {
+    const h = this.human!;
+    let move: Move;
+    let rate = 1;
+    if (this.danceT > 0) {
+      this.danceT = Math.max(0, this.danceT - dt);
+      move = "dance";
+    } else if (this.riding) {
+      move = "drive";
+    } else if (!this.onGround) {
+      move = this.glideActive || this.floatT > 0 ? "float" : this.vel.y > 2 && h.move !== "fall" ? "jump" : "fall";
+    } else if (hSpeed > 0.6) {
+      if (hSpeed < 3.2) { move = "walk"; rate = THREE.MathUtils.clamp(hSpeed / 1.6, 0.6, 1.6); }
+      else if (hSpeed < 9) { move = "jog"; rate = THREE.MathUtils.clamp(hSpeed / 4.6, 0.8, 1.7); }
+      else { move = "sprint"; rate = THREE.MathUtils.clamp(hSpeed / 7.5, 0.9, 1.6); }
+    } else {
+      move = "idle";
+    }
+    h.play(move, rate);
+    h.update(dt, this.near);
+
+    // pizza: grow giant, then shrink back
+    const size = this.group.scale.x + ((this.bigT > 0 ? 1.7 : 1) - this.group.scale.x) * Math.min(1, dt * 5);
+    this.group.scale.setScalar(size);
+
+    this.balloon.visible = this.floatT > 0;
+    if (this.balloon.visible) this.balloon.rotation.z = Math.sin(this.floatT * 3) * 0.08;
+    this.canopy.visible = this.glideActive;
+    if (this.glideActive) this.canopy.rotation.y += dt * 0.8;
+
+    // hurt blink
+    this.group.visible = this.invuln <= 0 || Math.floor(this.invuln * 10) % 2 === 0;
+  }
+
   private animate(dt: number): void {
     // face the travel direction (local +Z is the face)
     const hSpeed = Math.hypot(this.vel.x, this.vel.z);
@@ -441,6 +654,11 @@ export class Player {
       while (d < -Math.PI) d += Math.PI * 2;
       this.facing += d * Math.min(1, dt * 12);
       this.group.rotation.y = this.facing;
+    }
+
+    if (this.human) {
+      this.animateHuman(dt, hSpeed);
+      return;
     }
 
     if (this.riding) {
@@ -516,6 +734,12 @@ export class Player {
       this.legR.rotation.x = -w * 0.4;
       this.body.position.y = Math.abs(w) * 0.15;
     }
+
+    // blink now and then
+    this.blinkT -= dt;
+    if (this.blinkT < 0) this.blinkT = 2 + Math.random() * 3.5;
+    const shut = this.blinkT < 0.13;
+    for (const lid of this.lids) lid.visible = shut;
 
     // pizza: grow giant, then shrink back
     const size = this.group.scale.x + ((this.bigT > 0 ? 1.7 : 1) - this.group.scale.x) * Math.min(1, dt * 5);

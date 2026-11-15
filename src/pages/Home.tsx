@@ -97,8 +97,13 @@ export default function Home() {
         {/* dress-up: the kid stands above this panel while you choose */}
         <div id="ov-dress" className="overlay clear" style={{ display: 'none' }}>
           <div className="panel dress-panel">
-            <div className="choice-row"><span>Outfit</span><div id="outfits" className="outfits" /></div>
+            <div className="choice-row"><span>Body</span><div id="bodies" className="outfits" /></div>
+            <div className="choice-row"><span>Clothes</span><div id="clothes" className="outfits" /></div>
+            <div className="choice-row"><span>Color</span><div id="outfits" className="outfits" /></div>
             <div className="choice-row"><span>Skin</span><div id="skins" className="outfits" /></div>
+            <div className="choice-row"><span>Hair</span><div id="hairstyles" className="outfits" /></div>
+            <div className="choice-row"><span>Hair color</span><div id="haircolors" className="outfits" /></div>
+            <div className="choice-row"><span>Glasses</span><div id="glasses" className="outfits" /></div>
             <div className="choice-row"><span>Hat</span><div id="hats" className="outfits" /></div>
             <div className="choice-row"><span>Pet</span><div id="pets" className="outfits" /></div>
             <button className="big-btn primary" data-action="back">✔ Done</button>
@@ -145,6 +150,26 @@ export default function Home() {
             <div className="btn-col">
               <button className="big-btn primary" data-action="next">Next level ➜</button>
               <button className="big-btn" data-action="title">🏠 Title</button>
+            </div>
+          </div>
+        </div>
+
+        {/* memory verse: read it, then type it from memory to open the next level */}
+        <div id="ov-verse" className="overlay" style={{ display: 'none' }}>
+          <div className="panel verse-panel">
+            <h2>Memory verse 📖</h2>
+            <p id="verse-ref" className="verse-ref" />
+            <p id="verse-text" className="verse-text" />
+            <div id="verse-learn" className="btn-col">
+              <p className="tagline">Read it a few times. When you know it by heart, type it from memory!</p>
+              <button className="big-btn primary" data-action="verse-ready">✍️ I know it!</button>
+            </div>
+            <div id="verse-type" className="btn-col" style={{ display: 'none' }}>
+              <textarea id="verse-input" className="verse-input" rows={3} placeholder="Type the verse here…"
+                autoComplete="off" autoCapitalize="sentences" spellCheck={false} />
+              <p id="verse-feedback" className="verse-feedback" />
+              <button className="big-btn primary" data-action="verse-check">✔ Check</button>
+              <button className="big-btn" data-action="verse-peek">👀 Peek at the verse</button>
             </div>
           </div>
         </div>

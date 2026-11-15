@@ -23,6 +23,12 @@ export const HATS = ["🧢", "👑", "🐰", "🧙", "🌸"];
 // the last one is alien green (the Moon's villagers wear it; kids can too)
 export const SKINS = [0xffd9b3, 0xf2c39a, 0xd9a273, 0xb07a50, 0x7d5236, 0x8fe07a];
 
+export const HAIR_COLORS = [0x5a3a22, 0x1b1b22, 0xe3b04b, 0xc4562a, 0x8a5a33, 0xff6b9d, 0x5cb8ff];
+export const HAIR_STYLES = ["Short", "Long", "Buns", "Buzz", "Pixie"];
+export const BODIES = ["👧", "👦"];
+export const GLASSES = ["🚫", "👓", "🕶️", "❤️"];
+export const CLOTHES = ["🧥", "👗", "🩳", "👖"];
+
 /** Pets that follow you everywhere; index matches makePet() in pets.ts (0 = no pet). */
 export const PETS = ["🚫", "🐶", "🐱", "🐥", "🐲"];
 
@@ -39,6 +45,11 @@ export interface Profile {
   outfit: number;
   hat: number;
   skin: number;
+  body: number;
+  hair: number;
+  hairColor: number;
+  glasses: number;
+  clothes: number;
   pet: number;
   name: [number, number];
   easy: boolean;
@@ -74,9 +85,31 @@ export function safePet(v: unknown): number {
   return Number.isInteger(v) ? Math.abs(v as number) % PETS.length : 0;
 }
 
-/** The full look of a kid: outfit colors plus skin tone. */
-export function lookOf(outfit: number, skin: number): KidPalette {
-  return { ...OUTFITS[outfit], skin: SKINS[skin] };
+/** Clamp any integer (local storage or a network message) into a list's range. */
+export function pick(v: unknown, list: readonly unknown[]): number {
+  return Number.isInteger(v) ? Math.abs(v as number) % list.length : 0;
+}
+
+/** What a kid looks like, as list indices (this is also what travels over the network). */
+export interface Look {
+  body: number; outfit: number; skin: number; hair: number; hairColor: number; glasses: number; clothes: number;
+}
+
+/** Any object (a profile, a network message, a villager) → a safe Look. */
+export function safeLook(o: Partial<Record<keyof Look, unknown>>): Look {
+  return {
+    body: pick(o.body, BODIES),
+    outfit: pick(o.outfit, OUTFITS), skin: pick(o.skin, SKINS), hair: pick(o.hair, HAIR_STYLES),
+    hairColor: pick(o.hairColor, HAIR_COLORS), glasses: pick(o.glasses, GLASSES), clothes: pick(o.clothes, CLOTHES),
+  };
+}
+
+/** The colors and shapes the Player model is built from. */
+export function lookOf(l: Look): KidPalette {
+  return {
+    ...OUTFITS[l.outfit], skin: SKINS[l.skin], hair: HAIR_COLORS[l.hairColor], hairStyle: l.hair,
+    glasses: l.glasses, style: l.clothes, body: l.body,
+  };
 }
 
 export function nameText(n: [number, number]): string {
@@ -89,6 +122,11 @@ export function loadProfile(): Profile {
     outfit: safeOutfit(raw?.outfit),
     hat: safeHat(raw?.hat),
     skin: safeSkin(raw?.skin),
+    body: pick(raw?.body, BODIES),
+    hair: pick(raw?.hair, HAIR_STYLES),
+    hairColor: pick(raw?.hairColor, HAIR_COLORS),
+    glasses: pick(raw?.glasses, GLASSES),
+    clothes: pick(raw?.clothes, CLOTHES),
     pet: raw?.pet === undefined ? 1 : safePet(raw.pet), // everyone starts with a puppy
     name: raw?.name ? safeName(raw.name) : randomName(),
     easy: raw?.easy ?? true, // the youngest players shouldn't meet a game-over screen by default
