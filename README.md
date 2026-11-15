@@ -79,8 +79,11 @@ and answer the grown-up sum.
 - **Start a class**: you get a room code and land on Adventure Island. Up to 12 kids press
   **Play with friends**, type the code, and get your library verses in their verse book. Your own
   verse book shows each kid's made-up name and which verses they have typed from memory.
-- Only library verses travel to other devices, as numbers. Verses you type in stay on your device,
-  so nothing typed is ever sent between players.
+- **Copy the class link**: the link carries all your verses, including typed-in ones. Send it to
+  your families yourself. Kids who open it get the verses at home, and in your class room their
+  typed-in verses count on your board.
+- Through the game, only library verses travel to other devices, as numbers. Nothing typed is ever
+  sent between players; typed-in verses travel only inside the link you share.
 
 ## Jobs 💼
 

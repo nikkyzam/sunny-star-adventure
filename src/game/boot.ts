@@ -35,8 +35,8 @@ import { Rings } from "./rings";
 import { Foods } from "./food";
 import { Fleet } from "./ships";
 import { verseFor, grade, LIBRARY, type Verse } from "./verses";
-import { loadPlan, savePlan, planVerses, safePicks, cleanOwn, loadMemorized, saveMemorized, makeGate, MAX_PICKS, MAX_OWN, CLASS_MAX_KIDS, VERSE_PAY } from "./lesson";
-import { showGate, gateAnswer, setGateStatus, drawTeach, ownInput, clearOwnInput, setTeachStatus, setTeachButton, drawBook, type BoardRow } from "./lessonui";
+import { loadPlan, savePlan, planVerses, safePicks, cleanOwn, loadMemorized, saveMemorized, makeGate, ownHash, encodePlan, planFromLink, MAX_PICKS, MAX_OWN, CLASS_MAX_KIDS, VERSE_PAY } from "./lesson";
+import { showGate, gateAnswer, setGateStatus, drawTeach, ownInput, clearOwnInput, setTeachStatus, setTeachButton, showClassLink, drawBook, type BoardRow } from "./lessonui";
 import { loadHumanKit } from "./humans";
 import { loadEnvKit } from "./env";
 import { Props } from "./props";
@@ -90,7 +90,7 @@ declare global {
       job: { id: string; label: string; reporting: boolean; left: { x: number; y: number; z: number; npc?: string; ride?: string; hold?: number }[] } | null;
       jobsDone: number;
       traffic: { x: number; z: number; v: number }[];
-      lesson: { refs: string[]; done: string[]; room: boolean; host: boolean; on: boolean };
+      lesson: { refs: string[]; done: string[]; room: boolean; host: boolean; on: boolean; link: boolean };
       board: BoardRow[];
       setBank: (n: number) => void;
       shipsSunk: number;
@@ -273,7 +273,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const memorized = loadMemorized();
   const doneNow = new Set<string>(); // verse refs typed from memory since the page opened
   let roomPicks: number[] | null = null;
+  /** The class's typed-in verses: the teacher's own, or (for a kid) the ones from the class link. */
+  let roomOwn: Verse[] = [];
   let classHost = false;
+  /** Verses from a class link this page was opened with (?class=…). */
+  const linkPlan = planFromLink(location.search);
   let teachOpen = false;
   let bookOpen = false;
   let gate: { question: string; answer: number } | null = null;
@@ -291,7 +295,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   hud.setBest(highScore.get());
   hud.setKidName(nameText(profile.name));
   hud.setEasy(profile.easy);
-  setTeachButton(plan);
+  setTeachButton(plan, linkPlan ? linkPlan.picks.length + linkPlan.own.length : 0);
   hud.buildOutfits(OUTFITS.map((o) => o.jacket), profile.outfit, (i) => {
     profile.outfit = i;
     saveProfile(profile);
@@ -721,7 +725,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   /** The verses a grown-up picked: the class room's, else this device's (empty = none picked). */
   function lessonVerses(): Verse[] {
-    return roomPicks ? roomPicks.map((i) => LIBRARY[i]) : plan.on ? planVerses(plan) : [];
+    if (roomPicks) return [...roomPicks.map((i) => LIBRARY[i]), ...roomOwn];
+    return linkPlan ? planVerses(linkPlan) : plan.on ? planVerses(plan) : [];
   }
 
   /** The verse that opens the next level: a picked verse if there are any, else the level's own. */
@@ -755,10 +760,26 @@ export function startGame(canvas: HTMLCanvasElement): void {
       hud.setCoins(bank);
       paid = VERSE_PAY;
     }
-    const k = LIBRARY.findIndex((x) => x.ref === v.ref && x.text === v.text);
-    if (first && net && roomPicks?.includes(k)) net.send({ t: "vd", k });
+    if (first && net && roomPicks) {
+      const k = classNumber(v);
+      if (k >= 0) net.send({ t: "vd", k });
+    }
     refreshBook();
     return paid;
+  }
+
+  /** A class verse's number on the wire: its library position, or (typed-in verses) one past the
+   *  library for each. -1 when it isn't one of the class's verses. */
+  function classNumber(v: Verse): number {
+    const k = LIBRARY.findIndex((x) => x.ref === v.ref && x.text === v.text);
+    if (k >= 0) return roomPicks?.includes(k) ? k : -1;
+    const n = roomOwn.findIndex((x) => x.ref === v.ref && x.text === v.text);
+    return n >= 0 ? LIBRARY.length + n : -1;
+  }
+
+  /** Every number a class verse can have, in verse-book order. */
+  function classNumbers(): number[] {
+    return [...(roomPicks ?? []), ...roomOwn.map((_, n) => LIBRARY.length + n)];
   }
 
   function checkVerse(): void {
@@ -782,8 +803,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   // ── The verse book (a grown-up's verses) ─────────────────────────────────
   function boardRows(): BoardRow[] {
-    const picks = roomPicks ?? [];
-    return [...board.values()].map((r) => ({ name: r.name, here: r.here, done: picks.map((k) => r.done.has(k)) }));
+    const all = classNumbers();
+    return [...board.values()].map((r) => ({ name: r.name, here: r.here, done: all.map((k) => r.done.has(k)) }));
   }
 
   function showBook(): void {
@@ -822,7 +843,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   function savePicks(): void {
     if (plan.picks.length + plan.own.length === 0) plan.on = false;
     savePlan(plan);
-    setTeachButton(plan);
+    setTeachButton(plan, linkPlan ? linkPlan.picks.length + linkPlan.own.length : 0);
     drawTeach(plan, teachHandlers);
   }
 
@@ -887,9 +908,22 @@ export function startGame(canvas: HTMLCanvasElement): void {
     audio.sfx("ui");
   }
 
+  /** Show (and copy) the link that carries this plan, typed-in verses included. */
+  function classLink(): void {
+    if (!teachOpen || gate) return;
+    if (plan.picks.length + plan.own.length === 0) { setTeachStatus("Pick at least one verse first."); return; }
+    const url = `${location.origin}${location.pathname}?class=${encodePlan(plan)}`;
+    showClassLink(url);
+    const done = (ok: boolean) => setTeachStatus(ok
+      ? "Link copied! Send it to your families. Kids who open it get all your verses."
+      : "Copy the link below and send it to your families. Kids who open it get all your verses.");
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(url).then(() => done(true), () => done(false));
+    else done(false);
+  }
+
   function startClass(): void {
     if (!teachOpen || gate) return;
-    if (plan.picks.length === 0) { setTeachStatus("Pick at least one verse from the library first."); return; }
+    if (plan.picks.length + plan.own.length === 0) { setTeachStatus("Pick at least one verse first."); return; }
     hostRoom(true);
   }
 
@@ -943,6 +977,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       case "own-add": addOwnVerse(); break;
       case "family": toggleFamily(); break;
       case "class-start": startClass(); break;
+      case "class-link": classLink(); break;
       case "verse-check": checkVerse(); break;
       case "city":
         if (!sm.is("title")) break;
@@ -1276,6 +1311,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     net = null;
     for (const id of [...remotes.keys()]) removeRemote(id);
     roomPicks = null;
+    roomOwn = [];
     classHost = false;
     board.clear();
     refreshBook();
@@ -1358,19 +1394,27 @@ export function startGame(canvas: HTMLCanvasElement): void {
         const i = num(m.i);
         if (!Number.isInteger(i) || i < 0 || i >= LEVELS.length) return;
         // a class: the teacher's verses come with the welcome (as library positions, never text)
-        const cls = net && !net.isHost && m.cls !== undefined ? safePicks(m.cls) : [];
-        if (cls.length) {
+        const isClass = net !== null && !net.isHost && m.cls !== undefined;
+        const cls = isClass ? safePicks(m.cls) : [];
+        // typed-in verses never come through the room: a kid has them only from the teacher's class link
+        const wantOwn = isClass ? num(m.on) : 0;
+        const haveOwn = wantOwn > 0 && linkPlan !== null && ownHash(linkPlan.own) === m.oh;
+        if (isClass && (cls.length || wantOwn > 0)) {
           roomPicks = cls;
-          for (const k of cls) if (doneNow.has(LIBRARY[k].ref)) net?.send({ t: "vd", k }); // (after a reconnect)
+          roomOwn = haveOwn ? linkPlan.own : [];
+          for (const v of lessonVerses()) if (doneNow.has(v.ref)) net?.send({ t: "vd", k: classNumber(v) }); // (after a reconnect)
           refreshBook();
         }
+        const count = cls.length + roomOwn.length;
         if (sm.is("title", "win")) {
           // just joined (or the host pressed Play again): start on the room's level
           startRun(i, false);
           roomPill();
-          hud.showToast(cls.length
-            ? `Joined the class! 📖 Tap the book to learn ${cls.length === 1 ? "the verse" : `${cls.length} verses`}`
-            : `Joined room ${net?.code ?? ""}! Say hi with the 👋 sticker`);
+          hud.showToast(wantOwn > 0 && !haveOwn
+            ? "Joined the class! Open your teacher's class link to get every verse"
+            : count
+              ? `Joined the class! 📖 Tap the book to learn ${count === 1 ? "the verse" : `${count} verses`}`
+              : `Joined room ${net?.code ?? ""}! Say hi with the 👋 sticker`);
         } else if (i !== levelIdx) {
           if (sm.is("paused")) resumePlay();
           if (sm.is("levelclear")) {
@@ -1390,7 +1434,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       case "vd": {
         // a classmate typed a class verse from memory
         const k = num(m.k);
-        if (!roomPicks || !Number.isInteger(k) || !roomPicks.includes(k) || !from) return;
+        if (!roomPicks || !Number.isInteger(k) || !classNumbers().includes(k) || !from) return;
         const r = remotes.get(from);
         if (classHost) {
           const row = board.get(from) ?? { name: r?.name ?? "A friend", done: new Set<number>(), here: true };
@@ -1399,7 +1443,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
           board.set(from, row);
           if (bookOpen && !verseNow) showBook();
         }
-        if (r && sm.is("playing")) hud.showToast(`${r.name} memorized ${LIBRARY[k].ref}! 🎉`);
+        if (r && sm.is("playing")) hud.showToast(`${r.name} memorized ${(LIBRARY[k] ?? roomOwn[k - LIBRARY.length]).ref}! 🎉`);
         break;
       }
       case "win":
@@ -1413,7 +1457,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   function wireNet(n: Net): void {
     n.onMessage = onNetMessage;
-    n.onPeerJoined = (id) => n.sendTo(id, { t: "level", i: levelIdx, taken: takenStarIndices(), ...(roomPicks ? { cls: roomPicks } : {}) });
+    n.onPeerJoined = (id) => n.sendTo(id, { t: "level", i: levelIdx, taken: takenStarIndices(), ...(roomPicks ? { cls: roomPicks, on: roomOwn.length, oh: ownHash(roomOwn) } : {}) });
     n.onPeerLeft = (id) => removeRemote(id);
     n.onHostLost = () => {
       leaveOnline();
@@ -1434,6 +1478,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       wireNet(n);
       if (asClass) {
         roomPicks = plan.picks.slice();
+        roomOwn = plan.own.slice();
         classHost = true;
       }
       // friends meet on the big island unless the link asks for a level
@@ -2247,7 +2292,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     rings: rings.passed,
     food: foods.items.filter((f) => !f.taken).length,
     verse: gateVerse(),
-    lesson: { refs: lessonVerses().map((v) => v.ref), done: [...doneNow], room: roomPicks !== null, host: classHost, on: plan.on },
+    lesson: { refs: lessonVerses().map((v) => v.ref), done: [...doneNow], room: roomPicks !== null, host: classHost, on: plan.on, link: linkPlan !== null },
     board: boardRows(),
     song: audio.playingSong,
     bank,

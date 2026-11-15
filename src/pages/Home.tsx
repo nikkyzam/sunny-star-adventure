@@ -167,12 +167,14 @@ export default function Home() {
               <input id="own-ref" className="teach-input" maxLength={40} placeholder="Reference, like Psalm 23:4" autoComplete="off" />
               <textarea id="own-text" className="teach-input" rows={3} maxLength={320} placeholder="Type the verse, in any translation" autoComplete="off" />
               <button className="mini-btn wide" data-action="own-add">➕ Add this verse</button>
-              <p className="teach-note">Verses you type are never sent to other devices, so a class gets the library verses only.</p>
+              <p className="teach-note">Verses you type are never sent through the game. To give them to a class, share the class link below: kids who open it get all your verses.</p>
             </details>
             <p id="teach-status" className="stat-line" />
             <div className="btn-col">
               <button className="big-btn primary" data-action="class-start">🏫 Start a class (room code)</button>
               <button id="btn-family" className="big-btn primary2" data-action="family">🏠 Use on this device</button>
+              <button className="big-btn" data-action="class-link">🔗 Copy the class link</button>
+              <input id="class-link" className="teach-input" readOnly style={{ display: 'none' }} aria-label="Class link" />
               <button className="big-btn" data-action="back">⬅ Back</button>
             </div>
           </div>

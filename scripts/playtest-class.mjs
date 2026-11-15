@@ -49,14 +49,14 @@ const check = (name, ok, detail = "") => {
 };
 
 /** A separate browser profile = a separate device. */
-async function device(profile) {
+async function device(profile, query = "") {
   const ctx = await browser.newContext({ viewport: { width: 900, height: 600 } });
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => { errors.push(String(e)); if (errors.length === 1) console.log(e.stack); });
   if (profile) await page.addInitScript((p) => { if (!localStorage.getItem("game.profile")) localStorage.setItem("game.profile", JSON.stringify(p)); }, profile);
   const open = async () => {
-    await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
+    await page.goto(`http://127.0.0.1:${port}/${query}`, { waitUntil: "load" });
     await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
   };
   await open();
@@ -177,6 +177,9 @@ try {
   await tp.fill("#own-ref", "My verse");
   await tp.fill("#own-text", "This one stays on the teacher's device");
   await tp.click("[data-action=own-add]");
+  await tp.click("[data-action=class-link]");
+  const link = await tp.inputValue("#class-link");
+  check("K0 the class link carries the plan", /\?class=[\w-]+$/.test(link), link.slice(-60));
   await tp.click("[data-action=class-start]");
   const made = await tp.waitForFunction(() => document.getElementById("hud-room")?.textContent?.includes("🏫"), null, { timeout: 20000 }).then(() => true, () => false);
   if (!made) {
@@ -184,7 +187,7 @@ try {
   } else {
     const code = (await text(tp, "#hud-room")).match(/🏫 (\w+)/)?.[1] ?? "";
     let t = await dbg(tp);
-    check("K1 the teacher starts a class and gets a room code", code.length >= 4 && t.state === "playing" && t.lesson.host && t.lesson.refs.join("|") === "John 11:35|Psalm 56:3", `${code}: ${t.lesson.refs.join(", ")}`);
+    check("K1 the teacher starts a class and gets a room code", code.length >= 4 && t.state === "playing" && t.lesson.host && t.lesson.refs.join("|") === "John 11:35|Psalm 56:3|My verse", `${code}: ${t.lesson.refs.join(", ")}`);
 
     await kp.click("[data-action=online]");
     await kp.fill("#join-code", code);
@@ -199,14 +202,14 @@ try {
 
       await tp.waitForFunction(() => window.__gameDebug().board.length === 1, null, { timeout: 10000 }).catch(() => {});
       t = await dbg(tp);
-      check("K3 the teacher's board lists the kid", t.board.length === 1 && t.board[0].done.join() === "false,false" && t.board[0].here, JSON.stringify(t.board));
+      check("K3 the teacher's board lists the kid", t.board.length === 1 && t.board[0].done.join() === "false,false,false" && t.board[0].here, JSON.stringify(t.board));
 
       await kp.click("#btn-book");
       await kp.click(".book-verse >> nth=1");
       await typeVerse(kp);
       await tp.waitForFunction(() => window.__gameDebug().board[0]?.done[1] === true, null, { timeout: 10000 }).catch(() => {});
       t = await dbg(tp);
-      check("K4 a verse the kid types shows up on the teacher's board", t.board[0]?.done.join() === "false,true", JSON.stringify(t.board));
+      check("K4 a verse the kid types shows up on the teacher's board", t.board[0]?.done.join() === "false,true,false", JSON.stringify(t.board));
       // the kid keeps the book open for a while: they must not drop off the teacher's board
       await kp.waitForTimeout(8000);
       t = await dbg(tp);
@@ -215,9 +218,28 @@ try {
       await tp.click("#btn-book");
       await tp.waitForTimeout(300);
       const boardText = await text(tp, "#book-board");
-      check("K4b the teacher's verse book shows the class and its code", (await shown(tp, "#book-class")) && boardText.includes("1/2") && (await text(tp, "#book-code")).includes(code), boardText);
+      check("K4b the teacher's verse book shows the class and its code", (await shown(tp, "#book-class")) && boardText.includes("1/3") && (await text(tp, "#book-code")).includes(code), boardText);
       await tp.screenshot({ path: join(ROOT, "verification-shots/62-class-board.png") });
       await kp.screenshot({ path: join(ROOT, "verification-shots/63-class-kid.png") });
+      await tp.click("[data-action=book-close]");
+
+      // a second kid opened the teacher's class link first: they get the typed-in verse too
+      const kid2 = await device({ outfit: 4, name: [5, 2], easy: true }, link.slice(link.indexOf("?")));
+      const k2 = kid2.page;
+      check("K6a the class link turns the teacher's verses on", (await text(k2, "#btn-teach")).includes("teacher's 3 verses"), await text(k2, "#btn-teach"));
+      await k2.click("[data-action=online]");
+      await k2.fill("#join-code", code);
+      await k2.click("[data-action=join]");
+      await k2.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 }).catch(() => {});
+      const d2 = await dbg(k2);
+      check("K6 a kid with the class link gets the typed-in verse in class", d2.lesson.room && d2.lesson.refs.join("|") === "John 11:35|Psalm 56:3|My verse", d2.lesson.refs.join(", "));
+      await k2.click("#btn-book");
+      await k2.click(".book-verse >> nth=2");
+      await typeVerse(k2);
+      await tp.waitForFunction(() => window.__gameDebug().board.some((r) => r.done[2] === true), null, { timeout: 10000 }).catch(() => {});
+      t = await dbg(tp);
+      check("K7 their typed-in verse ticks on the teacher's board", t.board.length === 2 && t.board.some((r) => r.done.join() === "false,false,true"), JSON.stringify(t.board));
+      check("K8 no page errors for the second kid", kid2.errors.length === 0, kid2.errors.join(" | "));
     }
   }
   check("K9 no page errors in class", teacher.errors.length === 0 && kid.errors.length === 0, [...teacher.errors, ...kid.errors].join(" | "));

@@ -109,14 +109,24 @@ export function clearOwnInput(): void {
   el<HTMLTextAreaElement>("own-text").value = "";
 }
 
+/** Put the class link in its box, selected, ready to copy by hand if the clipboard is closed. */
+export function showClassLink(url: string): void {
+  const box = el<HTMLInputElement>("class-link");
+  box.style.display = "";
+  box.value = url;
+  box.select();
+}
+
 export function setTeachStatus(text: string): void {
   el("teach-status").textContent = text;
 }
 
 /** The title-screen button says whether this device's verses are on. */
-export function setTeachButton(plan: Plan): void {
+export function setTeachButton(plan: Plan, fromLink = 0): void {
   const n = plan.picks.length + plan.own.length;
-  el("btn-teach").textContent = plan.on
+  el("btn-teach").textContent = fromLink
+    ? `📖 Your teacher's ${fromLink} verse${fromLink === 1 ? " is" : "s are"} on`
+    : plan.on
     ? `📖 Your ${n} verse${n === 1 ? " is" : "s are"} on · change`
     : "👩‍🏫 Teachers & parents: pick the verses";
 }
