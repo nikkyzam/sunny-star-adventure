@@ -91,6 +91,8 @@ export interface BuildingDef {
   lock?: string;
   /** A glass skyscraper instead of brick. */
   style?: "glass";
+  /** A church (use with `enter`): a steeple with a cross outside; pews, a lectern and a cross inside. */
+  church?: boolean;
 }
 interface RoadDef { x: number; z: number; w: number; d: number }
 
@@ -166,6 +168,10 @@ export interface LevelDef {
   ferris?: [number, number, number, number];
   /** Cars that drive around the city by themselves (traffic.ts). */
   traffic?: TrafficLoop[];
+  /** Scripture scrolls to find: x, y, z and the reference of the library verse (verses.ts) written on it. */
+  scrolls?: [number, number, number, string][];
+  /** Noah's ark: x, z of its middle (the hull runs along x; its deck is a platform to walk on). */
+  ark?: [number, number];
 }
 
 export const LEVELS: LevelDef[] = [
@@ -804,6 +810,15 @@ const ADVENTURE_ISLAND: LevelDef = {
     { x: 42, z: -62, w: 4, d: 3.5, h: 3.2, color: 0xffa94d, enter: true },  // the Coconut Cove snack hut
     { x: -76, z: -63, w: 4, d: 4, h: 3.2, color: 0xc98a5b, enter: true },   // the Pine Island cabin
     { x: 64, z: 16, w: 3.5, d: 3.5, h: 6, color: 0xff9ecf }, // the Sunset Island tower
+    { x: 12, z: -37.5, w: 6, d: 7, h: 4.6, color: 0xfdf6ec, enter: true, church: true }, // the village church
+  ],
+  scrolls: [
+    [12, 1.4, -39.5, "Psalm 122:1"],        // inside the church
+    [-12, 3.0, -33.5, "Psalm 121:2"],       // on Lookout Hill
+    [6, 1.3, -76, "Matthew 5:16"],          // by the lighthouse
+    [-56, 1.3, -12.5, "Matthew 6:33"],      // Treasure Rock
+    [30, 31.2, 3, "Psalm 19:1"],            // Cloud Island
+    [-70, 1.4, -68, "Psalm 24:1"],          // Pine Island
   ],
   springs: [
     { x: 20, z: -18, y: 0.3, power: 18 },   // → the blue house roof
@@ -881,7 +896,8 @@ const ADVENTURE_ISLAND: LevelDef = {
         "Every house in the village is open. Walk in through the door and look around!",
         "The red car is for everyone. Drive around the island, then over the causeways to Coconut Cove and Pine Island!",
         "Want to earn coins? Villagers with a 💼 by their name have jobs for you!",
-        "Twenty-two friends live on these islands. Can you say hello to all of us?",
+        "Golden scrolls are hidden around the islands. Each one has a Bible verse on it!",
+        "Twenty-three friends live on these islands. Can you say hello to all of us?",
       ],
     },
     {
@@ -990,6 +1006,10 @@ const ADVENTURE_ISLAND: LevelDef = {
         "Ready for space? Hop in the rocket and blast off to the Moon!",
         "On the Moon you can jump super high. Everything is floaty up there!",
       ],
+    },
+    {
+      name: "Pastor Paul", x: 14.6, y: 0.3, z: -32.4, outfit: 4, hat: 0, skin: 3, job: "care",
+      lines: ["Welcome to our little church! Everyone is welcome here."],
     },
     // ── job givers ──
     {
@@ -1175,6 +1195,14 @@ const SUNSHINE_CITY: LevelDef = {
     { x: 19.5, z: 20.5, w: 7, d: 7, h: 9, color: 0xffd93d },
     { x: 28.5, z: 20.5, w: 7, d: 7, h: 12, color: 0x4ecbd9 },
     { x: 24, z: 29, w: 16, d: 6, h: 7, color: 0xff8c42 },
+    { x: 50, z: 0, w: 7, d: 8, h: 5, color: 0xfdf6ec, enter: true, church: true },   // Sunshine Chapel, by the east beach
+  ],
+  scrolls: [
+    [50, 1.3, -2.5, "Psalm 100:2"],          // inside the chapel
+    [28, 41.6, -27.5, "Psalm 46:10"],        // on top of Sunshine Tower
+    [0, 1.3, -30, "Psalm 23:1"],             // Maple Park
+    [0, 1.4, 74, "Psalm 136:1"],             // the pier
+    [-56, 1.1, -30, "Joshua 1:9"],           // the west beach
   ],
   springs: [
     { x: 24, z: -16.9, y: 0, power: 52 },     // → the top of Sunshine Tower (and the helicopter)
@@ -1266,6 +1294,10 @@ const SUNSHINE_CITY: LevelDef = {
         "Coins you earn are saved. Jobs are a great way to earn more!",
       ],
     },
+    {
+      name: "Pastor Grace", x: 52.6, y: 0, z: 6, outfit: 2, hat: 0, skin: 1, job: "care",
+      lines: ["Sunshine Chapel is open! Come in and sit a while."],
+    },
     // ── job givers ──
     {
       name: "Chef Pepper", x: 22.6, y: 0, z: 1.4, outfit: 0, hat: 1, skin: 3, job: "pizza",
@@ -1302,6 +1334,85 @@ const SUNSHINE_CITY: LevelDef = {
   ],
 };
 LEVELS.push(SUNSHINE_CITY);
+
+/**
+ * Noah's Ark (Genesis 6–9): a green island with the great ark in the middle. Climb the ramp to the
+ * deck, help Noah send the animals aboard two by two, and look for the rainbow.
+ */
+const ARK_ISLAND: LevelDef = {
+  name: "Noah's Ark",
+  sky: 0x9fd4ff, fog: 0xd4ecff,
+  grass: 0x7ed957, dirt: 0xc9a26b, foliage: 0x3fa34d,
+  flowerColors: [0xff6b9d, 0xffd93d, 0xffffff, 0xb197fc],
+  spawn: [0, 0.3, 6],
+  sea: -0.5,
+  rainbow: true,
+  ark: [0, -30],
+  discs: [
+    { x: 0, z: -20, r: 40, y: 0, color: SAND },
+    { x: 0, z: -20, r: 33, y: 0.3, flowers: 24, rocks: 5 },
+    { x: -22, z: -14, r: 6, y: 0.34, trees: 6, flowers: 3 },
+    { x: 22, z: -18, r: 6, y: 0.34, trees: 6, flowers: 3 },
+    { x: -14, z: -44, r: 5, y: 0.34, trees: 5 },
+    { x: 16, z: -45, r: 5, y: 0.34, trees: 5 },
+    { x: 14, z: 0, r: 5.5, y: 0.6, flowers: 3 }, { x: 14, z: 0, r: 4, y: 0.9 }, { x: 14, z: 0, r: 2.6, y: 1.2, flowers: 2 }, // a little hill
+  ],
+  bridges: [],
+  springs: [{ x: -8, z: -24.6, y: 0.3, power: 21 }], // → straight up onto the deck
+  balloons: [[14, 2.4, 0]],
+  birds: [{ cx: 0, cy: 11, cz: -30, r: 9, speed: 0.9 }], // the dove
+  stars: [
+    [0, 1.5, 0], [-10, 1.5, -6], [10, 1.5, -12], [-22, 1.6, -14], [22, 1.6, -18],
+    [14, 2.6, 0], [14, 9, 0],
+    [0, 3.2, -21.5],                                 // halfway up the ramp
+    [-8, 5.6, -30], [8, 5.6, -30], [0, 9.2, -30],    // the deck and the cabin roof
+    [-14, 1.6, -44], [16, 1.6, -45], [0, 1.5, -50], [-34, 1.2, -20], [34, 1.2, -20],
+  ],
+  coins: [...ring(14, 26, 0, -20, 1.3), ...line(6, 0, -16.5, 0, -25.5, 3.0), ...line(6, -9, -30, -4, -30, 5.4), ...line(6, 4, -30, 9, -30, 5.4)],
+  chests: [[9.5, 4.3, -32], [-30, 0, -40]],
+  hearts: [[-9.5, 5.4, -28]],
+  magnets: [],
+  buddies: [],
+  slimes: [],
+  checkpoints: [[2.5, 0.3, 3], [3, 4.3, -28]],
+  portal: [-14, 0.3, 2],
+  food: [["apple", 6, 1.3, -6], ["apple", -6, 1.3, -40], ["cupcake", 20, 1.3, -30]],
+  scrolls: [
+    [0, 5.5, -27.5, "Genesis 1:1"],          // on the deck
+    [14, 2.4, -1.5, "Psalm 136:1"],          // the little hill
+    [-28, 1.3, -28, "Proverbs 3:5"],
+    [26, 1.3, -40, "Isaiah 41:10"],
+  ],
+  npcs: [
+    {
+      name: "Noah", x: 3, y: 0.3, z: -11, outfit: 3, hat: 0, skin: 2, job: "ark",
+      spots: [[-20, 0.3, -6], [21, 0.3, -8], [-25, 0.3, -32], [25, 0.3, -30], [0, 0.3, -48], [-8, 0.3, 4]],
+      lines: ["God told me to build this ark. He always keeps his promises!"],
+    },
+    {
+      name: "Shem", x: -4, y: 0.3, z: -14.5, outfit: 1, hat: 0, skin: 2,
+      lines: [
+        "We built the ark out of gopher wood, just as God said. It took a very long time!",
+        "Walk up the ramp to the deck. You can see the whole island from up there.",
+      ],
+    },
+    {
+      name: "Ham", x: 5.5, y: 4.3, z: -28.2, outfit: 0, hat: 0, skin: 3,
+      lines: [
+        "Two of every animal are coming aboard. The elephants take up a lot of room!",
+        "It rained for forty days and forty nights, and God kept us all safe.",
+      ],
+    },
+    {
+      name: "Japheth", x: -22, y: 0.3, z: -24, outfit: 5, hat: 0, skin: 1,
+      lines: [
+        "Noah sent out a dove, and it came back with an olive leaf. The water was going down!",
+        "See the rainbow? It is God's promise that he will never flood the whole earth again.",
+      ],
+    },
+  ],
+};
+LEVELS.push(ARK_ISLAND);
 
 const RAINBOW_COLORS = [0xff5f6d, 0xffa94d, 0xffe066, 0x7ed957, 0x5cb8ff, 0xb197fc];
 
@@ -1460,6 +1571,22 @@ export class World {
       if (side > 0.9) box(shell, winMat, Math.min(0.8, side - 0.3), 0.7, 0.06, (DOORWAY / 2 + side / 2) * sx, floorY + 1.45, hd + 0.03, false);
     }
     box(shell, doorMat, DOORWAY + 0.28, 0.14, 0.12, 0, doorTop + 0.07, hd + 0.03, false);
+    if (b.church) {
+      // a steeple over the door, with a cross on top
+      const white = flat(0xfdf6ec), gold = new THREE.MeshStandardMaterial({ color: 0xffc93c, emissive: 0x6a4a00, metalness: 0.5, roughness: 0.35 });
+      const tz = hd - 1.1;
+      box(shell, white, 1.8, 2.6, 1.8, 0, b.h + 1.3, tz);
+      const spire = new THREE.Mesh(new THREE.ConeGeometry(1.45, 2.6, 4).rotateY(Math.PI / 4), flat(0x8a5a33));
+      spire.position.set(0, b.h + 3.9, tz);
+      spire.castShadow = true;
+      shell.add(spire);
+      box(shell, gold, 0.16, 1.3, 0.16, 0, b.h + 5.7, tz);
+      box(shell, gold, 0.8, 0.16, 0.16, 0, b.h + 5.9, tz);
+      // a round window over the door
+      const rose = new THREE.Mesh(new THREE.CircleGeometry(0.5, 20), new THREE.MeshBasicMaterial({ color: 0x9fd8ff }));
+      rose.position.set(0, doorTop + 0.9, hd + 0.02);
+      shell.add(rose);
+    }
 
     // ── inside ──
     const iw = b.w - 2 * WALL, id = b.d - 2 * WALL, ih = b.h - 0.2 - floorY;
@@ -1487,8 +1614,25 @@ export class World {
     const furniture = (minX: number, maxX: number, minZ: number, maxZ: number, top: number) => {
       this.solids.push({ minX: b.x + minX, maxX: b.x + maxX, minZ: b.z + minZ, maxZ: b.z + maxZ, topY: top });
     };
+    if (b.church) {
+      // a cross on the back wall, a lectern in front of it, and rows of pews with an aisle down the middle
+      const wood = flat(0x8a5a33), gold = new THREE.MeshStandardMaterial({ color: 0xffc93c, emissive: 0x6a4a00, metalness: 0.5, roughness: 0.35 });
+      box(room, gold, 0.16, 1.5, 0.08, 0, floorY + 2.2, -hd + WALL + 0.06, false);
+      box(room, gold, 0.9, 0.16, 0.08, 0, floorY + 2.5, -hd + WALL + 0.06, false);
+      box(room, wood, 0.7, 1.0, 0.45, 0, floorY + 0.5, -hd + WALL + 1.0);
+      furniture(-0.35, 0.35, -hd + WALL + 0.78, -hd + WALL + 1.22, floorY + 1.0);
+      const pewW = (iw - DOORWAY) / 2 - 0.15;
+      for (let z = -hd + WALL + 2.4; z < hd - WALL - 1.0; z += 1.25) {
+        for (const sx of [-1, 1]) {
+          const px = (DOORWAY / 2 + pewW / 2 + 0.05) * sx;
+          box(room, wood, pewW, 0.12, 0.45, px, floorY + 0.42, z);
+          box(room, wood, pewW, 0.55, 0.1, px, floorY + 0.7, z + 0.22);
+          furniture(px - pewW / 2, px + pewW / 2, z - 0.25, z + 0.3, floorY + 0.98);
+        }
+      }
+    }
     // bed in the back-left corner
-    if (iw >= 3.2 && id >= 3.2) {
+    if (!b.church && iw >= 3.2 && id >= 3.2) {
       const bx = -hw + WALL + 0.55, bz = -hd + WALL + 0.95;
       box(room, flat(0xc98a5b), 1.0, 0.3, 1.8, bx, floorY + 0.2, bz);
       box(room, flat(RUG_COLORS[(index + 2) % RUG_COLORS.length]), 1.0, 0.14, 1.25, bx, floorY + 0.42, bz + 0.27);
@@ -1496,7 +1640,7 @@ export class World {
       furniture(bx - 0.5, bx + 0.5, bz - 0.9, bz + 0.9, floorY + 0.6);
     }
     // bookshelf on the back wall, to the right
-    {
+    if (!b.church) {
       const sx = hw - WALL - 0.75, sz = -hd + WALL + 0.2;
       box(room, flat(0x8a5a33), 1.3, 1.5, 0.36, sx, floorY + 0.75, sz);
       for (let r = 0; r < 3; r++) {
@@ -1507,7 +1651,7 @@ export class World {
       furniture(sx - 0.65, sx + 0.65, sz - 0.2, sz + 0.2, floorY + 1.5);
     }
     // big houses get a living room: sofa and TV on the right, dining table on the left
-    if (iw >= 6) {
+    if (iw >= 6 && !b.church) {
       const sofaX = hw - WALL - 0.6;
       box(room, flat(0x5cb8ff), 0.9, 0.45, 2.4, sofaX, floorY + 0.25, 0.4);
       box(room, flat(0x4a9be0), 0.3, 0.9, 2.4, sofaX + 0.3, floorY + 0.5, 0.4);
@@ -1744,6 +1888,7 @@ export class World {
 
     this.ferris = null;
     if (def.ferris) this.buildFerris(...def.ferris);
+    if (def.ark) this.buildArk(def.ark[0], def.ark[1]);
 
     // ── Trampolines ──
     for (const s of def.springs) {
@@ -2301,6 +2446,78 @@ export class World {
     poles.computeBoundingSphere();
     globes.computeBoundingSphere();
     this.group.add(poles, globes);
+  }
+
+  /**
+   * Noah's ark: a long wooden hull lying along x with a walkable deck, a cabin with a roof you can
+   * stand on, and a ramp of planks up its +z side.
+   */
+  private buildArk(x: number, z: number): void {
+    const g = new THREE.Group();
+    const L = 22, W = 7, DECK = 4.3, base = 0.3;
+    const hull = new THREE.MeshStandardMaterial({ color: 0x9a6a3a, flatShading: true, roughness: 0.95 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x6e4a26, flatShading: true, roughness: 0.95 });
+    const light = new THREE.MeshStandardMaterial({ color: 0xc9a26b, flatShading: true, roughness: 0.9 });
+    const add = (m: THREE.Material, w: number, h: number, d: number, px: number, py: number, pz: number) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+      mesh.position.set(px, py, pz);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      g.add(mesh);
+      return mesh;
+    };
+    add(hull, L, DECK - base, W, 0, (DECK + base) / 2, 0);
+    // plank lines along the sides, and a darker keel
+    for (let k = 1; k < 4; k++) for (const sz of [-1, 1]) add(dark, L + 0.04, 0.08, 0.06, 0, base + k * 1.0, sz * (W / 2 + 0.02));
+    add(dark, L + 1.2, 0.5, W - 1.5, 0, base + 0.25, 0);
+    // pointed bow and stern
+    for (const sx of [-1, 1]) {
+      const end = new THREE.Mesh(new THREE.CylinderGeometry(W / 2, W / 2, DECK - base, 3), hull);
+      end.rotation.y = sx > 0 ? -Math.PI / 2 : Math.PI / 2;
+      end.scale.z = 1;
+      end.position.set(sx * (L / 2 + W / 4 - 0.05), (DECK + base) / 2, 0);
+      end.castShadow = true;
+      g.add(end);
+    }
+    // deck rail
+    for (const sz of [-1, 1]) add(dark, L, 0.12, 0.12, 0, DECK + 0.75, sz * (W / 2 - 0.1)).castShadow = false;
+    for (let px = -L / 2 + 1; px <= L / 2 - 1; px += 2) {
+      for (const sz of [-1, 1]) {
+        if (sz > 0 && Math.abs(px) < 1.6) continue; // the gap where the ramp arrives
+        add(dark, 0.12, 0.75, 0.12, px, DECK + 0.38, sz * (W / 2 - 0.1));
+      }
+    }
+    // the cabin, with a pitched roof (its flat ridge is a place to stand)
+    const CW = 8, CD = 3.4, CH = 3.2, cz = -0.9;
+    add(light, CW, CH, CD, 0, DECK + CH / 2, cz);
+    add(dark, CW + 0.6, 0.3, CD + 0.6, 0, DECK + CH + 0.15, cz);
+    for (const wx of [-2.4, 0, 2.4]) add(dark, 0.9, 0.9, 0.08, wx, DECK + 1.9, cz + CD / 2 + 0.03).castShadow = false;
+    g.position.set(x, 0, z);
+    this.group.add(g);
+
+    const flatPlat = (px: number, pz: number, hw: number, hd: number, topY: number, mesh: THREE.Object3D) => this.platforms.push({
+      kind: "box", x: px, z: pz, r: 0, hw, hd, topY, spring: 0, baseX: px, baseZ: pz, dx: 0, dz: 0, mesh, squashT: 0,
+    });
+    flatPlat(x, z, L / 2 + 0.6, W / 2, DECK, g);                         // the deck
+    flatPlat(x, z + cz, CW / 2 + 0.3, CD / 2 + 0.3, DECK + CH + 0.3, new THREE.Object3D()); // the cabin roof
+    this.solids.push({ minX: x - L / 2 - 0.6, maxX: x + L / 2 + 0.6, minZ: z - W / 2, maxZ: z + W / 2, topY: DECK - 0.4 });
+    this.solids.push({ minX: x - CW / 2, maxX: x + CW / 2, minZ: z + cz - CD / 2, maxZ: z + cz + CD / 2, topY: DECK + CH });
+
+    // the ramp: planks stepping down from the deck to the meadow
+    const steps = 12, rise = (DECK - 0.34) / steps;
+    for (let i = 0; i < steps; i++) {
+      const top = DECK - (i + 1) * rise;
+      const pz = z + W / 2 + 0.45 + i * 0.9;
+      const plank = new THREE.Mesh(new THREE.BoxGeometry(3, 0.16, 0.92), i % 2 ? light : hull);
+      plank.position.set(x, top - 0.08, pz);
+      plank.castShadow = true;
+      plank.receiveShadow = true;
+      this.group.add(plank);
+      const post = new THREE.Mesh(new THREE.BoxGeometry(2.6, Math.max(0.1, top - 0.3), 0.3), dark);
+      post.position.set(x, 0.3 + (top - 0.3) / 2 - 0.08, pz);
+      this.group.add(post);
+      flatPlat(x, pz, 1.5, 0.46, top, plank);
+    }
   }
 
   /** A Ferris wheel that turns slowly; its cabins hang level. Decorative (walk right through it). */

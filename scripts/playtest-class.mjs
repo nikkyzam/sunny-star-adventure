@@ -223,6 +223,8 @@ try {
       await kp.screenshot({ path: join(ROOT, "verification-shots/63-class-kid.png") });
       await tp.click("[data-action=book-close]");
 
+      // (three games at once is too much for software rendering: the first kid goes home)
+      await kid.ctx.close();
       // a second kid opened the teacher's class link first: they get the typed-in verse too
       const kid2 = await device({ outfit: 4, name: [5, 2], easy: true }, link.slice(link.indexOf("?")));
       const k2 = kid2.page;
@@ -232,7 +234,7 @@ try {
       await k2.click("[data-action=join]");
       await k2.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 }).catch(() => {});
       const d2 = await dbg(k2);
-      check("K6 a kid with the class link gets the typed-in verse in class", d2.lesson.room && d2.lesson.refs.join("|") === "John 11:35|Psalm 56:3|My verse", d2.lesson.refs.join(", "));
+      check("K6 a kid with the class link gets the typed-in verse in class", d2.lesson.room && d2.lesson.refs.join("|") === "John 11:35|Psalm 56:3|My verse", `${d2.lesson.refs.join(", ")} · state ${d2.state} · ${await text(k2, "#online-status")} · teacher sees ${(await dbg(tp)).remotes}`);
       await k2.click("#btn-book");
       await k2.click(".book-verse >> nth=2");
       await typeVerse(k2);

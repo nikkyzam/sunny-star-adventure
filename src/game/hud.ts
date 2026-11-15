@@ -6,7 +6,7 @@
 export type HudAction =
   | "play" | "play2" | "continue" | "resume" | "retry" | "next" | "title" | "again" | "jump" | "mute"
   | "online" | "host" | "join" | "back" | "reroll" | "easy" | "drive" | "car" | "honk"
-  | "dress" | "island" | "city" | "talk" | "verse-ready" | "verse-check" | "verse-peek"
+  | "dress" | "island" | "city" | "ark" | "talk" | "verse-ready" | "verse-check" | "verse-peek"
   | "teach" | "gate-ok" | "class-start" | "family" | "own-add" | "book" | "book-close" | "class-link";
 
 type OverlayName = "title" | "pause" | "gameover" | "clear" | "win" | "online" | "dress" | "verse" | "gate" | "teach" | "book";
@@ -252,12 +252,12 @@ export class Hud {
   }
 
   /** A villager's speech box (hides itself after a few seconds). */
-  showDialog(name: string, text: string): void {
+  showDialog(name: string, text: string, ms = 5200): void {
     el("dialog-name").textContent = name;
     el("dialog-text").textContent = text;
     this.dialog.classList.add("show");
     if (this.dialogTimer !== null) clearTimeout(this.dialogTimer);
-    this.dialogTimer = window.setTimeout(() => this.dialog.classList.remove("show"), 5200);
+    this.dialogTimer = window.setTimeout(() => this.dialog.classList.remove("show"), ms);
   }
 
   /** Sticker buttons (built once from the preset list). */

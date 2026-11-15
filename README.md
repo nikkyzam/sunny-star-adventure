@@ -85,6 +85,16 @@ and answer the grown-up sum.
 - Through the game, only library verses travel to other devices, as numbers. Nothing typed is ever
   sent between players; typed-in verses travel only inside the link you share.
 
+## Faith in the game ✝️
+
+- **Noah's Ark** 🌈 (title screen): an island with the great ark. Walk up the ramp to the deck, talk
+  to Noah, Shem, Ham and Japheth, and do Noah's job: find six pairs of animals and send them aboard.
+- **Churches**: a village church on Adventure Island and Sunshine Chapel in the city, with pews, a
+  lectern and a cross. Pastor Paul and Pastor Grace hand out the **Helping hands** job: carry food
+  baskets to three neighbors.
+- **Scripture scrolls** 📜: golden scrolls are hidden in Adventure Island (6), Sunshine City (5) and
+  Noah's Ark (4). Walk into one to read its verse; each pays 5 coins the first time.
+
 ## Jobs 💼
 
 Villagers with a 💼 on their name tag have a job for you. Talk to one to start; beams of light and
@@ -101,6 +111,8 @@ an arrow over your head show where to go. Talk to your boss twice to stop.
 | Bus driver | Driver Dee, Driver Dash | Drive the car to four bus stops in order | 15 |
 | Sky cargo | Cargo Cass, Pilot Penny | Fly the helicopter through two drop rings | 20 |
 | Crystal hunter | Blorp (on the Moon) | Find five moon crystals | 15 |
+| Helping hands | Pastor Paul, Pastor Grace | Carry food baskets to three neighbors | 15 |
+| Fill the ark | Noah | Find six pairs of animals, report back | 20 |
 
 ## Sunshine City 🏙️
 

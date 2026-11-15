@@ -13,9 +13,9 @@ import type { RideKind } from "./car";
 import type { Particles } from "./particles";
 import { makeTextSprite, disposeSprite } from "./social";
 
-export type JobId = "pizza" | "mail" | "fire" | "farm" | "clean" | "fish" | "bus" | "cargo" | "moon";
+export type JobId = "pizza" | "mail" | "fire" | "farm" | "clean" | "fish" | "bus" | "cargo" | "moon" | "care" | "ark";
 
-type Item = "carrot" | "bottle" | "fish" | "crystal" | "fire" | "busstop" | "drop";
+type Item = "carrot" | "bottle" | "fish" | "crystal" | "fire" | "busstop" | "drop" | "animals";
 
 export interface Stop {
   x: number; y: number; z: number;
@@ -28,6 +28,8 @@ export interface Stop {
   /** The villager this stop is for. */
   npc?: string;
   item?: Item;
+  /** Which kind of the item (which animals). */
+  kind?: number;
 }
 
 export interface Villager { name: string; x: number; y: number; z: number }
@@ -139,6 +141,21 @@ export const JOBS: Record<JobId, JobDef> = {
     thanks: "Parcels delivered by air!",
     make: (c) => fromSpots(c, 2, "drop", 6, 4.5, { ride: "heli", lift: 2.5 }),
   },
+  care: {
+    emoji: "🧺", title: "Helping hands", pay: 15, color: 0xff9ecf, ordered: false,
+    intro: (s) => `"Love thy neighbour as thyself." Would you carry these food baskets to ${names(s)}? Follow the pink beams.`,
+    label: (left) => `🧺 Baskets for ${names(left)}`,
+    got: "A food basket, for me? God bless you! 🧺",
+    thanks: "You were a good neighbour today!",
+    make: (c) => shuffle(c.villagers.filter((v) => Math.hypot(v.x - c.boss.x, v.z - c.boss.z) < NEAR_BOSS * 1.4)).slice(0, 3).map((v) => toVillager(v)),
+  },
+  ark: {
+    emoji: "🕊️", title: "Fill the ark", pay: 20, color: 0x7ed957, ordered: false, report: true,
+    intro: (s) => `The rain is coming! Find the ${s.length} pairs of animals and send them to the ark, two by two. Then come back to me.`,
+    label: (left, total) => `🕊️ Animal pairs ${total - left.length}/${total}`,
+    thanks: "Every animal is safe on the ark! God keeps his promises. Look for the rainbow!",
+    make: (c) => fromSpots(c, c.spots.length, "animals", 2.2, 3).map((s, i) => ({ ...s, kind: i })),
+  },
   moon: {
     emoji: "💎", title: "Crystal hunter", pay: 15, color: 0xb197fc, ordered: false, report: true,
     intro: (s) => `Blorp needs shiny moon crystals! Find ${s.length}, then bring them back to Blorp.`,
@@ -147,6 +164,16 @@ export const JOBS: Record<JobId, JobDef> = {
     make: (c) => fromSpots(c, 5, "crystal", 1.5, 2.5),
   },
 };
+
+/** The ark's passengers: simple blocky animals, a pair of each. */
+const ANIMALS = [
+  { color: 0xe0a84a, dark: 0x9a6a2a, size: 1.0, leg: 0.35, neck: 0.1, mane: true, trunk: false },   // lions
+  { color: 0x9aa3b0, dark: 0x7c8592, size: 1.7, leg: 0.6, neck: 0.1, mane: false, trunk: true },    // elephants
+  { color: 0xf2c94c, dark: 0xa8742a, size: 1.0, leg: 0.9, neck: 1.2, mane: false, trunk: false },   // giraffes
+  { color: 0xfdfdfd, dark: 0x33323e, size: 0.8, leg: 0.3, neck: 0.1, mane: false, trunk: false },   // sheep
+  { color: 0xf4f4f4, dark: 0x2b2b33, size: 1.0, leg: 0.5, neck: 0.3, mane: true, trunk: false },    // zebras
+  { color: 0x8a5a33, dark: 0x5e3b1f, size: 1.2, leg: 0.4, neck: 0.1, mane: false, trunk: false },   // bears
+];
 
 interface Live {
   stop: Stop;
@@ -316,7 +343,7 @@ export class Jobs {
     beam.scale.set(1, tall ? 40 : 7, 1);
     beam.renderOrder = 2;
     this.group.add(beam);
-    const obj = s.item ? this.makeItem(s.item) : null;
+    const obj = s.item ? this.makeItem(s.item, s.kind ?? 0) : null;
     if (obj) {
       obj.position.set(s.x, s.y, s.z);
       this.group.add(obj);
@@ -344,7 +371,7 @@ export class Jobs {
     return m;
   }
 
-  private makeItem(item: Item): THREE.Object3D {
+  private makeItem(item: Item, kind = 0): THREE.Object3D {
     const g = new THREE.Group();
     const std = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) => () => new THREE.MeshStandardMaterial({ color, roughness: 0.6, ...extra });
     const basic = (color: number, opacity = 1) => () => new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, depthWrite: opacity >= 1, side: THREE.DoubleSide });
@@ -423,6 +450,37 @@ export class Jobs {
         g.add(pad);
         break;
       }
+      case "animals": {
+        // two of a kind, side by side
+        const a = ANIMALS[kind % ANIMALS.length];
+        for (const sx of [-0.55, 0.55]) {
+          const one = new THREE.Group();
+          const fur = std(a.color), dark = std(a.dark);
+          const body = this.part(`an-body-${kind}`, () => new THREE.BoxGeometry(0.5 * a.size, 0.5 * a.size, 1.0 * a.size), fur);
+          body.position.y = a.leg + 0.25 * a.size;
+          one.add(body);
+          for (const [lx, lz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+            const leg = this.part(`an-leg-${kind}`, () => new THREE.BoxGeometry(0.13 * a.size, a.leg, 0.13 * a.size), dark);
+            leg.position.set(lx * 0.17 * a.size, a.leg / 2, lz * 0.38 * a.size);
+            one.add(leg);
+          }
+          const neck = this.part(`an-neck-${kind}`, () => new THREE.BoxGeometry(0.2 * a.size, a.neck, 0.2 * a.size), fur);
+          neck.position.set(0, a.leg + 0.4 * a.size + a.neck / 2, 0.42 * a.size);
+          one.add(neck);
+          const head = this.part(`an-head-${kind}`, () => new THREE.BoxGeometry(0.34 * a.size, 0.3 * a.size, 0.44 * a.size), a.mane ? dark : fur);
+          head.position.set(0, a.leg + 0.45 * a.size + a.neck, 0.55 * a.size);
+          one.add(head);
+          if (a.trunk) {
+            const trunk = this.part("an-trunk", () => new THREE.BoxGeometry(0.12, 0.7, 0.12), fur);
+            trunk.position.set(0, a.leg + 0.2, 0.55 * a.size + 0.28);
+            one.add(trunk);
+          }
+          one.position.x = sx * a.size;
+          one.name = "hop";
+          g.add(one);
+        }
+        break;
+      }
       case "drop": {
         const ring = this.part("dropRing", () => new THREE.TorusGeometry(3.4, 0.22, 8, 36).rotateX(Math.PI / 2), basic(0xb197fc));
         ring.castShadow = false;
@@ -460,6 +518,7 @@ export class Jobs {
       const lt = t + l.phase;
       for (const o of l.obj.children) {
         if (o.name === "spin") o.rotation.y += dt * 1.6;
+        else if (o.name === "hop") o.position.y = Math.abs(Math.sin(lt * 3 + o.position.x)) * 0.12;
         else if (o.name === "pulse") o.scale.setScalar(1 + Math.sin(lt * 3) * 0.06);
         else if (o.name === "flame") {
           // fires shrink as they're sprayed

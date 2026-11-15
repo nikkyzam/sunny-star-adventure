@@ -51,6 +51,7 @@ import { Pet } from "./pets";
 import { Npcs } from "./npcs";
 import { Jobs, JOBS, type Villager } from "./jobs";
 import { Traffic } from "./traffic";
+import { Scrolls } from "./scrolls";
 import { ads } from "./ads";
 import { STICKERS, Bubble, makeTextSprite, disposeSprite } from "./social";
 import { Net, MAX_KIDS, type NetMsg } from "./net";
@@ -92,6 +93,8 @@ declare global {
       traffic: { x: number; z: number; v: number }[];
       lesson: { refs: string[]; done: string[]; room: boolean; host: boolean; on: boolean; link: boolean };
       board: BoardRow[];
+      scrolls: { x: number; y: number; z: number; ref: string }[];
+      scrollsFound: number;
       setBank: (n: number) => void;
       shipsSunk: number;
       shipsAfloat: number;
@@ -125,7 +128,7 @@ const P2_JUMP = "Enter";
 const SONG_FOR: Record<string, SongId> = {
   "Sunny Meadow": "meadow", "Candy Canyon": "candy", "Rainbow Peak": "jungle", "Castle in the Clouds": "meadow",
   "Toy City": "city", "Frosty Mountain": "snow", "Bubbly Beach": "beach", "Jungle Vines": "jungle",
-  "Starlight Peak": "night", "Adventure Island": "island", "Moon Base": "space", "Sunshine City": "city",
+  "Starlight Peak": "night", "Adventure Island": "island", "Moon Base": "space", "Sunshine City": "city", "Noah's Ark": "meadow",
 };
 const NET_SEND_EVERY = 4; // fixed steps between state packets (60 Hz / 4 = 15 Hz)
 const REMOTE_TIMEOUT = 6; // seconds without a packet before a friend's kid is removed
@@ -213,6 +216,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const props = new Props();
   const npcs = new Npcs();
   const traffic = new Traffic();
+  const scrolls = new Scrolls();
+  const scrollsFound = new Set<string>(storage.get<string[]>("scrolls", []));
   const pet = new Pet();
   const particles = new Particles();
   const jobs = new Jobs(particles);
@@ -227,7 +232,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const blobGeo = new THREE.CircleGeometry(0.5, 20);
   const blobMat = new THREE.MeshBasicMaterial({ color: 0x1a2a1a, transparent: true, opacity: 0.28, depthWrite: false });
 
-  scene.add(jobs.group, traffic.group);
+  scene.add(jobs.group, traffic.group, scrolls.group);
   scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, boat.group, heli.group, jet.group, rocket, rings.group, foods.group, fleet.group, props.group, npcs.group, pet.group, particles.points);
 
   // ── Run state ────────────────────────────────────────────────────────────
@@ -483,6 +488,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
     hemi.color.setHex(light?.sky ?? 0xffffff);
     hemi.groundColor.setHex(light?.ground ?? 0x88aa66);
     traffic.build(world.def.traffic ?? []);
+    scrolls.build((world.def.scrolls ?? []).flatMap(([x, y, z, ref]) => {
+      const k = LIBRARY.findIndex((v) => v.ref === ref);
+      return k >= 0 ? [[x, y, z, k] as [number, number, number, number]] : [];
+    }));
     {
       const d = world.def;
       const watery = d.sea !== undefined || d.ocean === true;
@@ -984,6 +993,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
         startRun(LEVELS.findIndex((l) => l.name === "Sunshine City"), false);
         hud.showToast("🏙️ Welcome to Sunshine City! Bounce up the skyscrapers and glide down");
         break;
+      case "ark":
+        if (!sm.is("title")) break;
+        startRun(LEVELS.findIndex((l) => l.ark), false);
+        hud.showToast("🌈 Find Noah by the ark. The animals need your help!");
+        break;
       case "drive":
         if (!sm.is("title")) break;
         startRun(LEVELS.findIndex((l) => l.carSpawn), false);
@@ -1201,7 +1215,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       return `${jobs.busyText()} (Talk to me again to stop working.)`;
     }
     if (jobs.id) return `You're busy being a ${JOBS[jobs.id].title.toLowerCase()}! Finish that job first, then come back to me for some ${def.title.toLowerCase()} work.`;
-    const houses = (world.def.buildings ?? []).map((b) => ({ x: b.x, z: b.z, w: b.w, d: b.d, top: (world.groundAt(b.x, b.z, 2)?.y ?? 0) + b.h }));
+    const houses = (world.def.buildings ?? []).filter((b) => !b.church).map((b) => ({ x: b.x, z: b.z, w: b.w, d: b.d, top: (world.groundAt(b.x, b.z, 2)?.y ?? 0) + b.h }));
     const text = jobs.start(id, {
       boss: villagerOf(npc),
       villagers: npcs.items.filter((n) => n !== npc).map(villagerOf),
@@ -2021,6 +2035,27 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
     updateJobs(dt);
 
+    // scripture scrolls: walk into one to read its verse
+    scrolls.update(dt, elapsed);
+    for (const p of players) {
+      const sc = scrolls.readNear(p.riding ? (rideOf(p) ?? car).pos : p.pos);
+      if (!sc) continue;
+      const verse = LIBRARY[sc.verse];
+      const key = `${world.def.name}:${verse.ref}`;
+      hud.showDialog(`📜 ${verse.ref}`, verse.text, 9000);
+      audio.sfx("checkpoint");
+      particles.burst(sc.pos.x, sc.pos.y, sc.pos.z, 0xffe9a8, 18, 3, 1, 2);
+      if (!scrollsFound.has(key)) {
+        scrollsFound.add(key);
+        storage.set("scrolls", [...scrollsFound]);
+        earn(5);
+        score += 50;
+        hud.setCoins(bank);
+        hud.setScore(score);
+        hud.showToast(`📜 You found a scroll! +5 coins · ${scrollsFound.size} found`);
+      }
+    }
+
     // snacks: eat one for a few seconds of something silly
     foods.update(elapsed, dt);
     for (const p of players) {
@@ -2294,6 +2329,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
     verse: gateVerse(),
     lesson: { refs: lessonVerses().map((v) => v.ref), done: [...doneNow], room: roomPicks !== null, host: classHost, on: plan.on, link: linkPlan !== null },
     board: boardRows(),
+    scrolls: scrolls.items.map((sc) => ({ x: sc.pos.x, y: sc.pos.y, z: sc.pos.z, ref: LIBRARY[sc.verse].ref })),
+    scrollsFound: scrollsFound.size,
     song: audio.playingSong,
     bank,
     owned: [...owned],
@@ -2366,6 +2403,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       fleet.dispose();
       jobs.dispose();
       traffic.dispose();
+      scrolls.dispose();
       blobGeo.dispose();
       blobMat.dispose();
       scene.traverse((o) => {

@@ -397,6 +397,7 @@ body.touch.playing .stick-base { display: flex; }
 }
 .btn-pair { display: flex; gap: 8px; width: min(100%, 440px); }
 .btn-pair .big-btn { flex: 1; min-width: 0; padding-left: 8px; padding-right: 8px; font-size: 17px; }
+.big-btn.ark { background: linear-gradient(180deg, #d8f3ff, #9fd4ff); border-color: #fff; color: #0b4a7a; }
 .big-btn.city {
   background: linear-gradient(180deg, #ffd9a8, #ff9a5c);
   border-color: #fff;
