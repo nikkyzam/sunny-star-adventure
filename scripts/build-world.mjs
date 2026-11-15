@@ -55,6 +55,16 @@ async function pack(dir, names, outName, texSize) {
     wrap(merged, name);
     merged.dispose();
   }
+  // grey brick: the game tints it per building (pink, blue, yellow…) and red brick tinted looks muddy
+  const greyed = new Set();
+  for (const m of root.listMaterials()) {
+    const t = m.getBaseColorTexture();
+    if (!t || greyed.has(t) || !/Brick/i.test(m.getName())) continue;
+    greyed.add(t);
+    t.setImage(new Uint8Array(await sharp(Buffer.from(t.getImage())).modulate({ saturation: 0, brightness: 1.45 }).png().toBuffer()));
+    t.setMimeType("image/png");
+  }
+
   // drop occlusion/roughness/metal maps: a constant roughness reads the same at game size
   for (const m of root.listMaterials()) {
     m.setMetallicRoughnessTexture(null);

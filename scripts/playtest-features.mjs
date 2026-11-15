@@ -42,7 +42,7 @@ const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM_PATH,
   args: ["--no-sandbox", "--disable-gpu-sandbox", "--use-gl=swiftshader"],
 });
-const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const page = await browser.newPage({ viewport: { width: 800, height: 450 } /* small: these tests time key presses, and software-rendered foliage is slow */ });
 const errors = [];
 page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
 page.on("pageerror", (e) => errors.push(String(e)));
@@ -121,8 +121,9 @@ async function openLevel(n) {
 await openLevel(0);
 
 // G1: walk forward along the main path; two coins sit at z=-2 and z=-7
+// (walk until past them rather than for a fixed time: slow software rendering slows the game clock)
 await page.keyboard.down("KeyW");
-await page.waitForTimeout(1600);
+await page.waitForFunction(() => window.__gameDebug().pz < -8, null, { timeout: 15000 }).catch(() => {});
 await page.keyboard.up("KeyW");
 {
   const d = await dbg();
@@ -157,7 +158,9 @@ await openLevel(4);
   const d0 = await dbg();
   check("G4a car is parked in Toy City", d0.car !== null, JSON.stringify(d0.car));
 }
-await steerTo(4, 0, 14, 15_000, 1.6);
+// stand right beside the car (parked at about (3, 14)) before pressing E
+await steerTo(1.6, 0, 14.4, 15_000, 0.5);
+await page.waitForTimeout(300);
 await page.keyboard.press("KeyE");
 await page.waitForTimeout(400);
 {

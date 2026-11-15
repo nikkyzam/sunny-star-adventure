@@ -38,7 +38,7 @@ const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM_PATH,
   args: ["--no-sandbox", "--disable-gpu-sandbox", "--use-gl=swiftshader"],
 });
-const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const page = await browser.newPage({ viewport: { width: 800, height: 450 } /* small: these tests time key presses, and software-rendered foliage is slow */ });
 // easy mode (the default) refills hearts instead of game over — this run checks the hard path
 await page.addInitScript(() => localStorage.setItem("game.profile", JSON.stringify({ outfit: 0, name: [0, 0], easy: false })));
 const errors = [];

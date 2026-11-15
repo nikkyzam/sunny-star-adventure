@@ -123,6 +123,18 @@ body so they move with it.
   Library* (free versions, CC0). `scripts/build-characters.mjs` turns the downloaded packs into
   the small files in `public/models/`.
 
+## A real-looking world 🌳🏙️
+
+Trees, bushes, ferns, flowers, grass, mushrooms and rocks come from Quaternius' *Stylized Nature
+MegaKit*, and Toy City's buildings are dressed in wall panels, shop fronts, doors, cornices and
+roofs from the *Downtown City MegaKit* (free versions, CC0). The brick takes each building's
+color. Gameplay shapes didn't change: rooftops, collisions and jumps are exactly where they were.
+
+- `scripts/build-world.mjs` packs the chosen models into `public/models/nature.glb` and
+  `city.glb` (shared, shrunk textures; compressed geometry).
+- Scenery is drawn in instanced batches per 40 m square, so off-screen batches are skipped.
+- If the files can't load, the game draws its own code-built scenery.
+
 ## Make it yours
 
 - **Dress up** 🎨 on the title screen: outfit colors, skin tone, hats, and a pet.
@@ -213,10 +225,15 @@ Every push to `main` deploys to **GitHub Pages** through `.github/workflows/depl
 - **Interacting systems**: stars gate the portal; buddies grant verbs (vacuum / glide / heart);
   slimes, birds and hedgehogs each demand a different answer; springs chain into double jumps.
 - **Fixed-timestep loop** (60 Hz) decoupled from frame rate (`src/game/engine.ts`).
-- **Web Audio synth**: all sound is synthesized at runtime (`src/game/audio.ts`), no audio files.
-  Four 16-bar tunes built from chord progressions (meadow, island, city, snow), each with lead,
-  bass, chord pad and a light beat; sea-wave ambience on Adventure Island; effects for jumps,
-  coins, pets, splashes, villagers talking and more. Autoplay-compliant, persistent mute.
+- **Music**: real recorded loops, one per world (cozy jazz on the title screen and the big island,
+  cute / silly / festive versions of one tune for the meadow, candy and snow worlds, funk for Toy
+  City, lo-fi at night, dreamy ambient on the Moon). They come from *Abstraction - Music Loop
+  Bundle* (Tallbeard Studios, CC0); `scripts/build-music.mjs` copies the chosen songs into
+  `public/music/` as OGG (seamless loops) plus M4A for older iPads. Each world downloads only its
+  own song, and songs cross-fade when you change worlds. Until a song arrives (or if it can't),
+  the old synthesized tunes play.
+- **Sound effects** are synthesized at runtime with Web Audio (`src/game/audio.ts`); mute is
+  remembered.
 - **Pooled particles** on a single additive `THREE.Points` — zero allocation in the hot loop.
 - Perf: ~150–200 draw calls / ~10–19k triangles in the busiest scenes; 60 fps measured on
   Apple M2.

@@ -170,7 +170,8 @@ try {
   const stars0 = (await dbg()).stars.length;
   await walkTo(9, 6, 1);
   await walkTo(17, -4, 1);
-  await walkTo(17, -8.4, 0.5);
+  // line up with the doorway (1.8 m wide) before walking in
+  await walkTo(17, -8.4, 0.2);
   check("A10a outside the house counts as outside", (await dbg()).inside === false);
   await walkTo(17, -11.6, 0.6);
   await page.waitForTimeout(500);

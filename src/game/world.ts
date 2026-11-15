@@ -27,6 +27,15 @@ import type { PropDefs } from "./props";
 import type { FoodDef } from "./food";
 import type { ShipDef } from "./ships";
 import { makeTextSprite, disposeSprite } from "./social";
+import { envReady, hasModel, Placer } from "./env";
+
+/** Something decorative to draw: by the code-built shapes, or by the models in env.ts once loaded. */
+type Decor =
+  | { t: "tree"; kind: number; x: number; y: number; z: number; rot: number; scale: number; v: number }
+  | { t: "flower"; color: number; x: number; y: number; z: number; rot: number; v: number }
+  | { t: "rock"; x: number; y: number; z: number; size: number; rx: number; ry: number; rz: number; v: number }
+  | { t: "grass"; x: number; y: number; z: number; rot: number; v: number; sand: boolean }
+  | { t: "building"; b: BuildingDef };
 
 export interface Platform {
   kind: "disc" | "box";
@@ -1065,6 +1074,8 @@ export class World {
   def: LevelDef = LEVELS[0];
   solids: Solid[] = [];
   private houses: House[] = [];
+  private decor: Decor[] = [];
+  private decorGroup = new THREE.Group();
   /** Ids of things the kid has bought (set by boot.ts before a level is built). */
   owned = new Set<string>();
   private locks = new Map<string, { gate: THREE.Group; sign: THREE.Sprite; solid: Solid }>();
@@ -1326,6 +1337,7 @@ export class World {
     this.checkpoints = [];
     this.solids = [];
     this.houses = [];
+    this.decor = [];
     for (const l of this.locks.values()) disposeSprite(l.sign);
     this.locks.clear();
     this.starSpots = def.stars.map((s) => [...s] as [number, number, number]);
@@ -1377,28 +1389,29 @@ export class World {
         // sandy islands grow palms; elsewhere a mix of pines and leafy trees (snow and space keep pines)
         const scale = 0.8 + rng() * 0.5;
         const kind = d.color === SAND ? 2 : def.snow || def.space || rng() < 0.55 ? 0 : 1;
-        const tree = makeTree(trunkMat, foliageMat, kind === 2 ? scale * 1.5 : scale, kind);
-        tree.position.set(d.x + Math.cos(a) * rr, d.y, d.z + Math.sin(a) * rr);
-        tree.rotation.y = rng() * Math.PI * 2;
-        this.group.add(tree);
+        this.decor.push({ t: "tree", kind, x: d.x + Math.cos(a) * rr, y: d.y, z: d.z + Math.sin(a) * rr, rot: rng() * Math.PI * 2, scale, v: rng() });
       }
       const flowerCount = d.flowers ?? 0;
       for (let i = 0; i < flowerCount; i++) {
         const a = rng() * Math.PI * 2;
         const rr = d.r * (0.3 + rng() * 0.55);
-        const flower = makeFlower(pick(rng, def.flowerColors));
-        flower.position.set(d.x + Math.cos(a) * rr, d.y, d.z + Math.sin(a) * rr);
-        this.group.add(flower);
+        this.decor.push({ t: "flower", color: pick(rng, def.flowerColors), x: d.x + Math.cos(a) * rr, y: d.y, z: d.z + Math.sin(a) * rr, rot: rng() * Math.PI * 2, v: rng() });
       }
       const rockCount = d.rocks ?? 0;
       for (let i = 0; i < rockCount; i++) {
         const a = rng() * Math.PI * 2;
         const rr = d.r * (0.5 + rng() * 0.3);
-        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.3 + rng() * 0.25, 0), rockMat);
-        rock.position.set(d.x + Math.cos(a) * rr, d.y + 0.15, d.z + Math.sin(a) * rr);
-        rock.rotation.set(rng() * 3, rng() * 3, rng() * 3);
-        rock.castShadow = true;
-        this.group.add(rock);
+        this.decor.push({ t: "rock", x: d.x + Math.cos(a) * rr, y: d.y, z: d.z + Math.sin(a) * rr, size: 0.3 + rng() * 0.25, rx: rng() * 3, ry: rng() * 3, rz: rng() * 3, v: rng() });
+      }
+      // grass tufts (only drawn with the nature models): lush meadows, a few on beaches, none on snow / the Moon
+      if (!def.snow && !def.space && !def.night) {
+        const sand = d.color === SAND;
+        const tufts = Math.min(36, Math.round(d.r * d.r * (sand ? 0.02 : 0.16)));
+        for (let i = 0; i < tufts; i++) {
+          const a = rng() * Math.PI * 2;
+          const rr = d.r * Math.sqrt(rng()) * 0.92;
+          this.decor.push({ t: "grass", x: d.x + Math.cos(a) * rr, y: d.y, z: d.z + Math.sin(a) * rr, rot: rng() * Math.PI * 2, v: rng(), sand });
+        }
       }
     }
 
@@ -1480,33 +1493,11 @@ export class World {
           this.buildHouse(b, bi, trimMat, doorMat, winMat);
           continue;
         }
-        const g = new THREE.Group();
-        const bodyMat = new THREE.MeshStandardMaterial({ color: b.color, flatShading: true, roughness: 0.85 });
-        const body = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), bodyMat);
-        body.position.y = b.h / 2;
-        body.castShadow = true;
-        body.receiveShadow = true;
-        g.add(body);
-        const trim = new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.3, 0.25, b.d + 0.3), trimMat);
-        trim.position.y = b.h + 0.12;
-        trim.castShadow = true;
-        g.add(trim);
-        const door = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.1), doorMat);
-        door.position.set(0, 0.6, b.d / 2 + 0.03);
-        g.add(door);
-        // a couple of window strips on the front
-        const rows = Math.max(1, Math.floor(b.h / 2.6));
-        for (let i = 0; i < rows; i++) {
-          const win = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.62, 0.5, 0.06), winMat);
-          win.position.set(0, 1.6 + i * 2.2, b.d / 2 + 0.03);
-          g.add(win);
-        }
-        g.position.set(b.x, 0, b.z);
-        this.group.add(g);
+        this.decor.push({ t: "building", b });
         // roof is landable
         this.platforms.push({
           kind: "box", x: b.x, z: b.z, r: 0, hw: b.w / 2 + 0.15, hd: b.d / 2 + 0.15, topY: b.h + 0.25, spring: 0,
-          baseX: b.x, baseZ: b.z, dx: 0, dz: 0, mesh: g, squashT: 0,
+          baseX: b.x, baseZ: b.z, dx: 0, dz: 0, mesh: new THREE.Object3D(), squashT: 0,
         });
         // walls are solid
         this.solids.push({
@@ -1726,7 +1717,146 @@ export class World {
       this.group.add(rainbow);
     }
 
+    this.decorGroup = new THREE.Group();
+    this.group.add(this.decorGroup);
+    this.buildDecor(def);
+
     scene.add(this.group);
+  }
+
+  /** Redraw trees, plants, rocks and city buildings (call when the world models finish loading). */
+  refreshDecor(): void {
+    const free = (o: THREE.Object3D) => {
+      // instanced model parts share geometry and materials with the loaded models: keep those
+      if (o instanceof THREE.InstancedMesh) { o.dispose(); return; }
+      if (o instanceof THREE.Mesh) {
+        o.geometry.dispose();
+        const m = o.material;
+        if (Array.isArray(m)) m.forEach((mm) => mm.dispose()); else m.dispose();
+      }
+      for (const c of o.children) free(c);
+    };
+    free(this.decorGroup);
+    this.decorGroup.clear();
+    this.buildDecor(this.def);
+  }
+
+  private buildDecor(def: LevelDef): void {
+    const g = this.decorGroup;
+    const models = envReady();
+    const placer = new Placer();
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, flatShading: true, roughness: 1 });
+    const foliageMat = new THREE.MeshStandardMaterial({ color: def.foliage, flatShading: true, roughness: 0.85 });
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0xb8bec9, flatShading: true, roughness: 1 });
+    // the big open island gets full-size trees; the small sky islands smaller ones
+    const big = def.sea !== undefined;
+    const frost = def.snow ? 0xe4f1f8 : undefined;
+    const pickOf = (names: string[], v: number) => names[Math.min(names.length - 1, Math.floor(v * names.length))];
+
+    for (const d of this.decor) {
+      if (d.t === "tree") {
+        if (models && d.kind !== 2) {
+          // models are 7–9 m tall: scale to about the cartoon tree's height (a bit taller on the big island)
+          // (the lighter tree models: 1.6k–4k triangles each)
+          const name = pickOf(d.kind === 0 ? ["Pine_5", "Pine_1", "Pine_5"] : ["CommonTree_3", "CommonTree_5"], d.v);
+          placer.add(name, d.x, d.y, d.z, { rotY: d.rot, scale: d.scale * (big ? 0.62 : 0.36), tint: frost, tintOnly: /Leaf|Leaves/ });
+        } else {
+          const tree = makeTree(trunkMat, foliageMat, d.kind === 2 ? d.scale * 1.5 : d.scale, d.kind);
+          tree.position.set(d.x, d.y, d.z);
+          tree.rotation.y = d.rot;
+          g.add(tree);
+        }
+      } else if (d.t === "flower") {
+        if (models) {
+          const kinds: [string, number][] = [
+            ["Flower_3_Group", 0.28], ["Fern_1", 0.45], ["Plant_1", 0.5], ["Clover_1", 0.45],
+            ["Flower_3_Group", 0.28], ["Bush_Common", 0.38], ["Mushroom_Common", 0.9],
+          ];
+          const [name, sc] = kinds[Math.min(kinds.length - 1, Math.floor(d.v * kinds.length))];
+          placer.add(name, d.x, d.y, d.z, { rotY: d.rot, scale: sc * (big ? 1.3 : 1), shadow: false, tint: frost, tintOnly: /Leaf|Leaves/ });
+        } else {
+          const flower = makeFlower(d.color);
+          flower.position.set(d.x, d.y, d.z);
+          g.add(flower);
+        }
+      } else if (d.t === "rock") {
+        if (models) {
+          const name = pickOf(["Rock_Medium_1", "Rock_Medium_2", "Rock_Medium_3"], d.v);
+          placer.add(name, d.x, d.y, d.z, { rotY: d.ry, scale: d.size * 0.5, tint: def.space ? 0xb8bec9 : undefined });
+        } else {
+          const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(d.size, 0), rockMat);
+          rock.position.set(d.x, d.y + 0.15, d.z);
+          rock.rotation.set(d.rx, d.ry, d.rz);
+          rock.castShadow = true;
+          g.add(rock);
+        }
+      } else if (d.t === "grass") {
+        if (models) {
+          const name = d.sand ? "Grass_Wispy_Tall" : pickOf(["Grass_Common_Short", "Grass_Common_Short", "Grass_Common_Tall", "Grass_Wispy_Tall"], d.v);
+          placer.add(name, d.x, d.y, d.z, { rotY: d.rot, scale: (d.sand ? 0.28 : 0.32) * (0.8 + d.v * 0.5), shadow: false });
+        }
+      } else if (models && hasModel("Brick_Plain_3")) {
+        this.facade(placer, d.b);
+      } else {
+        g.add(cartoonBuilding(d.b));
+      }
+    }
+    trunkMat.dispose();
+    foliageMat.dispose();
+    rockMat.dispose();
+    if (models) g.add(placer.build());
+  }
+
+  /**
+   * Dress a building box in the city kit's wall panels (2 m wide, 3 m tall each): shop fronts and
+   * a door on the ground floor, windowed brick above, corner columns, a cornice and a flat roof.
+   * Panels stretch a little so each face is a whole number of them; the brick takes the building's
+   * color. Collisions and the roof height stay exactly as before.
+   */
+  private facade(placer: Placer, b: BuildingDef): void {
+    // (the grey brick texture reads darker than its color, so tint with a light pastel)
+    const tint = new THREE.Color(b.color).lerp(new THREE.Color(0xffffff), 0.55).multiplyScalar(1.25).getHex();
+    const brick = { tint, tintOnly: /Brick/ };
+    const rows = Math.max(1, Math.round(b.h / 3));
+    const sy = b.h / (rows * 3);
+    const faces: { nx: number; nz: number; width: number; depth: number; rot: number; front: boolean }[] = [
+      { nx: 0, nz: 1, width: b.w, depth: b.d / 2, rot: 0, front: true },
+      { nx: 0, nz: -1, width: b.w, depth: b.d / 2, rot: Math.PI, front: false },
+      { nx: 1, nz: 0, width: b.d, depth: b.w / 2, rot: Math.PI / 2, front: false },
+      { nx: -1, nz: 0, width: b.d, depth: b.w / 2, rot: -Math.PI / 2, front: false },
+    ];
+    for (const f of faces) {
+      const n = Math.max(1, Math.round(f.width / 2));
+      const pw = f.width / n;
+      // along the face: the panel's local +x direction after rotating
+      const ax = Math.cos(f.rot), az = -Math.sin(f.rot);
+      for (let i = 0; i < n; i++) {
+        const along = -f.width / 2 + (i + 0.5) * pw;
+        const x = b.x + f.nx * f.depth + ax * along;
+        const z = b.z + f.nz * f.depth + az * along;
+        for (let r = 0; r < rows; r++) {
+          const y = r * 3 * sy;
+          let name: string;
+          if (r === 0) name = f.front && i === Math.floor(n / 2) ? "DoorFrame_Wooden" : f.front ? "Metal_FirstFloor_Window" : "Metal_FirstFloor_Wall";
+          else if (r === rows - 1 && rows > 2) name = "Brick_TopTrim";
+          else name = (i + r) % 2 === 0 ? "Brick_Window_Trim_Single" : "Brick_Window_Square_Single";
+          const wide = name === "DoorFrame_Wooden" ? 2.3 : 2;
+          placer.add(name, x, y, z, { rotY: f.rot, scale: [pw / wide, sy, 1], ...brick });
+          if (name === "DoorFrame_Wooden") placer.add("Door_2", x + ax * 0.5 * (pw / 2), y, z + az * 0.5 * (pw / 2), { rotY: f.rot, scale: [pw / 2, sy, 1] });
+        }
+        // cornice along the top edge (its top lines up with the roof you can land on)
+        placer.add("Cornice_Trim_Center", x, b.h - 0.75, z, { rotY: f.rot, scale: [pw / 2, 1, 1] });
+      }
+    }
+    // corner columns, one per floor
+    const corners: [number, number, number][] = [[1, 1, 0], [-1, 1, -Math.PI / 2], [1, -1, Math.PI / 2], [-1, -1, Math.PI]];
+    for (const [cx, cz, rot] of corners) {
+      for (let r = 0; r < rows; r++) {
+        placer.add("Brick_CornerColumn_Center", b.x + cx * b.w / 2, r * 3 * sy, b.z + cz * b.d / 2, { rotY: rot, scale: [1, sy, 1], ...brick });
+      }
+    }
+    // flat roof (the kit's roof sits 0.2 below its origin)
+    placer.add("Roof_4x4", b.x, b.h + 0.45, b.z, { scale: [b.w / 4, 1, b.d / 4], shadow: false });
   }
 
   setPortalUnlocked(unlocked: boolean): void {
@@ -1825,6 +1955,34 @@ export class World {
 /** Three sets of swells crossing each other (about -2.2 … 2.2), in the sea mesh's local x/z. */
 function swell(x: number, z: number, t: number): number {
   return Math.sin(x * 0.33 + t * 1.5) + 0.7 * Math.sin(z * 0.27 - t * 1.2) + 0.5 * Math.sin((x + z) * 0.14 + t * 1.9);
+}
+
+/** The code-built building (used until the city models load). */
+function cartoonBuilding(b: BuildingDef): THREE.Group {
+  const g = new THREE.Group();
+  const flat = (color: number, rough = 0.85) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: rough });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), flat(b.color));
+  body.position.y = b.h / 2;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  g.add(body);
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.3, 0.25, b.d + 0.3), flat(0xffffff));
+  trim.position.y = b.h + 0.12;
+  trim.castShadow = true;
+  g.add(trim);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.1), flat(0x7a4a2b, 0.9));
+  door.position.set(0, 0.6, b.d / 2 + 0.03);
+  g.add(door);
+  // a couple of window strips on the front
+  const winMat = flat(0xfff6b8, 0.4);
+  const rows = Math.max(1, Math.floor(b.h / 2.6));
+  for (let i = 0; i < rows; i++) {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.62, 0.5, 0.06), winMat);
+    win.position.set(0, 1.6 + i * 2.2, b.d / 2 + 0.03);
+    g.add(win);
+  }
+  g.position.set(b.x, 0, b.z);
+  return g;
 }
 
 /**

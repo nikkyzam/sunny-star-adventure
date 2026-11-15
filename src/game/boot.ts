@@ -19,7 +19,7 @@
 import * as THREE from "three";
 import { GameLoop } from "./engine";
 import { Input } from "./input";
-import { AudioSystem } from "./audio";
+import { AudioSystem, type SongId } from "./audio";
 import { GameStateMachine } from "./state";
 import { World, LEVELS } from "./world";
 import { Player } from "./player";
@@ -36,6 +36,7 @@ import { Foods } from "./food";
 import { Fleet } from "./ships";
 import { verseFor, grade } from "./verses";
 import { loadHumanKit } from "./humans";
+import { loadEnvKit } from "./env";
 import { Props } from "./props";
 import { Particles } from "./particles";
 import { Hud } from "./hud";
@@ -77,6 +78,7 @@ declare global {
       rings: number;
       food: number;
       verse: { ref: string; text: string };
+      song: string | null;
       bank: number;
       owned: string[];
       jobTarget: { name: string; x: number; z: number } | null;
@@ -108,6 +110,12 @@ const KILL_Y = -12;
 const UNLOCKED_KEY = "unlockedLevel";
 const BUDDY_EMOJI: Record<string, string> = { bunny: "🐰", birdie: "🐦", turtle: "🐢" };
 const P2_JUMP = "Enter";
+/** Which recorded song each world plays (anything not listed picks one by its look). */
+const SONG_FOR: Record<string, SongId> = {
+  "Sunny Meadow": "meadow", "Candy Canyon": "candy", "Rainbow Peak": "jungle", "Castle in the Clouds": "meadow",
+  "Toy City": "city", "Frosty Mountain": "snow", "Bubbly Beach": "beach", "Jungle Vines": "jungle",
+  "Starlight Peak": "night", "Adventure Island": "island", "Moon Base": "space",
+};
 const NET_SEND_EVERY = 4; // fixed steps between state packets (60 Hz / 4 = 15 Hz)
 const REMOTE_TIMEOUT = 6; // seconds without a packet before a friend's kid is removed
 const BALLOON_FLOAT = 3.5; // seconds a balloon carries a kid upward
@@ -342,10 +350,22 @@ export function startGame(canvas: HTMLCanvasElement): void {
     return world.def.sea !== undefined ? Math.max(g, world.def.sea - 0.2) : g;
   }
 
-  // human-looking characters: load the model files, then swap them in for the cartoon kids
-  loadHumanKit().then((ok) => {
-    if (!ok || disposed) return;
-    swapInHumans();
+  // world models (trees, plants, rocks, city buildings): redraw the scenery once they arrive;
+  // human-looking characters: load the model files, then swap them in for the cartoon kids.
+  // The page reports ready (__GAME_READY__) once both have arrived (or failed, or 20 s passed),
+  // so nothing waits on a game that is about to pause for a moment to swap models in.
+  let modelsSettled = false;
+  const settleTimer = window.setTimeout(() => { modelsSettled = true; }, 20000);
+  Promise.all([
+    loadEnvKit().then((ok) => {
+      if (ok && !disposed) world.refreshDecor();
+    }),
+    loadHumanKit().then((ok) => {
+      if (ok && !disposed) swapInHumans();
+    }),
+  ]).finally(() => {
+    modelsSettled = true;
+    clearTimeout(settleTimer);
   });
 
   /** Rebuild every character with the human models, keeping where everyone is. */
@@ -433,6 +453,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       const d = world.def;
       const watery = d.sea !== undefined || d.ocean === true;
       audio.setTrack(watery ? "island" : d.snow || d.space ? "snow" : d.carSpawn ? "city" : "meadow", d.sea !== undefined);
+      audio.setSong(SONG_FOR[d.name] ?? (watery ? "island" : d.snow ? "snow" : d.space ? "space" : d.night ? "night" : d.carSpawn ? "city" : "meadow"));
     }
     stars.build(world.starSpots);
     slimes.build(world.slimeSpecs);
@@ -684,6 +705,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     sm.transition("title");
     makePlayers(false);
     loadLevel(0);
+    audio.setSong("title");
     hud.showOverlay("title");
     hud.setPlayingUi(false);
     hud.setBest(highScore.get());
@@ -1162,6 +1184,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
   // ── Initial: title screen over level 1 (single preview player) ──────────
   makePlayers(false);
   loadLevel(0);
+  audio.setSong("title");
+  audio.autoStart = true; // the title song starts on the first tap / key press
   hud.showOverlay("title");
   hud.setPlayingUi(false);
   hud.showContinue(unlockedLevel() > 0, LEVELS[unlockedLevel()].name);
@@ -1811,7 +1835,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
     },
     render: () => {
       renderer.render(scene, camera);
-      window.__GAME_READY__ = true; // first rendered frame = the page is playable
+      // first rendered frame with the models in = the page is playable
+      if (modelsSettled) window.__GAME_READY__ = true;
     },
   });
   loop.start();
@@ -1870,6 +1895,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     rings: rings.passed,
     food: foods.items.filter((f) => !f.taken).length,
     verse: verseFor(levelIdx),
+    song: audio.playingSong,
     bank,
     owned: [...owned],
     jobTarget: job ? { name: job.target.def.name, x: job.target.p.pos.x, z: job.target.p.pos.z } : null,

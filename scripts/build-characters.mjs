@@ -10,8 +10,8 @@
  */
 import { NodeIO } from "@gltf-transform/core";
 import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
-import { prune, dedup, textureCompress, resample, meshopt } from "@gltf-transform/functions";
-import { MeshoptEncoder } from "meshoptimizer";
+import { prune, dedup, textureCompress, resample, meshopt, simplify, weld } from "@gltf-transform/functions";
+import { MeshoptEncoder, MeshoptSimplifier } from "meshoptimizer";
 import sharp from "sharp";
 import { mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -30,6 +30,7 @@ const KEEP_ANIMS = new Set([
 ]);
 
 await MeshoptEncoder.ready;
+await MeshoptSimplifier.ready;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ sharp, "meshopt.encoder": MeshoptEncoder });
 const FINGER = /^(index|middle|pinky|ring|thumb)_/;
 
@@ -39,7 +40,7 @@ async function write(doc, name) {
   console.log(`${name.padEnd(28)} ${(statSync(out).size / 1024).toFixed(0)} KB`);
 }
 
-async function slim(doc, maxSize) {
+async function slim(doc, maxSize, ratio = 1) {
   for (const m of doc.getRoot().listMaterials()) {
     const t = m.getMetallicRoughnessTexture();
     if (t) {
@@ -51,6 +52,8 @@ async function slim(doc, maxSize) {
   await doc.transform(
     prune(),
     dedup(),
+    // fewer triangles (many characters can be on screen at once); small error = shape kept
+    ...(ratio < 1 ? [weld(), simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.0015 })] : []),
     textureCompress({ encoder: sharp, targetFormat: "webp", resize: [maxSize, maxSize], quality: 82 }),
   );
   // (no quantization: the game reads body positions and normals to fit clothes over them)
@@ -59,14 +62,14 @@ async function slim(doc, maxSize) {
 // bodies
 for (const [file, name] of [["Superhero_Female_FullBody.gltf", "body_female.glb"], ["Superhero_Male_FullBody.gltf", "body_male.glb"]]) {
   const doc = await io.read(join(SRC, "body", file));
-  await slim(doc, 1024);
+  await slim(doc, 1024, 0.5);
   await write(doc, name);
 }
 
 // hairstyles (rigged to the head bone of the same skeleton)
 for (const h of ["Hair_SimpleParted", "Hair_Long", "Hair_Buns", "Hair_Buzzed", "Hair_BuzzedFemale", "Hair_Beard"]) {
   const doc = await io.read(join(SRC, "hair", `${h}.gltf`));
-  await slim(doc, 512);
+  await slim(doc, 512, 0.5);
   await write(doc, `${h.toLowerCase().replace("hair_", "hair_")}.glb`);
 }
 

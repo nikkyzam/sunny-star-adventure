@@ -116,7 +116,10 @@ export class Npcs {
   update(dt: number, look: THREE.Vector3): void {
     for (const n of this.items) {
       const dx = look.x - n.p.pos.x, dz = look.z - n.p.pos.z;
-      n.p.near = dx * dx + dz * dz < 45 * 45; // far-away villagers animate less often
+      const d2 = dx * dx + dz * dz;
+      n.p.near = d2 < 45 * 45; // far-away villagers animate less often
+      n.p.group.visible = d2 < 70 * 70; // and very far ones (a speck on screen) aren't drawn at all
+      if (!n.p.group.visible) continue;
       if (dx * dx + dz * dz < 64) {
         let d = Math.atan2(dx, dz) - n.p.facing;
         while (d > Math.PI) d -= Math.PI * 2;

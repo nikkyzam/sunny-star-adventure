@@ -1,10 +1,12 @@
 /**
- * audio.ts — Web Audio synthesized SFX + looping music + sea ambience + mute toggle (remembered
- * in localStorage). No audio asset files at all — everything is synthesized at runtime.
+ * audio.ts — music, synthesized sound effects, sea ambience and the mute toggle (remembered in
+ * localStorage).
  *
- * Music: four tunes (meadow / island / city / snow), each 16 bars with an A and a B section,
- * built from chord progressions so every note fits its chord. Each has a lead, bass, soft chord
- * pad and a light beat.
+ * Music: real recorded loops ("Abstraction - Music Loop Bundle", Tallbeard Studios, CC0; picked
+ * and copied by scripts/build-music.mjs into public/music/), one per world, streamed when the
+ * world opens and cross-faded when it changes. OGG (seamless loops) where the browser plays it,
+ * otherwise M4A. While a song loads — or if it can't — four synthesized 16-bar tunes (meadow /
+ * island / city / snow) play instead. Sound effects are all synthesized.
  */
 
 export type SfxId =
@@ -13,6 +15,12 @@ export type SfxId =
   | "coin" | "chest" | "buddy" | "powerup" | "honk" | "splash" | "talk" | "pet" | "munch";
 
 export type TrackId = "meadow" | "island" | "city" | "snow";
+
+/** Recorded songs in public/music/ (see scripts/build-music.mjs). */
+export type SongId = "title" | "meadow" | "candy" | "snow" | "island" | "beach" | "jungle" | "city" | "night" | "space";
+
+const SONG_VOLUME = 0.6;
+const SONG_FADE = 1.2; // seconds of cross-fade between songs
 
 const MUTE_KEY = "game.muted";
 
@@ -133,12 +141,20 @@ export class AudioSystem {
   private wantSea = false;
   private lastSplash = 0;
   private disposed = false;
+  private songWanted: SongId | null = null;
+  private song: { id: SongId; src: AudioBufferSourceNode; gain: GainNode } | null = null;
+  private songCache = new Map<SongId, Promise<{ buffer: AudioBuffer; loop: number } | null>>();
+  private manifest: Promise<Record<string, { loop: number }> | null> | null = null;
+  private musicOn = false;
+  /** Start the music on the first tap / key press (browsers block sound before that). */
+  autoStart = false;
   muted = false;
 
   // browsers require a first user interaction before the AudioContext can start
   private readonly unlock = () => {
     this.ensureCtx();
     this.detachUnlock();
+    if (this.autoStart) this.startMusic();
   };
 
   constructor() {
@@ -170,6 +186,8 @@ export class AudioSystem {
     this.stopMusic();
     this.engineStop();
     this.seaStop();
+    this.song?.src.stop();
+    this.song = null;
     this.master?.disconnect();
     this.master = null;
     const ctx = this.ctx;
@@ -239,6 +257,76 @@ export class AudioSystem {
     if (this.track === TRACKS[id]) return;
     this.track = TRACKS[id];
     this.step = 0;
+  }
+
+  /** The recorded song playing now (null while the built-in tune plays or music is off). */
+  get playingSong(): SongId | null {
+    return this.song?.id ?? null;
+  }
+
+  /** Pick the recorded song for a world (or the title screen); cross-fades if music is on. */
+  setSong(id: SongId): void {
+    this.songWanted = id;
+    if (this.musicOn) void this.playSong(id);
+  }
+
+  /** Fetch and decode a song once (OGG where supported, otherwise M4A). */
+  private loadSong(id: SongId): Promise<{ buffer: AudioBuffer; loop: number } | null> {
+    let p = this.songCache.get(id);
+    if (p) return p;
+    const base = `${import.meta.env.BASE_URL}music/`;
+    this.manifest ??= fetch(`${base}music.json`).then((r) => (r.ok ? r.json() : null), () => null);
+    const ogg = typeof Audio !== "undefined" && new Audio().canPlayType('audio/ogg; codecs="vorbis"') !== "";
+    const decode = async (ext: string) => {
+      const res = await fetch(`${base}${id}.${ext}`);
+      if (!res.ok) throw new Error(`${id}.${ext}: ${res.status}`);
+      return this.ensureCtx().decodeAudioData(await res.arrayBuffer());
+    };
+    p = (async () => {
+      try {
+        const info = (await this.manifest)?.[id];
+        let buffer: AudioBuffer;
+        try {
+          buffer = await decode(ogg ? "ogg" : "m4a");
+        } catch {
+          buffer = await decode("m4a"); // some browsers claim OGG but can't decode it
+        }
+        return { buffer, loop: Math.min(buffer.duration, info?.loop ?? buffer.duration) };
+      } catch (err) {
+        console.warn("song unavailable, using the built-in tune", err);
+        return null;
+      }
+    })();
+    this.songCache.set(id, p);
+    return p;
+  }
+
+  private async playSong(id: SongId): Promise<void> {
+    if (this.song?.id === id) return;
+    const got = await this.loadSong(id);
+    // still wanted, music still on, and nothing changed while it loaded?
+    if (!got || this.disposed || !this.musicOn || this.songWanted !== id || this.song?.id === id) return;
+    const ctx = this.ensureCtx();
+    if (!this.master) return;
+    const now = ctx.currentTime;
+    const old = this.song;
+    if (old) {
+      old.gain.gain.cancelScheduledValues(now);
+      old.gain.gain.setValueAtTime(old.gain.gain.value, now);
+      old.gain.gain.linearRampToValueAtTime(0, now + SONG_FADE);
+      old.src.stop(now + SONG_FADE + 0.05);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = got.buffer;
+    src.loop = true;
+    src.loopStart = 0;
+    src.loopEnd = got.loop; // the exact loop length: encoder padding never adds a gap
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(SONG_VOLUME, now + SONG_FADE);
+    src.connect(gain).connect(this.master);
+    src.start(now);
+    this.song = { id, src, gain };
   }
 
   /** Gentle waves: looping low noise whose volume swells slowly. */
@@ -336,10 +424,12 @@ export class AudioSystem {
     }
   }
 
-  /** Start the current track's loop (scheduled a little ahead of time). */
+  /** Start the music: the world's recorded song, with the built-in tune until it has loaded. */
   startMusic(): void {
     if (this.disposed) return;
     const ctx = this.ensureCtx();
+    this.musicOn = true;
+    if (this.songWanted) void this.playSong(this.songWanted);
     if (this.musicTimer !== null) return;
     this.nextNoteTime = ctx.currentTime + 0.08;
     this.step = 0;
@@ -387,6 +477,11 @@ export class AudioSystem {
   private scheduleMusic(): void {
     if (!this.ctx || !this.master || this.disposed) return;
     if (this.wantSea) this.seaStart();
+    if (this.song) {
+      // a recorded song is playing: the built-in tune waits, ready if a later song can't load
+      this.nextNoteTime = this.ctx.currentTime + 0.1;
+      return;
+    }
     const tr = this.track;
     const STEP_DUR = 60 / tr.bpm / 2; // one eighth note
     while (this.nextNoteTime < this.ctx.currentTime + 0.3) {

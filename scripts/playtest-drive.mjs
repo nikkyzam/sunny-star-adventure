@@ -43,7 +43,7 @@ const check = (name, ok, detail = "") => {
 };
 
 try {
-  const page = await browser.newPage({ viewport: { width: 960, height: 600 } });
+  const page = await browser.newPage({ viewport: { width: 800, height: 450 } /* small: these tests time key presses, and software-rendered foliage is slow */ });
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
@@ -72,11 +72,26 @@ try {
     return { maxY, maxSpeed };
   };
 
-  // walk from the spawn (0, 18) to the car parked at about (3, 14)
+  // walk from the spawn (0, 18) to the car parked at about (3, 14), in short self-correcting
+  // steps (W/A/S/D at the default camera = -z/-x/+z/+x) so slow frames can't make the kid overshoot
+  const walkTo = async (tx, tz, r = 0.6, ms = 20000) => {
+    const t0 = Date.now();
+    while (Date.now() - t0 < ms) {
+      const d = await dbg();
+      const dx = tx - d.px, dz = tz - d.pz;
+      const dist = Math.hypot(dx, dz);
+      if (dist < r) return true;
+      const key = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? "KeyD" : "KeyA") : (dz > 0 ? "KeyS" : "KeyW");
+      await page.keyboard.down(key);
+      await page.waitForTimeout(Math.min(220, Math.max(40, dist * 50)));
+      await page.keyboard.up(key);
+      await page.waitForTimeout(60);
+    }
+    return false;
+  };
   check("D2a no car button far from the car", !(await visible("#btn-car")));
-  await hold("KeyW", (d) => d.pz < 14.6);
-  await hold("KeyD", (d) => d.px > 1.4);
-  await page.waitForTimeout(200);
+  await walkTo(1.4, 14.6);
+  await page.waitForTimeout(300);
   const label = await page.textContent("#btn-car");
   check("D2 Hop in button appears", (await visible("#btn-car")) && label.includes("Hop in"), label);
   await page.click("#btn-car");
