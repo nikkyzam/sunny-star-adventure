@@ -50,6 +50,8 @@ export default function Home() {
         <button id="btn-honk" className="car-btn honk" aria-label="Honk" style={{ display: 'none' }}>📣</button>
         {/* villagers: shown when one is close (touch-friendly F) */}
         <button id="btn-talk" className="car-btn talk" style={{ display: 'none' }}>💬 Talk</button>
+        {/* the verse book: shown while a grown-up's verses are on (a class, or this device) */}
+        <button id="btn-book" className="book-btn" style={{ display: 'none' }} />
         <div id="dialog" className="dialog">
           <span id="dialog-name" className="dialog-name" />
           <span id="dialog-text" />
@@ -86,7 +88,10 @@ export default function Home() {
               <button id="btn-continue" className="big-btn" data-action="continue" style={{ display: 'none' }}>▶ Continue</button>
             </div>
             <p id="title-best" className="best" />
-            <a className="parents-link" href="parents.html" target="_blank" rel="noopener">👪 For parents · Privacy</a>
+            <div className="grownups">
+              <button id="btn-teach" className="link-btn" data-action="teach">👩‍🏫 Teachers &amp; parents: pick the verses</button>
+              <a className="parents-link" href="parents.html" target="_blank" rel="noopener">👪 For parents · Privacy</a>
+            </div>
             <div className="controls-help">
               <span>🕹️ P1: WASD + Space (jump ×2, hold = glide)</span>
               <span>👥 P2: Arrows + Enter</span>
@@ -128,6 +133,63 @@ export default function Home() {
             <p id="online-status" className="stat-line" />
             <div className="btn-col">
               <button className="big-btn" data-action="back">⬅ Back</button>
+            </div>
+          </div>
+        </div>
+
+        {/* grown-up check before the teacher screen */}
+        <div id="ov-gate" className="overlay" style={{ display: 'none' }}>
+          <div className="panel">
+            <h2>Grown-ups only 👩‍🏫</h2>
+            <p className="tagline">This part is for teachers and parents. Please answer:</p>
+            <p className="gate-q">What is <span id="gate-question" />?</p>
+            <div className="btn-col">
+              <input id="gate-answer" className="code-input" inputMode="numeric" maxLength={3} autoComplete="off" aria-label="Answer" />
+              <button className="big-btn primary" data-action="gate-ok">✔ OK</button>
+              <button className="big-btn" data-action="back">⬅ Back</button>
+            </div>
+            <p id="gate-status" className="stat-line" />
+          </div>
+        </div>
+
+        {/* teacher / parent screen: pick this week's verses, then start a class or use them here */}
+        <div id="ov-teach" className="overlay" style={{ display: 'none' }}>
+          <div className="panel teach-panel">
+            <h2>Verses to memorize 📖</h2>
+            <p className="tagline">Pick up to 8 verses. Kids learn them in the verse book and type them from memory to earn coins.</p>
+            <h3 className="teach-h">Your verses <span id="teach-count" /></h3>
+            <div id="teach-picked" className="teach-picked" />
+            <h3 className="teach-h">Add from the library (King James Version)</h3>
+            <div id="teach-topics" className="teach-topics" />
+            <div id="teach-library" className="teach-library" />
+            <details className="teach-own">
+              <summary>✍️ Add your own verse (stays on this device)</summary>
+              <input id="own-ref" className="teach-input" maxLength={40} placeholder="Reference, like Psalm 23:4" autoComplete="off" />
+              <textarea id="own-text" className="teach-input" rows={3} maxLength={320} placeholder="Type the verse, in any translation" autoComplete="off" />
+              <button className="mini-btn wide" data-action="own-add">➕ Add this verse</button>
+              <p className="teach-note">Verses you type are never sent to other devices, so a class gets the library verses only.</p>
+            </details>
+            <p id="teach-status" className="stat-line" />
+            <div className="btn-col">
+              <button className="big-btn primary" data-action="class-start">🏫 Start a class (room code)</button>
+              <button id="btn-family" className="big-btn primary2" data-action="family">🏠 Use on this device</button>
+              <button className="big-btn" data-action="back">⬅ Back</button>
+            </div>
+          </div>
+        </div>
+
+        {/* the verse book: this week's verses, and (for the teacher) who has memorized what */}
+        <div id="ov-book" className="overlay" style={{ display: 'none' }}>
+          <div className="panel teach-panel">
+            <h2>Verse book 📖</h2>
+            <p id="book-note" className="tagline" />
+            <div id="book-list" className="book-list" />
+            <div id="book-class" style={{ display: 'none' }}>
+              <h3 className="teach-h">Your class <span id="book-code" /></h3>
+              <div id="book-board" className="book-board" />
+            </div>
+            <div className="btn-col">
+              <button className="big-btn primary" data-action="book-close">▶ Back to the game</button>
             </div>
           </div>
         </div>
@@ -175,6 +237,7 @@ export default function Home() {
               <button className="big-btn primary" data-action="verse-check">✔ Check</button>
               <button className="big-btn" data-action="verse-peek">👀 Peek at the verse</button>
             </div>
+            <button id="verse-back" className="mini-btn wide" data-action="book" style={{ display: 'none' }}>⬅ Back to the verse book</button>
           </div>
         </div>
 

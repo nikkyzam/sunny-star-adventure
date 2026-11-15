@@ -528,5 +528,82 @@ body.touch.playing .stick-base { display: flex; }
   .panel { padding: 22px 26px; }
 }
 
-.parents-link { display: inline-block; margin: 2px 0 4px; font-size: 13px; font-weight: 700; color: #8a7fb8; text-decoration: none; }
+.grownups { display: flex; flex-wrap: wrap; gap: 2px 16px; justify-content: center; align-items: center; margin: 2px 0 4px; }
+.link-btn { font: inherit; font-size: 13px; font-weight: 800; color: #6c5ce7; background: none; border: none; padding: 4px 2px; cursor: pointer; text-decoration: underline; }
+.parents-link { display: inline-block; font-size: 13px; font-weight: 700; color: #8a7fb8; text-decoration: none; }
 .parents-link:hover { text-decoration: underline; }
+
+/* ── verse book button (in play) ─────────────────────────────────── */
+.book-btn {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  height: 48px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 3px solid #fff;
+  background: linear-gradient(180deg, #fff3d6, #ffd98a);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.15);
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 900;
+  color: #8a4b00;
+  cursor: pointer;
+}
+.book-btn:active { transform: scale(0.92); }
+
+/* ── teachers & parents: verse picker, verse book, class board ───── */
+.gate-q { font-size: 30px; font-weight: 900; color: #4a3b6b; margin: 4px 0 12px; }
+.teach-panel { width: min(94vw, 700px); max-width: min(94vw, 700px); padding: 22px 26px; }
+.teach-panel h2 { font-size: clamp(22px, 4vw, 30px); }
+.teach-panel .tagline { margin: 2px 0 8px; font-size: 15px; }
+.teach-h { margin: 12px 0 6px; font-size: 16px; color: #6c5ce7; text-align: left; }
+.teach-picked, .teach-library, .book-list, .book-board { display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.teach-library { max-height: 34vh; overflow-y: auto; padding-right: 4px; }
+.teach-empty { color: #8a83ad; font-size: 15px; font-weight: 700; }
+.teach-row {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff; border: 2px solid #e6e0f8; border-radius: 14px; padding: 6px 8px 6px 12px;
+}
+.teach-row.on { background: #f1fbf3; border-color: #9fdcae; }
+.teach-row.own { background: #fff8e8; border-color: #f1d28a; }
+.teach-n { font-weight: 900; color: #2f9e55; min-width: 16px; }
+.teach-ref { font-weight: 900; color: #4a3b6b; white-space: nowrap; font-size: 15px; }
+.teach-text { flex: 1; min-width: 0; color: #6b6390; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.teach-tag { font-size: 11px; font-weight: 800; color: #a86a00; background: #ffe7b0; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.teach-btn {
+  font: inherit; font-size: 16px; font-weight: 900; width: 40px; height: 36px; flex: none;
+  border-radius: 12px; border: 2px solid #d9d2f5; background: #fff; color: #6c5ce7; cursor: pointer;
+}
+.teach-btn.remove { border-color: #9fdcae; color: #2f9e55; }
+.teach-btn:disabled { opacity: 0.35; cursor: default; }
+.teach-topics { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.teach-chip {
+  font: inherit; font-size: 13px; font-weight: 800; padding: 4px 10px; border-radius: 999px;
+  border: 2px solid #d9d2f5; background: #fff; color: #5b4a86; cursor: pointer;
+}
+.teach-chip.on { background: #6c5ce7; border-color: #6c5ce7; color: #fff; }
+.teach-own { text-align: left; margin: 10px 0 4px; }
+.teach-own summary { cursor: pointer; font-weight: 800; color: #5b4a86; font-size: 15px; }
+.teach-input {
+  display: block; width: 100%; box-sizing: border-box; margin: 6px 0; padding: 8px 12px;
+  font: inherit; font-size: 16px; font-weight: 700; color: #4a3b6b;
+  border: 3px solid #d9d2f5; border-radius: 14px; resize: none; user-select: text; -webkit-user-select: text;
+}
+.teach-note { font-size: 13px; color: #8a83ad; margin: 6px 0 0; }
+.teach-panel .stat-line { font-size: 16px; min-height: 22px; }
+.teach-panel .btn-col { gap: 8px; margin: 8px 0 0; }
+.teach-panel .big-btn { font-size: 18px; padding: 9px 26px; }
+.book-verse {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  font: inherit; background: #fff; border: 3px solid #d9d2f5; border-radius: 16px; padding: 10px 14px; cursor: pointer;
+}
+.book-verse .teach-ref { flex: 1; font-size: 19px; white-space: normal; }
+.book-verse.done { background: #f1fbf3; border-color: #9fdcae; }
+.book-tick { font-size: 20px; }
+.book-go { font-weight: 800; color: #6c5ce7; font-size: 15px; white-space: nowrap; }
+.board-row { display: flex; align-items: center; gap: 10px; background: #fff; border: 2px solid #e6e0f8; border-radius: 12px; padding: 6px 12px; }
+.board-row.gone { opacity: 0.55; }
+.board-name { flex: 1; font-weight: 900; color: #4a3b6b; }
+.board-ticks { letter-spacing: 1px; }
+.board-count { font-weight: 900; color: #2f9e55; min-width: 34px; text-align: right; }

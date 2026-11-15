@@ -71,6 +71,19 @@ Then upload the `dist` folder through their developer dashboard. Use their test 
 - [ ] **Pick the game's name.** Search for trademarks on "Sunny Star Adventure" before you spend money on
       branding.
 
+## Churches, schools and homeschool groups
+
+The game has a verse class mode: a teacher picks the memory verses, starts a class with a room code,
+and sees which child has typed which verse from memory (see `parents.html`). That makes it something
+a children's ministry or homeschool co-op can use as curriculum, and those groups pay for curriculum.
+
+- A simple way to sell it: a yearly license per church or group, sold from your own website, with the
+  ad-free build. Nothing in the game checks a license yet, so today this would be on trust.
+- Before selling to groups, run your own online-play server (see the checklist above). A class of 12
+  on the free public server is fine for trying it out, not for paying customers.
+- The built-in verses were typed in from the King James Version. Have someone proofread
+  `src/game/verses.ts` against a printed Bible before a church relies on them.
+
 ## Selling the game itself
 
 Instead of ads you can sell or license it:

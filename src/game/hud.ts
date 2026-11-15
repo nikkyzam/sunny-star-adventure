@@ -6,9 +6,10 @@
 export type HudAction =
   | "play" | "play2" | "continue" | "resume" | "retry" | "next" | "title" | "again" | "jump" | "mute"
   | "online" | "host" | "join" | "back" | "reroll" | "easy" | "drive" | "car" | "honk"
-  | "dress" | "island" | "city" | "talk" | "verse-ready" | "verse-check" | "verse-peek";
+  | "dress" | "island" | "city" | "talk" | "verse-ready" | "verse-check" | "verse-peek"
+  | "teach" | "gate-ok" | "class-start" | "family" | "own-add" | "book" | "book-close";
 
-type OverlayName = "title" | "pause" | "gameover" | "clear" | "win" | "online" | "dress" | "verse";
+type OverlayName = "title" | "pause" | "gameover" | "clear" | "win" | "online" | "dress" | "verse" | "gate" | "teach" | "book";
 
 const OVERLAY_IDS: Record<OverlayName, string> = {
   title: "ov-title",
@@ -19,6 +20,9 @@ const OVERLAY_IDS: Record<OverlayName, string> = {
   online: "ov-online",
   dress: "ov-dress",
   verse: "ov-verse",
+  gate: "ov-gate",
+  teach: "ov-teach",
+  book: "ov-book",
 };
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -55,6 +59,8 @@ export class Hud {
   private honkBtn = el("btn-honk");
   private carMode: string | null = null;
   private talkBtn = el("btn-talk");
+  private bookBtn = el("btn-book");
+  private bookText: string | null = null;
   private talkShown = false;
   private dialog = el("dialog");
   private dialogTimer: number | null = null;
@@ -90,6 +96,7 @@ export class Hud {
     press(this.carBtn, "car");
     press(this.honkBtn, "honk");
     press(this.talkBtn, "talk");
+    press(this.bookBtn, "book");
     // jump: press to jump, keep holding to glide
     const jumpDown = (e: PointerEvent) => {
       e.preventDefault();
@@ -174,6 +181,7 @@ export class Hud {
     document.body.classList.toggle("playing", playing);
     if (!playing) this.jumpHeld = false;
     this.stickerBar.style.display = playing ? "" : "none";
+    this.bookBtn.style.display = playing && this.bookText ? "" : "none";
     if (!playing) {
       this.setCarUi(null);
       this.setTalk(false);
@@ -198,8 +206,16 @@ export class Hud {
     this.talkBtn.style.display = show ? "" : "none";
   }
 
-  /** Memory verse screen: show the verse to learn. */
-  showVerse(ref: string, text: string): void {
+  /** The verse book button, e.g. "📖 1/3" (null hides it: no grown-up's verses are on). */
+  setBook(text: string | null): void {
+    this.bookText = text;
+    if (text) this.bookBtn.textContent = text;
+    this.bookBtn.style.display = text && document.body.classList.contains("playing") ? "" : "none";
+  }
+
+  /** Memory verse screen: show the verse to learn. `fromBook` adds a way back to the verse book. */
+  showVerse(ref: string, text: string, fromBook = false): void {
+    el("verse-back").style.display = fromBook ? "" : "none";
     el("verse-ref").textContent = ref;
     el("verse-text").textContent = text;
     el<HTMLTextAreaElement>("verse-input").value = "";

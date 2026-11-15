@@ -34,7 +34,9 @@ import { Car, makeRocket, type RideKind } from "./car";
 import { Rings } from "./rings";
 import { Foods } from "./food";
 import { Fleet } from "./ships";
-import { verseFor, grade } from "./verses";
+import { verseFor, grade, LIBRARY, type Verse } from "./verses";
+import { loadPlan, savePlan, planVerses, safePicks, cleanOwn, loadMemorized, saveMemorized, makeGate, MAX_PICKS, MAX_OWN, CLASS_MAX_KIDS, VERSE_PAY } from "./lesson";
+import { showGate, gateAnswer, setGateStatus, drawTeach, ownInput, clearOwnInput, setTeachStatus, setTeachButton, drawBook, type BoardRow } from "./lessonui";
 import { loadHumanKit } from "./humans";
 import { loadEnvKit } from "./env";
 import { Props } from "./props";
@@ -88,6 +90,8 @@ declare global {
       job: { id: string; label: string; reporting: boolean; left: { x: number; y: number; z: number; npc?: string; ride?: string; hold?: number }[] } | null;
       jobsDone: number;
       traffic: { x: number; z: number; v: number }[];
+      lesson: { refs: string[]; done: string[]; room: boolean; host: boolean; on: boolean };
+      board: BoardRow[];
       setBank: (n: number) => void;
       shipsSunk: number;
       shipsAfloat: number;
@@ -131,6 +135,8 @@ const DANCE_KEY = "Digit7";
 /** A friend's kid, driven by their network packets. */
 interface Remote {
   p: Player;
+  /** Their made-up name, as shown on their tag. */
+  name: string;
   tag: THREE.Sprite;
   bubble: Bubble;
   seen: number;
@@ -262,6 +268,17 @@ export function startGame(canvas: HTMLCanvasElement): void {
   let connecting = false;
   let onlineMenuOpen = false;
   let dressOpen = false;
+  // verses picked by a grown-up (lesson.ts): this device's plan, or the class room we're in
+  const plan = loadPlan();
+  const memorized = loadMemorized();
+  const doneNow = new Set<string>(); // verse refs typed from memory since the page opened
+  let roomPicks: number[] | null = null;
+  let classHost = false;
+  let teachOpen = false;
+  let bookOpen = false;
+  let gate: { question: string; answer: number } | null = null;
+  /** Teacher's scoreboard: who is in the class and which class verses they've typed from memory. */
+  const board = new Map<string, { name: string; done: Set<number>; here: boolean }>();
   let humansPending = false;
   let sendTick = 0;
   const remotes = new Map<string, Remote>();
@@ -274,6 +291,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   hud.setBest(highScore.get());
   hud.setKidName(nameText(profile.name));
   hud.setEasy(profile.easy);
+  setTeachButton(plan);
   hud.buildOutfits(OUTFITS.map((o) => o.jacket), profile.outfit, (i) => {
     profile.outfit = i;
     saveProfile(profile);
@@ -548,6 +566,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
     loadLevel(level);
     onlineMenuOpen = false;
     dressOpen = false;
+    teachOpen = false;
+    refreshBook();
     sm.transition("playing");
     ads.gameplayStart();
     hud.showOverlay(null);
@@ -663,6 +683,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   function backToPlay(): void {
+    bookOpen = false;
+    if (verseNow?.practice) verseNow = null;
     ads.gameplayStart();
     sm.transition("playing");
     hud.showOverlay(null);
@@ -693,38 +715,188 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }));
   }
 
-  // ── Memory verse gate ────────────────────────────────────────────────────
-  let verseThen: (() => void) | null = null;
+  // ── Memory verses ────────────────────────────────────────────────────────
+  /** The verse on screen: the gate after a level, or one being practiced from the verse book. */
+  let verseNow: { verse: Verse; practice: boolean; then: () => void } | null = null;
+
+  /** The verses a grown-up picked: the class room's, else this device's (empty = none picked). */
+  function lessonVerses(): Verse[] {
+    return roomPicks ? roomPicks.map((i) => LIBRARY[i]) : plan.on ? planVerses(plan) : [];
+  }
+
+  /** The verse that opens the next level: a picked verse if there are any, else the level's own. */
+  function gateVerse(): Verse {
+    const l = lessonVerses();
+    return l.length ? l[levelIdx % l.length] : verseFor(levelIdx);
+  }
+
+  function refreshBook(): void {
+    const l = lessonVerses();
+    hud.setBook(l.length ? `📖 ${l.filter((v) => doneNow.has(v.ref)).length}/${l.length}` : null);
+  }
 
   function openVerse(then: () => void): void {
-    if (verseThen) return; // already showing
-    verseThen = then;
-    const v = verseFor(levelIdx);
-    hud.showVerse(v.ref, v.text);
+    if (verseNow) return; // already showing
+    const verse = gateVerse();
+    verseNow = { verse, practice: false, then };
+    hud.showVerse(verse.ref, verse.text);
     hud.showOverlay("verse");
   }
 
+  /** A verse typed from memory: tick it, pay coins the first time ever, tell the class. */
+  function recordVerse(v: Verse): number {
+    const first = !doneNow.has(v.ref);
+    doneNow.add(v.ref);
+    let paid = 0;
+    if (!memorized.has(v.ref)) {
+      memorized.add(v.ref);
+      saveMemorized(memorized);
+      earn(VERSE_PAY);
+      hud.setCoins(bank);
+      paid = VERSE_PAY;
+    }
+    const k = LIBRARY.findIndex((x) => x.ref === v.ref && x.text === v.text);
+    if (first && net && roomPicks?.includes(k)) net.send({ t: "vd", k });
+    refreshBook();
+    return paid;
+  }
+
   function checkVerse(): void {
-    if (!verseThen || !sm.is("levelclear")) return;
-    const result = grade(hud.verseInput(), verseFor(levelIdx));
+    const now = verseNow;
+    if (!now || !(now.practice ? sm.is("paused") : sm.is("levelclear"))) return;
+    const result = grade(hud.verseInput(), now.verse);
     if (!result.ok) {
       audio.sfx("ui");
       hud.setVerseFeedback("Almost! The green words are right. Peek, then try again.", result.words);
       return;
     }
-    const then = verseThen;
-    verseThen = null;
+    verseNow = null;
     score += 100;
+    const paid = recordVerse(now.verse);
     saveProgress();
     audio.sfx("win");
-    then();
+    now.then();
     hud.setScore(score);
-    hud.showToast("📖 Well done! You remembered the verse! +100");
+    hud.showToast(paid ? `📖 Well done! You remembered the verse! +${paid} coins` : "📖 Well done! You remembered the verse! +100");
+  }
+
+  // ── The verse book (a grown-up's verses) ─────────────────────────────────
+  function boardRows(): BoardRow[] {
+    const picks = roomPicks ?? [];
+    return [...board.values()].map((r) => ({ name: r.name, here: r.here, done: picks.map((k) => r.done.has(k)) }));
+  }
+
+  function showBook(): void {
+    const l = lessonVerses();
+    const left = l.filter((v) => !doneNow.has(v.ref)).length;
+    const note = left === 0
+      ? "You know them all by heart! 🏆 Practice any time."
+      : "Tap a verse to learn it, then type it from memory. New verses earn coins!";
+    drawBook(l, (v) => doneNow.has(v.ref), note, practiceVerse, classHost && net ? { code: net.code, rows: boardRows() } : null);
+    hud.showOverlay("book");
+  }
+
+  /** Open the verse book (pausing play), or go back to it from a verse. */
+  function openBook(): void {
+    if (sm.is("playing")) {
+      if (lessonVerses().length === 0) return;
+      sm.transition("paused");
+      ads.gameplayStop();
+      hud.setPlayingUi(false);
+      audio.sfx("ui");
+      bookOpen = true;
+    } else if (!(sm.is("paused") && bookOpen)) return;
+    verseNow = null;
+    showBook();
+  }
+
+  function practiceVerse(i: number): void {
+    const verse = lessonVerses()[i];
+    if (!verse || !bookOpen || !sm.is("paused")) return;
+    verseNow = { verse, practice: true, then: showBook };
+    hud.showVerse(verse.ref, verse.text, true);
+    hud.showOverlay("verse");
+  }
+
+  // ── Teachers & parents: pick the verses ──────────────────────────────────
+  function savePicks(): void {
+    if (plan.picks.length + plan.own.length === 0) plan.on = false;
+    savePlan(plan);
+    setTeachButton(plan);
+    drawTeach(plan, teachHandlers);
+  }
+
+  const teachHandlers = {
+    togglePick(i: number): void {
+      const at = plan.picks.indexOf(i);
+      if (at >= 0) plan.picks.splice(at, 1);
+      else if (plan.picks.length < MAX_PICKS && LIBRARY[i]) plan.picks.push(i);
+      setTeachStatus("");
+      savePicks();
+    },
+    removeOwn(n: number): void {
+      plan.own.splice(n, 1);
+      setTeachStatus("");
+      savePicks();
+    },
+  };
+
+  function openGate(): void {
+    if (!sm.is("title") || connecting) return;
+    teachOpen = true;
+    gate = makeGate();
+    showGate(gate.question, gateOk);
+    hud.showOverlay("gate");
+    audio.sfx("ui");
+  }
+
+  function gateOk(): void {
+    if (!teachOpen || !gate) return;
+    if (gateAnswer() !== gate.answer) {
+      gate = makeGate();
+      showGate(gate.question, gateOk);
+      setGateStatus("Not quite. Please ask a grown-up to help!");
+      return;
+    }
+    gate = null;
+    setTeachStatus("");
+    drawTeach(plan, teachHandlers);
+    hud.showOverlay("teach");
+    audio.sfx("ui");
+  }
+
+  function addOwnVerse(): void {
+    if (!teachOpen || gate) return;
+    const typed = ownInput();
+    const verse = cleanOwn(typed.ref, typed.text);
+    if (!verse) { setTeachStatus("Please type the reference and the verse."); return; }
+    if (plan.own.length >= MAX_OWN) { setTeachStatus(`You can add up to ${MAX_OWN} of your own verses.`); return; }
+    plan.own.push(verse);
+    clearOwnInput();
+    setTeachStatus(`Added ${verse.ref}.`);
+    savePicks();
+  }
+
+  /** Turn this device's verses on or off. */
+  function toggleFamily(): void {
+    if (!teachOpen || gate) return;
+    if (!plan.on && plan.picks.length + plan.own.length === 0) { setTeachStatus("Pick at least one verse first."); return; }
+    plan.on = !plan.on;
+    setTeachStatus(plan.on ? "On! Kids playing on this device get a 📖 verse book with your verses." : "Off. The game uses its own verse for each level.");
+    savePicks();
+    audio.sfx("ui");
+  }
+
+  function startClass(): void {
+    if (!teachOpen || gate) return;
+    if (plan.picks.length === 0) { setTeachStatus("Pick at least one verse from the library first."); return; }
+    hostRoom(true);
   }
 
   function toTitle(): void {
     if (!sm.is("paused", "gameover", "levelclear", "win")) return;
-    verseThen = null;
+    verseNow = null;
+    bookOpen = false;
     leaveOnline();
     sm.transition("title");
     makePlayers(false);
@@ -762,8 +934,15 @@ export function startGame(canvas: HTMLCanvasElement): void {
         audio.sfx("ui");
         break;
       case "talk": talk(); break;
-      case "verse-ready": if (verseThen) hud.verseStage(true); break;
-      case "verse-peek": if (verseThen) hud.verseStage(false); break;
+      case "verse-ready": if (verseNow) hud.verseStage(true); break;
+      case "verse-peek": if (verseNow) hud.verseStage(false); break;
+      case "book": openBook(); break;
+      case "book-close": if (bookOpen) resumePlay(); break;
+      case "teach": openGate(); break;
+      case "gate-ok": gateOk(); break;
+      case "own-add": addOwnVerse(); break;
+      case "family": toggleFamily(); break;
+      case "class-start": startClass(); break;
       case "verse-check": checkVerse(); break;
       case "city":
         if (!sm.is("title")) break;
@@ -804,8 +983,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
         audio.sfx("ui");
         break;
       case "back":
+        if (!sm.is("title")) break;
         onlineMenuOpen = false;
         dressOpen = false;
+        teachOpen = false;
+        gate = null;
         hud.showOverlay("title");
         break;
       case "host": hostRoom(); break;
@@ -816,13 +998,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
   /** Space / Enter context action, by state. */
   function primaryAction(): void {
     if (sm.is("title")) {
-      if (onlineMenuOpen || dressOpen) return; // those screens are waiting on a button, not Space
+      if (onlineMenuOpen || dressOpen || teachOpen) return; // those screens are waiting on a button, not Space
       const u = unlockedLevel();
       startRun(u > 0 ? u : requestedStartLevel(), false);
     } else if (sm.is("playing")) {
       pendingJump = true;
     } else if (sm.is("paused")) {
-      resumePlay();
+      if (!bookOpen) resumePlay(); // (the verse book closes with its own button, not a stray Space)
     } else if (sm.is("gameover")) {
       retryLevel();
     } else if (sm.is("levelclear")) {
@@ -1069,7 +1251,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   // ── Online: rooms, friends' kids, shared stars and levels ───────────────
   function roomPill(): void {
     if (!net) hud.setRoom(null);
-    else hud.setRoom(`🌐 ${net.code} · ${remotes.size + 1} kid${remotes.size ? "s" : ""}`);
+    else hud.setRoom(`${roomPicks ? "🏫" : "🌐"} ${net.code} · ${remotes.size + 1} kid${remotes.size ? "s" : ""}`);
   }
 
   function removeRemote(id: string): void {
@@ -1081,6 +1263,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
     scene.remove(r.pet.group);
     scene.remove(r.p.group);
     remotes.delete(id);
+    const row = board.get(id);
+    if (row) {
+      row.here = false;
+      if (bookOpen && !verseNow) showBook();
+    }
     roomPill();
   }
 
@@ -1088,6 +1275,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
     net?.dispose();
     net = null;
     for (const id of [...remotes.keys()]) removeRemote(id);
+    roomPicks = null;
+    classHost = false;
+    board.clear();
+    refreshBook();
     hud.setRoom(null);
   }
 
@@ -1101,19 +1292,29 @@ export function startGame(canvas: HTMLCanvasElement): void {
       case "s": {
         let r = remotes.get(from);
         if (!r) {
-          if (remotes.size >= MAX_KIDS - 1 || !from) return;
+          if (remotes.size >= CLASS_MAX_KIDS - 1 || !from) return; // (the host decides how many may join)
           const p = new Player(lookOf(safeLook({ body: m.bd, outfit: m.o, skin: m.sk, hair: m.hs, hairColor: m.hc, glasses: m.gs, clothes: m.cs })));
           p.setHat(safeHat(m.h));
-          const tag = makeTextSprite(nameText(safeName(m.n)), { bg: "rgba(108,92,231,0.88)", fg: "#ffffff", size: 44, height: 0.4 });
+          const name = nameText(safeName(m.n));
+          const tag = makeTextSprite(name, { bg: "rgba(108,92,231,0.88)", fg: "#ffffff", size: 44, height: 0.4 });
           tag.position.y = 2.25;
           p.group.add(tag);
           p.pos.set(num(m.x), num(m.y), num(m.z));
           scene.add(p.group);
-          r = { p, tag, bubble: new Bubble(p.group, 2.75), seen: elapsed, level: -1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, g: true, gl: false, r: false, f: 0, fl: false, bg: false, car: null, rk: "", pet: new Pet() };
+          r = { p, name, tag, bubble: new Bubble(p.group, 2.75), seen: elapsed, level: -1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, g: true, gl: false, r: false, f: 0, fl: false, bg: false, car: null, rk: "", pet: new Pet() };
           scene.add(r.pet.group);
           remotes.set(from, r);
+          if (classHost) {
+            // the teacher's scoreboard gets a row for every kid, even before their first verse
+            const row = board.get(from);
+            if (row) {
+              row.name = name;
+              row.here = true;
+            } else board.set(from, { name, done: new Set(), here: true });
+            if (bookOpen && !verseNow) showBook();
+          }
           roomPill();
-          hud.showToast(`${nameText(safeName(m.n))} is here! 👋`);
+          hud.showToast(`${name} is here! 👋`);
         }
         r.seen = elapsed;
         r.level = num(m.L);
@@ -1156,16 +1357,25 @@ export function startGame(canvas: HTMLCanvasElement): void {
       case "level": {
         const i = num(m.i);
         if (!Number.isInteger(i) || i < 0 || i >= LEVELS.length) return;
+        // a class: the teacher's verses come with the welcome (as library positions, never text)
+        const cls = net && !net.isHost && m.cls !== undefined ? safePicks(m.cls) : [];
+        if (cls.length) {
+          roomPicks = cls;
+          for (const k of cls) if (doneNow.has(LIBRARY[k].ref)) net?.send({ t: "vd", k }); // (after a reconnect)
+          refreshBook();
+        }
         if (sm.is("title", "win")) {
           // just joined (or the host pressed Play again): start on the room's level
           startRun(i, false);
           roomPill();
-          hud.showToast(`Joined room ${net?.code ?? ""}! Say hi with the 👋 sticker`);
+          hud.showToast(cls.length
+            ? `Joined the class! 📖 Tap the book to learn ${cls.length === 1 ? "the verse" : `${cls.length} verses`}`
+            : `Joined room ${net?.code ?? ""}! Say hi with the 👋 sticker`);
         } else if (i !== levelIdx) {
           if (sm.is("paused")) resumePlay();
           if (sm.is("levelclear")) {
             // a friend finished their verse first: go along with them
-            verseThen = null;
+            verseNow = null;
             backToPlay();
           }
           if (sm.is("playing")) friendsGoTo(i, `🎉 A friend opened the portal! On to ${LEVELS[i].name}!`);
@@ -1175,6 +1385,21 @@ export function startGame(canvas: HTMLCanvasElement): void {
           hud.setStars(stars.takenCount, stars.total);
           if (stars.allCollected) world.setPortalUnlocked(true);
         }
+        break;
+      }
+      case "vd": {
+        // a classmate typed a class verse from memory
+        const k = num(m.k);
+        if (!roomPicks || !Number.isInteger(k) || !roomPicks.includes(k) || !from) return;
+        const r = remotes.get(from);
+        if (classHost) {
+          const row = board.get(from) ?? { name: r?.name ?? "A friend", done: new Set<number>(), here: true };
+          if (row.done.has(k)) return;
+          row.done.add(k);
+          board.set(from, row);
+          if (bookOpen && !verseNow) showBook();
+        }
+        if (r && sm.is("playing")) hud.showToast(`${r.name} memorized ${LIBRARY[k].ref}! 🎉`);
         break;
       }
       case "win":
@@ -1188,7 +1413,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   function wireNet(n: Net): void {
     n.onMessage = onNetMessage;
-    n.onPeerJoined = (id) => n.sendTo(id, { t: "level", i: levelIdx, taken: takenStarIndices() });
+    n.onPeerJoined = (id) => n.sendTo(id, { t: "level", i: levelIdx, taken: takenStarIndices(), ...(roomPicks ? { cls: roomPicks } : {}) });
     n.onPeerLeft = (id) => removeRemote(id);
     n.onHostLost = () => {
       leaveOnline();
@@ -1196,22 +1421,30 @@ export function startGame(canvas: HTMLCanvasElement): void {
     };
   }
 
-  function hostRoom(): void {
+  /** Make a room for friends, or (asClass) a class room that hands out the teacher's verses. */
+  function hostRoom(asClass = false): void {
     if (connecting || net || !sm.is("title")) return;
     connecting = true;
-    hud.setOnlineStatus("Making a room…");
-    Net.host().then((n) => {
+    const say = asClass ? setTeachStatus : (t: string) => hud.setOnlineStatus(t);
+    say("Making a room…");
+    Net.host(asClass ? CLASS_MAX_KIDS : MAX_KIDS).then((n) => {
       connecting = false;
-      if (disposed || !onlineMenuOpen) { n.dispose(); return; }
+      if (disposed || !(asClass ? teachOpen : onlineMenuOpen)) { n.dispose(); return; }
       net = n;
       wireNet(n);
+      if (asClass) {
+        roomPicks = plan.picks.slice();
+        classHost = true;
+      }
       // friends meet on the big island unless the link asks for a level
       startRun(new URLSearchParams(location.search).has("level") ? requestedStartLevel() : islandLevel(), false);
       roomPill();
-      hud.showToast(`Your room code is ${n.code} — tell your friends!`);
+      hud.showToast(asClass
+        ? `Class code: ${n.code} — kids press "Play with friends" and type it`
+        : `Your room code is ${n.code} — tell your friends!`);
     }, (err: Error) => {
       connecting = false;
-      hud.setOnlineStatus(err.message);
+      say(err.message);
     });
   }
 
@@ -1269,6 +1502,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       if (r.pet.group.visible) {
         r.pet.update(dt, elapsed, r.p.pos.x, petGroundY(r.pet.group.position.x, r.pet.group.position.z, r.p.pos.y), r.p.pos.z);
       }
+      r.p.near = r.p.pos.distanceToSquared(players[0].pos) < 45 * 45; // far-away friends animate less often
       if (r.p.group.visible) r.p.applyRemote(dt, r.x, r.y, r.z, r.vx, r.vy, r.vz, r.g, r.gl, r.r, r.f, r.fl, r.bg);
       r.bubble.update(dt);
     }
@@ -1318,7 +1552,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (input.consumeAction("KeyH")) honk();
     if (input.consumeAction("KeyF")) talk();
 
-    if (sm.is("paused")) return;
+    if (sm.is("paused")) {
+      // a kid reading the verse book (or paused) stays in the room: friends see them standing still
+      if (net && ++sendTick % (NET_SEND_EVERY * 4) === 0) sendState();
+      return;
+    }
 
     // the world stays alive on every screen (title orbit, overlays, gameplay)
     elapsed += dt;
@@ -1934,7 +2172,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
     sun.target.position.set(sx, sy, sz);
     sun.position.set(sx + 18, sy + 30, sz + 28);
 
-    if (net && ++sendTick % NET_SEND_EVERY === 0) sendState();
+    // a full class sends half as often, so the teacher's device isn't flooded
+    if (net && ++sendTick % (remotes.size > 5 ? NET_SEND_EVERY * 2 : NET_SEND_EVERY) === 0) sendState();
   }
 
   const loop = new GameLoop({
@@ -2007,7 +2246,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
     heli: heli.group.visible ? { x: heli.pos.x, y: heli.pos.y, z: heli.pos.z, occupied: heli.occupied } : null,
     rings: rings.passed,
     food: foods.items.filter((f) => !f.taken).length,
-    verse: verseFor(levelIdx),
+    verse: gateVerse(),
+    lesson: { refs: lessonVerses().map((v) => v.ref), done: [...doneNow], room: roomPicks !== null, host: classHost, on: plan.on },
+    board: boardRows(),
     song: audio.playingSong,
     bank,
     owned: [...owned],

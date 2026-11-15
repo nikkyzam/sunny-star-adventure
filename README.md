@@ -62,10 +62,53 @@ and they type it from memory. The next level opens only when the verse is right.
 - After a wrong try, the words they got turn green and the rest show as blanks.
 - **Peek at the verse** shows it again, as often as needed.
 - Playing online, the kid who reaches the portal says the verse, then everyone moves on together.
-- Verses are from the King James Version (public domain) and live in `src/game/verses.ts`, one
-  per level. Edit that file to change verses or use another translation.
+- Verses are from the King James Version (public domain) and live in `src/game/verses.ts`: about
+  100 verses in eight topics. The first eleven are the game's own, one per level.
+- The first time a kid types a verse from memory, it pays 15 coins.
 - The title-screen shortcuts (Adventure Island, Drive in Toy City), Continue and the rocket are
   not gated; only finishing a level through its portal is.
+
+## Verse classes for teachers and families 👩‍🏫
+
+A grown-up can choose the verses. On the title screen, tap **Teachers & parents: pick the verses**
+and answer the grown-up sum.
+
+- **Pick up to 8 verses** from the library, by topic, or type in your own in any translation.
+- **Use on this device**: kids get a 📖 verse book while they play. They can learn any of your
+  verses at any time, and your verses replace the game's own at the end of each level.
+- **Start a class**: you get a room code and land on Adventure Island. Up to 12 kids press
+  **Play with friends**, type the code, and get your library verses in their verse book. Your own
+  verse book shows each kid's made-up name and which verses they have typed from memory.
+- Only library verses travel to other devices, as numbers. Verses you type in stay on your device,
+  so nothing typed is ever sent between players.
+
+## Jobs 💼
+
+Villagers with a 💼 on their name tag have a job for you. Talk to one to start; beams of light and
+an arrow over your head show where to go. Talk to your boss twice to stop.
+
+| Job | Who | What you do | Pay |
+|---|---|---|---|
+| Pizza delivery | Chef Chili, Chef Pepper | Take a pizza to a villager | 10 |
+| Mail carrier | Postie Pat, Postie Paz | Bring letters to three villagers | 15 |
+| Firefighter | Chief Blaze, Chief Ember | Stand close to three fires to spray them out | 15 |
+| Farmer | Farmer Fern | Pull up six carrots, bring them back | 10 |
+| Beach cleanup | Surfer Sky, Ranger Rosa | Pick up the bottles, report back | 10 |
+| Fishing | Fisher Flo, Fisher Fred | Sail the boat to three jumping fish | 15 |
+| Bus driver | Driver Dee, Driver Dash | Drive the car to four bus stops in order | 15 |
+| Sky cargo | Cargo Cass, Pilot Penny | Fly the helicopter through two drop rings | 20 |
+| Crystal hunter | Blorp (on the Moon) | Find five moon crystals | 15 |
+
+## Sunshine City 🏙️
+
+A seaside city at sunset, straight from the title screen: glass skyscrapers to bounce up and glide
+off, streets with crosswalks and traffic that stops for kids, parks, shops, a fire station and post
+office to walk into, a pier with a boat, a Ferris wheel, a helicopter on top of Sunshine Tower, and
+a city house to buy for 80 coins.
+
+## Ads and selling the game
+
+Ad breaks between levels are built in but switched off. See [MONETIZATION.md](MONETIZATION.md).
 
 ## Coins, a job and a mansion 💰
 

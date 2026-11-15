@@ -38,6 +38,9 @@ export class Net {
   private conns: DataConnection[] = [];
   private disposed = false;
 
+  /** Host: how many kids fit in the room, the host included. */
+  private maxKids = MAX_KIDS;
+
   private constructor(private peer: Peer, readonly code: string, readonly isHost: boolean) {
     peer.on("disconnected", () => { if (!this.disposed) peer.reconnect(); });
   }
@@ -51,13 +54,14 @@ export class Net {
   }
 
   /** Make a room. Retries a few codes in case one is already taken. */
-  static host(): Promise<Net> {
+  static host(maxKids = MAX_KIDS): Promise<Net> {
     const attempt = (tries: number): Promise<Net> =>
       new Promise<Net>((resolve, reject) => {
         const code = makeCode();
         const peer = new Peer(PREFIX + code);
         peer.once("open", () => {
           const net = new Net(peer, code, true);
+          net.maxKids = maxKids;
           peer.on("connection", (conn) => net.accept(conn));
           resolve(net);
         });
@@ -126,7 +130,7 @@ export class Net {
   }
 
   private accept(conn: DataConnection): void {
-    if (this.conns.length >= MAX_KIDS - 1) {
+    if (this.conns.length >= this.maxKids - 1) {
       conn.on("open", () => conn.close());
       return;
     }
