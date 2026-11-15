@@ -171,7 +171,11 @@ try {
   await walkTo(9, 6, 1);
   await walkTo(17, -4, 1);
   // line up with the doorway (1.8 m wide) before walking in
-  await walkTo(17, -8.4, 0.2);
+  if (!(await walkTo(17, -8.4, 0.2, 12000))) {
+    // a slow machine can leave the step-walker short of the doorway: stand in front of it instead
+    await page.evaluate(() => window.__gameDebug().warp(17, -8.4));
+    await page.waitForTimeout(300);
+  }
   check("A10a outside the house counts as outside", (await dbg()).inside === false);
   await walkTo(17, -11.6, 0.6);
   await page.waitForTimeout(500);

@@ -155,6 +155,76 @@ try {
   await page.screenshot({ path: join(ROOT, "verification-shots/76-chapel.png") });
   check("F7 Sunshine City has a chapel with five scrolls around town", Math.abs(roof - 5.25) < 0.2 && (await page.evaluate(() => window.__gameDebug().scrolls.length)) === 5, `roof ${roof}`);
 
+  // ── Jonah ──
+  const fresh = async (action) => {
+    await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
+    await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
+    await page.click(`[data-action=${action}]`);
+    await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
+    await page.waitForTimeout(800);
+  };
+  await fresh("jonah");
+  check("J1 the Jonah button opens his world", (await page.evaluate(() => document.getElementById("hud-level").textContent)).includes("Jonah"));
+  await warp(0, 56);
+  await page.waitForTimeout(300);
+  check("J2 the big fish's back is a place to stand", Math.abs((await dbg()).py - 3.4) < 0.2, `y ${(await dbg()).py}`);
+  await warp(4, 74);
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: join(ROOT, "verification-shots/77-big-fish.png") });
+  await warp(2.6, 10.4);
+  await page.waitForTimeout(300);
+  await talk();
+  d = await dbg();
+  check("J3a Jonah's job: two legs by boat, then two people to tell", d.job?.id === "jonah" && d.job.left.length === 4 && d.job.left[0].ride === "boat" && d.job.left[1].ride === "boat" && !!d.job.left[2].npc && !!d.job.left[3].npc, JSON.stringify(d.job?.left));
+  const legs = d.job.left;
+  const bankJ = d.bank;
+  await warp(1, 20.6);
+  await page.waitForTimeout(400);
+  await page.keyboard.press("KeyE");
+  await page.waitForTimeout(300);
+  check("J3b hop in the boat at Joppa's dock", (await dbg()).boat?.occupied === true);
+  for (const s of legs.slice(0, 2)) {
+    const before = leftCount(await dbg());
+    await page.evaluate((s) => window.__gameDebug().placeBoat(s.x, s.z, 0), s);
+    await until((x) => leftCount(x) < before);
+  }
+  await page.keyboard.press("KeyE");
+  await page.waitForTimeout(400);
+  for (const s of legs.slice(2)) {
+    const before = leftCount(await dbg());
+    await warp(s.x + 1.3, s.z + 0.4, s.y + 0.5);
+    await until((x) => leftCount(x) < before);
+  }
+  d = await until((x) => x.job === null);
+  check("J3 telling Nineveh pays 20", d.job === null && d.bank >= bankJ + 20, `bank ${bankJ} → ${d.bank}`);
+  await page.screenshot({ path: join(ROOT, "verification-shots/78-nineveh.png") });
+
+  // ── David ──
+  await fresh("david");
+  check("D1 the David button opens the valley", (await page.evaluate(() => document.getElementById("hud-level").textContent)).includes("David"));
+  await warp(12, -11);
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: join(ROOT, "verification-shots/79-goliath.png") });
+  await warp(-8, -10.6);
+  await page.waitForTimeout(300);
+  await talk();
+  d = await dbg();
+  check("D2a David asks for five smooth stones", d.job?.id === "david" && d.job.left.length === 5, JSON.stringify(d.job?.left.length));
+  for (const s of d.job.left) {
+    const before = leftCount(await dbg());
+    await warp(s.x, s.z);
+    await until((x) => leftCount(x) < before || x.job?.reporting);
+  }
+  d = await until((x) => x.job?.reporting === true);
+  check("D2b with five stones, it's time to face Goliath", d.job?.reporting === true && (await pill()).includes("Goliath"), await pill());
+  const bankD = d.bank;
+  await warp(12, -15.2);
+  d = await until((x) => x.job === null);
+  await warp(12, -10);
+  await page.waitForTimeout(1800);
+  check("D2 facing Goliath ends the job and pays 20", d.job === null && d.bank === bankD + 20, `bank ${bankD} → ${d.bank}`);
+  await page.screenshot({ path: join(ROOT, "verification-shots/80-goliath-down.png") });
+
   check("F9 no page errors", errors.length === 0, errors.join(" | "));
 } catch (e) {
   console.error(e);

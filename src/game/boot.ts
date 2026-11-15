@@ -128,7 +128,7 @@ const P2_JUMP = "Enter";
 const SONG_FOR: Record<string, SongId> = {
   "Sunny Meadow": "meadow", "Candy Canyon": "candy", "Rainbow Peak": "jungle", "Castle in the Clouds": "meadow",
   "Toy City": "city", "Frosty Mountain": "snow", "Bubbly Beach": "beach", "Jungle Vines": "jungle",
-  "Starlight Peak": "night", "Adventure Island": "island", "Moon Base": "space", "Sunshine City": "city", "Noah's Ark": "meadow",
+  "Starlight Peak": "night", "Adventure Island": "island", "Moon Base": "space", "Sunshine City": "city", "Noah's Ark": "meadow", "Jonah and the Big Fish": "beach", "David and Goliath": "meadow",
 };
 const NET_SEND_EVERY = 4; // fixed steps between state packets (60 Hz / 4 = 15 Hz)
 const REMOTE_TIMEOUT = 6; // seconds without a packet before a friend's kid is removed
@@ -998,6 +998,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
         startRun(LEVELS.findIndex((l) => l.ark), false);
         hud.showToast("🌈 Find Noah by the ark. The animals need your help!");
         break;
+      case "jonah":
+      case "david": {
+        if (!sm.is("title")) break;
+        startRun(LEVELS.findIndex((l) => l.name === (a === "jonah" ? "Jonah and the Big Fish" : "David and Goliath")), false);
+        hud.showToast(a === "jonah" ? "🐋 Talk to Jonah by the dock, then sail south!" : "🪨 Find David in the valley. He needs five smooth stones!");
+        break;
+      }
       case "drive":
         if (!sm.is("title")) break;
         startRun(LEVELS.findIndex((l) => l.carSpawn), false);
@@ -1224,6 +1231,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       ground: jobGround,
     });
     if (jobs.id) {
+      if (id === "david") npcs.setFallen("Goliath", false);
       hud.setJob(jobs.label());
       audio.sfx("powerup");
       hud.showToast(`${def.emoji} New job: ${def.title}! Pays ${def.pay} coins`);
@@ -1253,9 +1261,15 @@ export function startGame(canvas: HTMLCanvasElement): void {
         hud.setJob(jobs.label());
       } else if (e.type === "report") {
         audio.sfx("checkpoint");
-        hud.showToast(`${def.emoji} All done! Now go back to ${e.boss} to get paid`);
+        hud.showToast(def.reportTo ? jobs.label() : `${def.emoji} All done! Now go back to ${e.boss} to get paid`);
         hud.setJob(jobs.label());
       } else if (e.type === "done") {
+        if (def.reportTo === "Goliath") {
+          // the stone flies, and the giant topples over
+          npcs.setFallen("Goliath", true);
+          audio.sfx("stomp");
+          shake = Math.max(shake, 0.6);
+        }
         earn(e.pay);
         score += 100;
         jobsDone++;

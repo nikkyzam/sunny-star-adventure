@@ -89,11 +89,15 @@ and answer the grown-up sum.
 
 - **Noah's Ark** 🌈 (title screen): an island with the great ark. Walk up the ramp to the deck, talk
   to Noah, Shem, Ham and Japheth, and do Noah's job: find six pairs of animals and send them aboard.
+- **Jonah and the Big Fish** 🐋: talk to Jonah in Joppa, sail past the great fish (you can stand on
+  its back) to Nineveh, and tell the king and the people God's message.
+- **David and Goliath** 🪨: in the Valley of Elah, pick five smooth stones from the brook for David,
+  then stand before the giant. He falls over, and David says the battle is the LORD's.
 - **Churches**: a village church on Adventure Island and Sunshine Chapel in the city, with pews, a
   lectern and a cross. Pastor Paul and Pastor Grace hand out the **Helping hands** job: carry food
   baskets to three neighbors.
 - **Scripture scrolls** 📜: golden scrolls are hidden in Adventure Island (6), Sunshine City (5) and
-  Noah's Ark (4). Walk into one to read its verse; each pays 5 coins the first time.
+  each Bible-story world (4 each). Walk into one to read its verse; each pays 5 coins the first time.
 
 ## Jobs 💼
 
@@ -113,6 +117,8 @@ an arrow over your head show where to go. Talk to your boss twice to stop.
 | Crystal hunter | Blorp (on the Moon) | Find five moon crystals | 15 |
 | Helping hands | Pastor Paul, Pastor Grace | Carry food baskets to three neighbors | 15 |
 | Fill the ark | Noah | Find six pairs of animals, report back | 20 |
+| God's messenger | Jonah | Sail to Nineveh and tell two people | 20 |
+| Five smooth stones | David | Pick five stones, then face Goliath | 20 |
 
 ## Sunshine City 🏙️
 

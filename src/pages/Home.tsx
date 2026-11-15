@@ -67,7 +67,7 @@ export default function Home() {
         <div id="ov-title" className="overlay">
           <div className="panel title-panel">
             <h1 className="game-title">Sunny Star Adventure</h1>
-            <p className="tagline">Explore sky islands, Adventure Island, Sunshine City and Noah's Ark — collect every ★, bring your pet, sail the boat, drive the car, meet the villagers and play with friends!</p>
+            <p className="tagline">Explore sky islands, Adventure Island, Sunshine City and Bible stories — collect every ★, bring your pet, sail the boat, drive the car, meet the villagers and play with friends!</p>
             <div className="kid-setup">
               <div className="name-row">
                 <span id="kid-name" className="kid-name" />
@@ -83,10 +83,12 @@ export default function Home() {
                 <button className="big-btn island" data-action="island">🏝️ Adventure Island</button>
                 <button className="big-btn city" data-action="city">🏙️ Sunshine City</button>
               </div>
-              <div className="btn-pair">
+              <div className="btn-pair stories">
                 <button className="big-btn ark" data-action="ark">🌈 Noah's Ark</button>
-                <button className="big-btn" data-action="drive">🚗 Toy City</button>
+                <button className="big-btn ark" data-action="jonah">🐋 Jonah</button>
+                <button className="big-btn ark" data-action="david">🪨 David</button>
               </div>
+              <button className="big-btn" data-action="drive">🚗 Drive in Toy City</button>
               <button className="big-btn" data-action="play2">👥 2 Players (same keyboard)</button>
               <button id="btn-continue" className="big-btn" data-action="continue" style={{ display: 'none' }}>▶ Continue</button>
             </div>

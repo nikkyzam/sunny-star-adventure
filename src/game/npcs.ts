@@ -18,6 +18,8 @@ interface Npc {
   tag: THREE.Sprite;
   nextLine: number;
   met: boolean;
+  /** Knocked flat on their back (Goliath, once David's stone has flown). */
+  fallen?: boolean;
 }
 
 function makeVillager(def: NpcDef): { p: Player; tag: THREE.Sprite } {
@@ -30,6 +32,7 @@ function makeVillager(def: NpcDef): { p: Player; tag: THREE.Sprite } {
   p.setHat(safeHat(def.hat));
   p.pos.set(def.x, def.y, def.z);
   p.facing = 0;
+  if (def.scale) p.group.scale.setScalar(def.scale);
   // job givers wear a briefcase on their name tag
   const tag = makeTextSprite(def.job ? `💼 ${def.name}` : def.name, { bg: def.job ? "rgba(41,98,255,0.92)" : "rgba(255,169,77,0.92)", fg: "#ffffff", size: 44, height: 0.4 });
   tag.position.y = 2.3;
@@ -91,6 +94,12 @@ export class Npcs {
     return best;
   }
 
+  /** Lay a villager flat on their back, or stand them up again. */
+  setFallen(name: string, fallen: boolean): void {
+    const n = this.items.find((i) => i.def.name === name);
+    if (n) n.fallen = fallen;
+  }
+
   /** Villagers are solid: nudge a kid who walks into one back out. */
   pushOut(pos: THREE.Vector3): void {
     for (const n of this.items) {
@@ -129,6 +138,9 @@ export class Npcs {
         n.p.group.rotation.y = n.p.facing;
       }
       n.p.applyRemote(dt, n.def.x, n.def.y, n.def.z, 0, 0, 0, true, false, false, n.p.facing, false);
+      if (n.def.scale) n.p.group.scale.setScalar(n.def.scale); // (the kid model resets its own size each frame)
+      const lean = n.fallen ? -Math.PI / 2 : 0;
+      n.p.group.rotation.x += (lean - n.p.group.rotation.x) * Math.min(1, dt * 4);
     }
   }
 }

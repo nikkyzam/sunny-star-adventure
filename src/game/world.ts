@@ -78,6 +78,8 @@ export interface NpcDef {
   lines: string[];
   /** Sells something for coins (until it has been bought). */
   sells?: { id: string; price: number; what: string };
+  /** Taller or smaller than everyone else (Goliath is 2.6). */
+  scale?: number;
   /** Hands out a job (see jobs.ts). */
   job?: JobId;
   /** Places their job uses: garden rows, litter, fishing spots, bus stops, drop rings… */
@@ -170,6 +172,12 @@ export interface LevelDef {
   traffic?: TrafficLoop[];
   /** Scripture scrolls to find: x, y, z and the reference of the library verse (verses.ts) written on it. */
   scrolls?: [number, number, number, string][];
+  /** A great fish floating in the sea: x, z. Its back is a place to stand. */
+  bigFish?: [number, number];
+  /** Camp tents: x, y, z, color. */
+  tents?: [number, number, number, number][];
+  /** Shallow water lying on the ground (a brook): flat blue strips. */
+  brooks?: RoadDef[];
   /** Noah's ark: x, z of its middle (the hull runs along x; its deck is a platform to walk on). */
   ark?: [number, number];
 }
@@ -1414,6 +1422,178 @@ const ARK_ISLAND: LevelDef = {
 };
 LEVELS.push(ARK_ISLAND);
 
+/**
+ * Jonah and the Big Fish (the book of Jonah): the harbor town of Joppa, a great fish out at sea,
+ * and the city of Nineveh on the far shore. Sail there with God's message.
+ */
+const JONAH_SEA: LevelDef = {
+  name: "Jonah and the Big Fish",
+  sky: 0x8fd0ff, fog: 0xc8e8ff,
+  grass: 0x7ed957, dirt: 0xc9a26b, foliage: 0x3fa34d,
+  flowerColors: [0xff6b9d, 0xffd93d, 0xffffff],
+  spawn: [0, 0.3, 4],
+  sea: -0.5,
+  boatSpawn: [3.4, 21, 0],
+  bigFish: [0, 56],
+  discs: [
+    { x: 0, z: 0, r: 17, y: 0, color: SAND },                               // Joppa
+    { x: 0, z: -1, r: 11.5, y: 0.3, trees: 3, flowers: 10, rocks: 2 },
+    { x: 0, z: 112, r: 22, y: 0, color: SAND },                             // Nineveh
+    { x: 0, z: 113, r: 16, y: 0.3, color: PAVEMENT, paved: true },
+    { x: -30, z: 60, r: 5, y: 0.2, trees: 2, rocks: 1, color: SAND },       // a little islet on the way
+  ],
+  bridges: [{ x: 0, z: 19, w: 2.4, d: 8, y: 0.1 }, { x: 0, z: 88.5, w: 2.4, d: 6, y: 0.1 }], // the two docks
+  buildings: [
+    { x: -6, z: -5, w: 4, d: 4, h: 3.4, color: 0xffd93d, enter: true },
+    { x: 6, z: -6, w: 4, d: 4, h: 3.8, color: 0x5cb8ff, enter: true },
+    // Nineveh, "that great city"
+    { x: -8, z: 108, w: 5, d: 5, h: 6, color: 0xe8c48a },
+    { x: 8, z: 108, w: 5, d: 5, h: 8, color: 0xd9a066 },
+    { x: -9, z: 119, w: 5, d: 6, h: 5, color: 0xf0d9a8 },
+    { x: 9, z: 119, w: 5, d: 6, h: 7, color: 0xe8c48a },
+    { x: 0, z: 124.5, w: 8, d: 4, h: 10, color: 0xffe2a8 },                 // the king's palace
+  ],
+  springs: [{ x: -8.6, z: 56, y: -0.9, power: 17 }, { x: 4.2, z: 124.5 - 3.2, y: 0.3, power: 24 }], // onto the fish; onto the palace
+  stars: [
+    [0, 1.5, -2], [-6, 1.5, -5.2], [6, 1.5, -6.2], [0, 1.3, 22],
+    [0, 5.2, 56], [3, 5.2, 56], [10, 1.2, 56],                    // on the fish's back, and at its mouth
+    [-30, 1.4, 60], [20, 1.0, 38], [-14, 1.0, 84],
+    [0, 1.3, 90], [0, 1.6, 113], [-8, 7.4, 108], [0, 11.4, 124.5],
+  ],
+  coins: [...ring(10, 9, 0, -1, 1.3), ...line(6, 0, 16, 0, 22, 1.2), ...ring(8, 11, 0, 56, 0.6), ...ring(10, 12, 0, 113, 1.3)],
+  chests: [[-30, 0.2, 62], [9, 0.3, 113]],
+  hearts: [[-3, 5.2, 56]],
+  magnets: [],
+  buddies: [],
+  slimes: [],
+  checkpoints: [[2, 0.3, 8], [2.5, 0.3, 96]],
+  portal: [0, 0.3, 116],
+  food: [["apple", -3, 1.3, 6], ["icecream", 5, 1.3, 104]],
+  scrolls: [
+    [0, 5.2, 54.6, "Psalm 145:18"],          // on the fish's back
+    [-10, 1.3, 0, "Psalm 46:1"],
+    [0, 1.6, 100.5, "1 John 1:9"],
+    [-30, 1.3, 58, "Jeremiah 33:3"],
+  ],
+  npcs: [
+    {
+      name: "Jonah", x: 2.6, y: 0.3, z: 9, outfit: 3, hat: 0, skin: 2, job: "jonah",
+      spots: [[10, -0.5, 50], [3.4, -0.5, 84]],
+      lines: ["God gave me a message for Nineveh. I ran away once. Never again!"],
+    },
+    {
+      name: "Sailor Sam", x: -2.4, y: 0, z: 14.5, outfit: 1, hat: 4, skin: 4,
+      lines: [
+        "Jonah tried to sail away from God, and a mighty storm came up. But you can't hide from God!",
+        "A great fish swallowed Jonah. He was inside it three days and three nights, and he prayed.",
+        "The fish is out there, to the south. Bounce on the spring by its tail to stand on its back!",
+      ],
+    },
+    {
+      name: "King of Nineveh", x: 0, y: 0.3, z: 120.5, outfit: 4, hat: 3, skin: 3,
+      lines: [
+        "When I heard God's message, I took off my royal robe and told everyone to pray.",
+        "God saw that we were sorry, and he forgave us. He is gracious and full of mercy!",
+      ],
+    },
+    {
+      name: "Nadia of Nineveh", x: -4, y: 0.3, z: 106, outfit: 2, hat: 0, skin: 1,
+      lines: [
+        "Nineveh is so big it takes three days to walk across!",
+        "God cares about every person in this city, and all the animals too.",
+      ],
+    },
+  ],
+};
+LEVELS.push(JONAH_SEA);
+
+/**
+ * David and Goliath (1 Samuel 17): the Valley of Elah. Israel's camp on one hill, the Philistines'
+ * on the other, a brook between them, and a giant nobody dares to face. Except a shepherd boy.
+ */
+const ELAH: LevelDef = {
+  name: "David and Goliath",
+  sky: 0xa8d8ff, fog: 0xdbeeff,
+  grass: 0x8fd060, dirt: 0xc9a26b, foliage: 0x3fa34d,
+  flowerColors: [0xffd93d, 0xffffff, 0xff9f43],
+  spawn: [-6, 0.3, 12],
+  sea: -0.5,
+  discs: [
+    { x: 0, z: -20, r: 48, y: 0, color: SAND },
+    { x: 0, z: -20, r: 43, y: 0.3, flowers: 22, rocks: 8 },
+    // Israel's hill (west) and the Philistines' hill (east)
+    { x: -26, z: -22, r: 13, y: 0.6, trees: 3 }, { x: -26, z: -22, r: 10.5, y: 0.9 }, { x: -26, z: -22, r: 8, y: 1.2 },
+    { x: 26, z: -22, r: 13, y: 0.6, rocks: 3 }, { x: 26, z: -22, r: 10.5, y: 0.9 }, { x: 26, z: -22, r: 8, y: 1.2 },
+    { x: -14, z: 6, r: 6, y: 0.34, trees: 5, flowers: 3 },                  // the sheep pasture
+    { x: 10, z: -50, r: 6, y: 0.34, trees: 5 },
+  ],
+  brooks: [{ x: 0, z: -20, w: 3.4, d: 64 }],
+  tents: [
+    [-26, 1.2, -22, 0x5c8fd6], [-30, 1.2, -18, 0x5c8fd6], [-23, 1.2, -27, 0xdfe6ee], [-30.5, 1.2, -25.5, 0xdfe6ee],
+    [26, 1.2, -22, 0xc0392b], [30, 1.2, -18, 0xc0392b], [23, 1.2, -27, 0x7d2a22], [30.5, 1.2, -25.5, 0x7d2a22],
+  ],
+  bridges: [],
+  springs: [],
+  balloons: [[26, 2.6, -15]],
+  hedgehogs: [{ ax: -17, az: 4, bx: -11, bz: 4, y: 0.34, speed: 0.8 }],
+  stars: [
+    [-6, 1.5, 4], [-14, 1.6, 6], [0, 1.4, -2], [0, 1.4, -38], [0, 1.4, -50],
+    [-26, 2.6, -17], [-20, 2.0, -22], [26, 2.6, -17], [26, 9, -15], [32, 2.0, -28],
+    [10, 1.6, -50], [-36, 1.5, -40], [38, 1.5, -2], [14, 1.5, -8],
+  ],
+  coins: [...line(10, 0, 8, 0, -48, 1.2), ...ring(8, 6, -26, -22, 2.2), ...ring(8, 6, 26, -22, 2.2)],
+  chests: [[-33, 1.2, -22], [33.5, 1.2, -22]],
+  hearts: [[-14, 1.6, 8]],
+  magnets: [],
+  buddies: [],
+  slimes: [],
+  checkpoints: [[-4, 0.3, 8], [-12, 0.3, -16]],
+  portal: [-30, 0.3, 0],
+  food: [["apple", -12, 1.3, 4], ["apple", -22, 1.9, -14], ["cupcake", 16, 1.3, -40]],
+  scrolls: [
+    [-14, 1.4, 4.5, "Psalm 23:1"],           // the sheep pasture
+    [-26, 2.4, -19, "Joshua 1:9"],           // Israel's camp
+    [0, 1.3, -44, "Psalm 27:1"],
+    [22, 1.3, -6, "2 Timothy 1:7"],
+  ],
+  npcs: [
+    {
+      name: "David", x: -8, y: 0.3, z: -12, outfit: 3, hat: 0, skin: 2, job: "david",
+      spots: [[0, 0.3, -6], [0.6, 0.3, -14], [-0.5, 0.3, -26], [0.4, 0.3, -34], [-0.3, 0.3, -42], [0.2, 0.3, 2]],
+      lines: ["I look after my father's sheep. God saved me from a lion and from a bear!"],
+    },
+    {
+      name: "Goliath", x: 12, y: 0.3, z: -20, outfit: 0, hat: 0, skin: 3, scale: 2.6,
+      lines: [
+        "I am Goliath of Gath! Who will come out and face me?",
+        "Nobody in Israel's whole army dares to come near me. Ha!",
+      ],
+    },
+    {
+      name: "King Saul", x: -23.5, y: 1.2, z: -19, outfit: 4, hat: 3, skin: 1,
+      lines: [
+        "For forty days that giant has shouted at us, and my soldiers are all afraid.",
+        "I offered David my armor, but it was far too big for him. He trusts in God instead.",
+      ],
+    },
+    {
+      name: "Eliab", x: -14, y: 0.3, z: -28, outfit: 1, hat: 0, skin: 2,
+      lines: [
+        "I'm David's big brother. He only came to bring us bread and cheese!",
+        "Goliath is over nine feet tall. But our God is bigger.",
+      ],
+    },
+    {
+      name: "Jesse", x: -11, y: 0.34, z: 9, outfit: 5, hat: 4, skin: 2,
+      lines: [
+        "David is my youngest son. He plays the harp and sings songs to God.",
+        "People look at the outside. The LORD looks at the heart.",
+      ],
+    },
+  ],
+};
+LEVELS.push(ELAH);
+
 const RAINBOW_COLORS = [0xff5f6d, 0xffa94d, 0xffe066, 0x7ed957, 0x5cb8ff, 0xb197fc];
 
 interface Solid {
@@ -1889,6 +2069,25 @@ export class World {
     this.ferris = null;
     if (def.ferris) this.buildFerris(...def.ferris);
     if (def.ark) this.buildArk(def.ark[0], def.ark[1]);
+    if (def.bigFish) this.buildBigFish(def.bigFish[0], def.bigFish[1], def.sea ?? 0);
+    for (const [tx, ty, tz, color] of def.tents ?? []) {
+      const tent = new THREE.Mesh(new THREE.ConeGeometry(1.6, 2.4, 4).rotateY(Math.PI / 4), new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.9 }));
+      tent.position.set(tx, ty + 1.2, tz);
+      tent.castShadow = true;
+      this.group.add(tent);
+      const flap = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.3), new THREE.MeshStandardMaterial({ color: 0x4a3524, side: THREE.DoubleSide }));
+      flap.position.set(tx, ty + 0.65, tz + 1.0);
+      flap.rotation.x = -0.6;
+      this.group.add(flap);
+      this.solids.push({ minX: tx - 0.9, maxX: tx + 0.9, minZ: tz - 0.9, maxZ: tz + 0.9, topY: ty + 2 });
+    }
+    for (const w of def.brooks ?? []) {
+      const y = (this.groundAt(w.x, w.z, 2)?.y ?? 0) + 0.04;
+      const water = new THREE.Mesh(new THREE.BoxGeometry(w.w, 0.04, w.d), new THREE.MeshStandardMaterial({ color: 0x5cb8ff, roughness: 0.2, transparent: true, opacity: 0.8 }));
+      water.position.set(w.x, y, w.z);
+      water.receiveShadow = true;
+      this.group.add(water);
+    }
 
     // ── Trampolines ──
     for (const s of def.springs) {
@@ -2446,6 +2645,51 @@ export class World {
     poles.computeBoundingSphere();
     globes.computeBoundingSphere();
     this.group.add(poles, globes);
+  }
+
+  /** The great fish of the book of Jonah: body along x, mouth toward +x, a spout, and a back to stand on. */
+  private buildBigFish(x: number, z: number, sea: number): void {
+    const g = new THREE.Group();
+    const skin = new THREE.MeshStandardMaterial({ color: 0x3f6fa8, flatShading: true, roughness: 0.6 });
+    const belly = new THREE.MeshStandardMaterial({ color: 0xcfe3f5, flatShading: true, roughness: 0.7 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x1d2b44, roughness: 0.5 });
+    const body = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), skin);
+    body.scale.set(9, 3.6, 4.6);
+    body.position.y = 0.6;
+    body.castShadow = true;
+    g.add(body);
+    const under = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), belly);
+    under.scale.set(8.2, 2.6, 4.2);
+    under.position.set(0.6, -0.4, 0);
+    g.add(under);
+    for (const s of [-1, 1]) {
+      const fluke = new THREE.Mesh(new THREE.ConeGeometry(1.6, 4, 4), skin);
+      fluke.position.set(-10.2, 1.6, s * 1.8);
+      fluke.rotation.set(s * 0.9, 0, Math.PI / 2 + 0.5);
+      fluke.castShadow = true;
+      g.add(fluke);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.4, 10, 8), dark);
+      eye.position.set(6.4, 1.6, s * 3.0);
+      g.add(eye);
+      const fin = new THREE.Mesh(new THREE.ConeGeometry(1.0, 3, 4), skin);
+      fin.position.set(2, -0.4, s * 4.6);
+      fin.rotation.x = s * 1.9;
+      g.add(fin);
+    }
+    const mouth = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), dark);
+    mouth.scale.set(2.2, 1.4, 3.2);
+    mouth.rotation.z = -Math.PI / 2;
+    mouth.position.set(7.4, 0.2, 0);
+    g.add(mouth);
+    const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.12, 3.4, 10, 1, true),
+      new THREE.MeshStandardMaterial({ color: 0xdff3ff, transparent: true, opacity: 0.6, depthWrite: false, roughness: 0.2 }));
+    spout.position.set(3, 5.6, 0);
+    g.add(spout);
+    g.position.set(x, sea, z);
+    this.group.add(g);
+    const top = sea + 3.9;
+    this.platforms.push({ kind: "box", x, z, r: 0, hw: 5.5, hd: 2.4, topY: top, spring: 0, baseX: x, baseZ: z, dx: 0, dz: 0, mesh: g, squashT: 0 });
+    this.solids.push({ minX: x - 8, maxX: x + 8, minZ: z - 3.6, maxZ: z + 3.6, topY: top - 0.4 });
   }
 
   /**

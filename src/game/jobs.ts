@@ -13,9 +13,9 @@ import type { RideKind } from "./car";
 import type { Particles } from "./particles";
 import { makeTextSprite, disposeSprite } from "./social";
 
-export type JobId = "pizza" | "mail" | "fire" | "farm" | "clean" | "fish" | "bus" | "cargo" | "moon" | "care" | "ark";
+export type JobId = "pizza" | "mail" | "fire" | "farm" | "clean" | "fish" | "bus" | "cargo" | "moon" | "care" | "ark" | "jonah" | "david";
 
-type Item = "carrot" | "bottle" | "fish" | "crystal" | "fire" | "busstop" | "drop" | "animals";
+type Item = "carrot" | "bottle" | "fish" | "crystal" | "fire" | "busstop" | "drop" | "animals" | "stone";
 
 export interface Stop {
   x: number; y: number; z: number;
@@ -54,6 +54,10 @@ interface JobDef {
   ordered: boolean;
   /** After the last stop, go back to the boss to be paid. */
   report?: boolean;
+  /** The last trip goes to this villager instead of the boss. */
+  reportTo?: string;
+  /** The HUD line for that last trip. */
+  reportLabel?: string;
   intro: (stops: Stop[]) => string;
   /** The HUD line while working. */
   label: (left: Stop[], total: number) => string;
@@ -156,6 +160,25 @@ export const JOBS: Record<JobId, JobDef> = {
     thanks: "Every animal is safe on the ark! God keeps his promises. Look for the rainbow!",
     make: (c) => fromSpots(c, c.spots.length, "animals", 2.2, 3).map((s, i) => ({ ...s, kind: i })),
   },
+  jonah: {
+    emoji: "🐋", title: "God's messenger", pay: 20, color: 0x5cb8ff, ordered: true,
+    intro: () => "God says: go to Nineveh, that great city! Take the boat and follow the beam: past the big fish, on to Nineveh's dock, then tell the people.",
+    label: (left, total) => (left[0]?.npc ? `🐋 Tell ${left[0].npc}` : `🐋 Sail to Nineveh · step ${total - left.length + 1} of ${total}`),
+    got: "We will listen, and turn back to God. Thank you for coming!",
+    thanks: "The whole city listened, and God forgave them!",
+    make: (c) => {
+      const tell = c.villagers.filter((v) => /Nineveh/.test(v.name));
+      return [...fromSpots(c, 2, "drop", 7, 4, { ride: "boat", inOrder: true }).map((s) => ({ ...s, item: undefined })), ...tell.map((v) => toVillager(v))];
+    },
+  },
+  david: {
+    emoji: "🪨", title: "Five smooth stones", pay: 20, color: 0xb8bec9, ordered: false, report: true,
+    reportTo: "Goliath", reportLabel: "🪨 Now face Goliath! God is with you",
+    intro: (s) => `I will face the giant, and God will help me. Pick ${s.length} smooth stones out of the brook for my sling, then go and stand before Goliath!`,
+    label: (left, total) => `🪨 Smooth stones ${total - left.length}/${total}`,
+    thanks: "The giant fell! The battle is the LORD's.",
+    make: (c) => fromSpots(c, 5, "stone", 1.3, 2),
+  },
   moon: {
     emoji: "💎", title: "Crystal hunter", pay: 15, color: 0xb197fc, ordered: false, report: true,
     intro: (s) => `Blorp needs shiny moon crystals! Find ${s.length}, then bring them back to Blorp.`,
@@ -199,6 +222,8 @@ export class Jobs {
   readonly group = new THREE.Group();
   id: JobId | null = null;
   boss: Villager | null = null;
+  /** Where the last trip of a "report back" job ends (the boss, unless the job says otherwise). */
+  private reportAt: Villager | null = null;
   private live: Live[] = [];
   private total = 0;
   /** Every stop is done: now walk back to the boss. */
@@ -232,7 +257,7 @@ export class Jobs {
   label(): string {
     const def = this.def;
     if (!def) return "";
-    if (this.reporting) return `${def.emoji} Back to ${this.boss?.name}!`;
+    if (this.reporting) return def.reportLabel ?? `${def.emoji} Back to ${this.boss?.name}!`;
     return def.label(this.left, this.total);
   }
 
@@ -254,6 +279,7 @@ export class Jobs {
     if (stops.length === 0) return "Hmm, there's no work today. Come back later!";
     this.id = id;
     this.boss = c.boss;
+    this.reportAt = (def.reportTo && c.villagers.find((v) => v.name === def.reportTo)) || c.boss;
     this.total = stops.length;
     this.beamMat = new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false, fog: false });
     this.arrowMat.color.setHex(def.color);
@@ -320,10 +346,10 @@ export class Jobs {
       if (def.ordered) break; // the next stop counts from the next frame
     }
     if (this.live.length === 0 && this.id) {
-      if (def.report && this.boss) {
+      if (def.report && this.boss && this.reportAt) {
         this.reporting = true;
-        this.addStop({ ...toVillager(this.boss, 3.4), npc: undefined });
-        ev.push({ type: "report", boss: this.boss.name });
+        this.addStop({ ...toVillager(this.reportAt, def.reportTo ? 5 : 3.4), npc: undefined });
+        ev.push({ type: "report", boss: this.reportAt.name });
       } else {
         ev.push({ type: "done", pay: def.pay, thanks: def.thanks, boss: this.boss?.name ?? "" });
         this.clear();
@@ -448,6 +474,12 @@ export class Jobs {
         pad.position.y = 0.06;
         pad.castShadow = false;
         g.add(pad);
+        break;
+      }
+      case "stone": {
+        const st = this.part("stone", () => new THREE.SphereGeometry(0.2, 10, 8).scale(1.2, 0.6, 1), std(0xdfe6ee, { roughness: 0.3 }));
+        st.position.y = 0.14;
+        g.add(st);
         break;
       }
       case "animals": {
