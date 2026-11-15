@@ -65,7 +65,7 @@ export default function Home() {
         <div id="ov-title" className="overlay">
           <div className="panel title-panel">
             <h1 className="game-title">Sunny Star Adventure</h1>
-            <p className="tagline">Explore sky islands, Toy City and the big Adventure Island — collect every ★, bring your pet, sail the boat, drive the car, meet the villagers and play with friends!</p>
+            <p className="tagline">Explore sky islands, Toy City, the big Adventure Island and Sunshine City — collect every ★, bring your pet, sail the boat, drive the car, meet the villagers and play with friends!</p>
             <div className="kid-setup">
               <div className="name-row">
                 <span id="kid-name" className="kid-name" />
@@ -77,12 +77,16 @@ export default function Home() {
             <div className="btn-col">
               <button className="big-btn primary" data-action="play">▶ Play</button>
               <button className="big-btn primary2" data-action="online">🌐 Play with friends</button>
-              <button className="big-btn island" data-action="island">🏝️ Adventure Island</button>
+              <div className="btn-pair">
+                <button className="big-btn island" data-action="island">🏝️ Adventure Island</button>
+                <button className="big-btn city" data-action="city">🏙️ Sunshine City</button>
+              </div>
               <button className="big-btn" data-action="drive">🚗 Drive in Toy City</button>
               <button className="big-btn" data-action="play2">👥 2 Players (same keyboard)</button>
               <button id="btn-continue" className="big-btn" data-action="continue" style={{ display: 'none' }}>▶ Continue</button>
             </div>
             <p id="title-best" className="best" />
+            <a className="parents-link" href="parents.html" target="_blank" rel="noopener">👪 For parents · Privacy</a>
             <div className="controls-help">
               <span>🕹️ P1: WASD + Space (jump ×2, hold = glide)</span>
               <span>👥 P2: Arrows + Enter</span>

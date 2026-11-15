@@ -30,7 +30,8 @@ function makeVillager(def: NpcDef): { p: Player; tag: THREE.Sprite } {
   p.setHat(safeHat(def.hat));
   p.pos.set(def.x, def.y, def.z);
   p.facing = 0;
-  const tag = makeTextSprite(def.name, { bg: "rgba(255,169,77,0.92)", fg: "#ffffff", size: 44, height: 0.4 });
+  // job givers wear a briefcase on their name tag
+  const tag = makeTextSprite(def.job ? `💼 ${def.name}` : def.name, { bg: def.job ? "rgba(41,98,255,0.92)" : "rgba(255,169,77,0.92)", fg: "#ffffff", size: 44, height: 0.4 });
   tag.position.y = 2.3;
   p.group.add(tag);
   return { p, tag };

@@ -47,6 +47,9 @@ import {
 } from "./profile";
 import { Pet } from "./pets";
 import { Npcs } from "./npcs";
+import { Jobs, JOBS, type Villager } from "./jobs";
+import { Traffic } from "./traffic";
+import { ads } from "./ads";
 import { STICKERS, Bubble, makeTextSprite, disposeSprite } from "./social";
 import { Net, MAX_KIDS, type NetMsg } from "./net";
 
@@ -82,6 +85,9 @@ declare global {
       bank: number;
       owned: string[];
       jobTarget: { name: string; x: number; z: number } | null;
+      job: { id: string; label: string; reporting: boolean; left: { x: number; y: number; z: number; npc?: string; ride?: string; hold?: number }[] } | null;
+      jobsDone: number;
+      traffic: { x: number; z: number; v: number }[];
       setBank: (n: number) => void;
       shipsSunk: number;
       shipsAfloat: number;
@@ -97,7 +103,8 @@ declare global {
       carSpeed: number;
       /** Test hooks: move the helicopter / the kid. */
       placeHeli: (x: number, y: number, z: number, heading: number) => void;
-      warp: (x: number, z: number) => void;
+      /** Onto the highest ground at (x, z), or the floor just below y when given (inside a house). */
+      warp: (x: number, z: number, y?: number) => void;
       /** Test hook: park the car somewhere else. */
       placeCar: (x: number, z: number, heading: number) => void;
       groundAt: (x: number, z: number) => number | null;
@@ -114,7 +121,7 @@ const P2_JUMP = "Enter";
 const SONG_FOR: Record<string, SongId> = {
   "Sunny Meadow": "meadow", "Candy Canyon": "candy", "Rainbow Peak": "jungle", "Castle in the Clouds": "meadow",
   "Toy City": "city", "Frosty Mountain": "snow", "Bubbly Beach": "beach", "Jungle Vines": "jungle",
-  "Starlight Peak": "night", "Adventure Island": "island", "Moon Base": "space",
+  "Starlight Peak": "night", "Adventure Island": "island", "Moon Base": "space", "Sunshine City": "city",
 };
 const NET_SEND_EVERY = 4; // fixed steps between state packets (60 Hz / 4 = 15 Hz)
 const REMOTE_TIMEOUT = 6; // seconds without a packet before a friend's kid is removed
@@ -199,8 +206,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const fleet = new Fleet();
   const props = new Props();
   const npcs = new Npcs();
+  const traffic = new Traffic();
   const pet = new Pet();
   const particles = new Particles();
+  const jobs = new Jobs(particles);
   const hud = new Hud();
   const audio = new AudioSystem();
   const input = new Input(canvas);
@@ -212,6 +221,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const blobGeo = new THREE.CircleGeometry(0.5, 20);
   const blobMat = new THREE.MeshBasicMaterial({ color: 0x1a2a1a, transparent: true, opacity: 0.28, depthWrite: false });
 
+  scene.add(jobs.group, traffic.group);
   scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, boat.group, heli.group, jet.group, rocket, rings.group, foods.group, fleet.group, props.group, npcs.group, pet.group, particles.points);
 
   // ── Run state ────────────────────────────────────────────────────────────
@@ -221,13 +231,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
   // the piggy bank: every coin ever earned, saved in this browser, spent on things like the mansion
   let bank = Math.max(0, Math.floor(storage.get<number>("bank", 0)) || 0);
   const owned = new Set<string>(storage.get<string[]>("owned", []));
-  let job: { target: (typeof npcs.items)[number] } | null = null;
-  const beacon = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.7, 0.7, 40, 14, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0xffd93d, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false, fog: false }),
-  );
-  beacon.visible = false;
-  scene.add(beacon);
+  let jobsDone = Math.max(0, Math.floor(storage.get<number>("jobsDone", 0)) || 0);
+  let quitArmed = -100; // when the kid last asked their boss about an unfinished job
+  let rideHintAt = -100;
 
   function earn(n: number): void {
     coinCount += n;
@@ -449,6 +455,12 @@ export function startGame(canvas: HTMLCanvasElement): void {
     levelIdx = i;
     world.owned = owned;
     world.buildLevel(i, scene);
+    // each world's light: a sunset city glows warm
+    const light = world.def.light;
+    sun.color.setHex(light?.sun ?? 0xfff5dd);
+    hemi.color.setHex(light?.sky ?? 0xffffff);
+    hemi.groundColor.setHex(light?.ground ?? 0x88aa66);
+    traffic.build(world.def.traffic ?? []);
     {
       const d = world.def;
       const watery = d.sea !== undefined || d.ocean === true;
@@ -512,8 +524,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
     if (humansPending) swapInHumans();
     npcs.build(world.def.npcs ?? []);
-    job = null;
-    beacon.visible = false;
+    jobs.clear();
     hud.setJob(null);
     pet.setKind(profile.pet);
     pet.snapTo(world.spawn.x, world.spawn.y, world.spawn.z);
@@ -538,6 +549,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     onlineMenuOpen = false;
     dressOpen = false;
     sm.transition("playing");
+    ads.gameplayStart();
     hud.showOverlay(null);
     hud.setPlayingUi(true);
     audio.startMusic();
@@ -552,6 +564,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   function levelComplete(): void {
+    ads.gameplayStop();
     const timeBonus = Math.max(0, 180 - Math.floor(timer)) * 5;
     score += timeBonus;
     // never lower saved progress (replaying an early level must not re-lock later ones)
@@ -602,6 +615,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   function gameOver(): void {
+    ads.gameplayStop();
     saveProgress();
     hud.fillGameOver(score, highScore.get());
     hud.setPlayingUi(false);
@@ -641,7 +655,15 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   // ── Flow helpers (shared by buttons and the Space/Enter context action) ──
+  /** A natural pause between rounds: maybe an ad (never in online play), then carry on. */
+  function adBreak(kind: "next" | "browse", name: string, then: () => void): void {
+    if (!ads.enabled || net) { then(); return; }
+    ads.gameplayStop();
+    void ads.pause(kind, name, (on) => audio.setAdMute(on)).then(() => { if (!disposed) then(); });
+  }
+
   function backToPlay(): void {
+    ads.gameplayStart();
     sm.transition("playing");
     hud.showOverlay(null);
     hud.setPlayingUi(true);
@@ -654,19 +676,21 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   function retryLevel(): void {
     if (!sm.is("gameover", "paused")) return;
-    score = levelStartScore;
-    loadLevel(levelIdx);
-    backToPlay();
+    adBreak("next", `retry-${levelIdx + 1}`, () => {
+      score = levelStartScore;
+      loadLevel(levelIdx);
+      backToPlay();
+    });
   }
 
   /** The next level opens once the kid has typed this level's memory verse. */
   function nextLevel(): void {
     if (!sm.is("levelclear")) return;
     const to = levelIdx + 1;
-    openVerse(() => {
+    openVerse(() => adBreak("next", `level-${to + 1}`, () => {
       loadLevel(to);
       backToPlay();
-    });
+    }));
   }
 
   // ── Memory verse gate ────────────────────────────────────────────────────
@@ -711,6 +735,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     hud.setBest(highScore.get());
     hud.showContinue(unlockedLevel() > 0, LEVELS[unlockedLevel()].name);
     audio.sfx("ui");
+    adBreak("browse", "title", () => {});
   }
 
   function playAgain(): void {
@@ -740,6 +765,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
       case "verse-ready": if (verseThen) hud.verseStage(true); break;
       case "verse-peek": if (verseThen) hud.verseStage(false); break;
       case "verse-check": checkVerse(); break;
+      case "city":
+        if (!sm.is("title")) break;
+        startRun(LEVELS.findIndex((l) => l.name === "Sunshine City"), false);
+        hud.showToast("🏙️ Welcome to Sunshine City! Bounce up the skyscrapers and glide down");
+        break;
       case "drive":
         if (!sm.is("title")) break;
         startRun(LEVELS.findIndex((l) => l.carSpawn), false);
@@ -805,6 +835,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   function togglePause(): void {
     if (sm.is("playing")) {
       sm.transition("paused");
+      ads.gameplayStop();
       hud.showOverlay("pause");
       hud.setPlayingUi(false);
       audio.sfx("ui");
@@ -893,30 +924,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
     const said = npcs.talk(npc);
     let text = said.text;
     const sells = npc.def.sells;
-    if (job && job.target === npc) {
-      // pizza delivered!
-      job = null;
-      beacon.visible = false;
-      hud.setJob(null);
-      earn(10);
-      score += 50;
-      hud.setCoins(bank);
-      hud.setScore(score);
-      audio.sfx("chest");
-      particles.burst(npc.p.pos.x, npc.p.pos.y + 1.6, npc.p.pos.z, 0xffc93c, 20, 4, 0.9, 4);
-      text = "Mmm, pizza! Thank you! Here are 10 coins. 🍕";
-    } else if (npc.def.job === "pizza") {
-      if (!job) {
-        const others = npcs.items.filter((n) => n !== npc);
-        job = { target: others[Math.floor(Math.random() * others.length)] };
-        beacon.position.set(job.target.p.pos.x, job.target.p.pos.y + 20, job.target.p.pos.z);
-        beacon.visible = true;
-        hud.setJob(`🍕 Pizza for ${job.target.def.name}`);
-        audio.sfx("powerup");
-        text = `Order up! Please take this pizza to ${job.target.def.name}. Look for the yellow beam of light. Drive, sail or fly!`;
-      } else {
-        text = `${job.target.def.name} is still waiting for that pizza. Follow the yellow beam of light!`;
-      }
+    if (npc.def.job) {
+      text = workFor(npc);
     } else if (sells && !owned.has(sells.id)) {
       if (bank >= sells.price) {
         bank -= sells.price;
@@ -929,7 +938,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
         particles.burst(npc.p.pos.x, npc.p.pos.y + 2, npc.p.pos.z, 0xffd93d, 40, 6, 1.2, 4);
         text = `Sold! The ${sells.what} is all yours. The door is open, go on in! 🏠`;
       } else {
-        text = `This ${sells.what} is for sale: ${sells.price} coins. You have ${bank}. Collect coins, deliver pizzas and sink pirate ships to save up!`;
+        text = `This ${sells.what} is for sale: ${sells.price} coins. You have ${bank}. Collect coins, do jobs and sink pirate ships to save up!`;
       }
     }
     hud.showDialog(said.name, text);
@@ -946,6 +955,93 @@ export function startGame(canvas: HTMLCanvasElement): void {
       score += 200;
       hud.setScore(score);
       hud.showToast("You met everyone on the islands! 🎉 +200");
+    }
+  }
+
+  // ── Jobs ─────────────────────────────────────────────────────────────────
+  const villagerOf = (n: (typeof npcs.items)[number]): Villager => ({ name: n.def.name, x: n.def.x, y: n.def.y, z: n.def.z });
+
+  /** Ground (or sea) height under a job spot. */
+  function jobGround(x: number, z: number, y: number): number {
+    const sea = world.def.sea;
+    const g = world.groundAt(x, z, y)?.y;
+    return Math.max(g ?? sea ?? y - 1, sea ?? -Infinity);
+  }
+
+  /** Talking to a job giver: take their job, ask about it, or (asking twice) stop it. */
+  function workFor(npc: (typeof npcs.items)[number]): string {
+    const id = npc.def.job!;
+    const def = JOBS[id];
+    if (jobs.id === id) {
+      if (elapsed - quitArmed < 8) {
+        jobs.clear();
+        hud.setJob(null);
+        quitArmed = -100;
+        audio.sfx("ui");
+        return "No problem! Come back any time you want to work.";
+      }
+      quitArmed = elapsed;
+      return `${jobs.busyText()} (Talk to me again to stop working.)`;
+    }
+    if (jobs.id) return `You're busy being a ${JOBS[jobs.id].title.toLowerCase()}! Finish that job first, then come back to me for some ${def.title.toLowerCase()} work.`;
+    const houses = (world.def.buildings ?? []).map((b) => ({ x: b.x, z: b.z, w: b.w, d: b.d, top: (world.groundAt(b.x, b.z, 2)?.y ?? 0) + b.h }));
+    const text = jobs.start(id, {
+      boss: villagerOf(npc),
+      villagers: npcs.items.filter((n) => n !== npc).map(villagerOf),
+      spots: npc.def.spots ?? [],
+      houses,
+      ground: jobGround,
+    });
+    if (jobs.id) {
+      hud.setJob(jobs.label());
+      audio.sfx("powerup");
+      hud.showToast(`${def.emoji} New job: ${def.title}! Pays ${def.pay} coins`);
+    }
+    return text;
+  }
+
+  function updateJobs(dt: number): void {
+    if (!jobs.id) return;
+    const kids = players.map((p) => {
+      const r = p.riding ? rideOf(p) : null;
+      return { pos: r ? r.pos : p.pos, ride: r ? r.kind : null };
+    });
+    const def = jobs.def!;
+    let handedTo: string | null = null; // a delivery that finished the job: they say thanks and pay
+    for (const e of jobs.update(dt, elapsed, kids)) {
+      if (e.type === "stop") {
+        score += 20;
+        hud.setScore(score);
+        audio.sfx(e.stop.item === "fire" ? "splash" : e.stop.npc ? "talk" : "coin");
+        particles.burst(e.stop.x, e.stop.y + (e.stop.item === "fire" ? 1 : 1.2), e.stop.z, e.stop.item === "fire" ? 0x8fd8ff : def.color, 16, 4, 0.8, 5);
+        if (e.stop.npc && def.got) {
+          hud.showDialog(e.stop.npc, def.got);
+          handedTo = e.stop.npc;
+        }
+        else if (e.stop.item === "fire") hud.showToast("💦 Fire's out!");
+        hud.setJob(jobs.label());
+      } else if (e.type === "report") {
+        audio.sfx("checkpoint");
+        hud.showToast(`${def.emoji} All done! Now go back to ${e.boss} to get paid`);
+        hud.setJob(jobs.label());
+      } else if (e.type === "done") {
+        earn(e.pay);
+        score += 100;
+        jobsDone++;
+        storage.set("jobsDone", jobsDone);
+        hud.setCoins(bank);
+        hud.setScore(score);
+        hud.setJob(null);
+        audio.sfx("chest");
+        if (pet.active) pet.cheer();
+        const at = players[0].pos;
+        particles.burst(at.x, at.y + 1.6, at.z, 0xffd93d, 30, 5, 1, 4);
+        hud.showDialog(handedTo ?? e.boss, `${handedTo && def.got ? def.got : e.thanks} Here's your pay: ${e.pay} coins! 💰`);
+        hud.showToast(`💼 Job done! +${e.pay} coins · jobs done: ${jobsDone}`);
+      } else if (elapsed - rideHintAt > 4) {
+        rideHintAt = elapsed;
+        hud.showToast(`Hop in the ${RIDE_ICON[e.ride]} for this job!`);
+      }
     }
   }
 
@@ -1238,6 +1334,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
     for (const b of bubbles) b.update(dt);
     updateRemotes(dt);
     npcs.update(dt, players[0].pos);
+    if (traffic.cars.length) {
+      // city cars wait for kids and rides in front of them
+      const blockers = players.map((p) => (p.riding ? (rideOf(p) ?? car).pos : p.pos));
+      for (const v of rides) if (v.group.visible && !v.occupied) blockers.push(v.pos);
+      for (const r of remotes.values()) if (r.level === levelIdx) blockers.push(r.p.pos);
+      traffic.update(dt, blockers);
+    }
     world.updateCutaway(players.map((p) => p.pos));
     {
       const k = players[0];
@@ -1338,6 +1441,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       // instead of sitting still; only pushing backwards reverses
       const mag = Math.hypot(a.wishX, a.wishZ);
       v.update(dt, -lat, fwd >= -0.5 * mag ? mag : fwd, world);
+      if (v.kind === "car" && traffic.cars.length && traffic.pushOut(v.pos, 1.1)) v.speed *= 0.6; // bump!
     }
 
     for (let i = 0; i < players.length; i++) {
@@ -1351,6 +1455,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       const pace = wading ? 0.55 : 1;
       const ev = p.update(dt, a.wishX * pace, a.wishZ * pace, wantJump, glideHeld, world);
       npcs.pushOut(p.pos);
+      if (traffic.cars.length) traffic.pushOut(p.pos, 0.4);
       if (wading && Math.random() < dt * 5 && Math.hypot(p.vel.x, p.vel.z) > 1) {
         particles.burst(p.pos.x, world.def.sea! + 0.05, p.pos.z, 0xdff6ff, 3, 1.5, 0.4, 3);
         audio.sfx("splash");
@@ -1631,6 +1736,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
       }
     }
 
+    updateJobs(dt);
+
     // snacks: eat one for a few seconds of something silly
     foods.update(elapsed, dt);
     for (const p of players) {
@@ -1811,6 +1918,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
       camTarget.y + spv * dist,
       camTarget.z + Math.cos(camYaw) * cpv * dist,
     );
+    // never let a building get between the camera and the kid (inside a house, the walls are cut away instead)
+    if (!world.isInside(players[0].pos)) world.clipCamera(camTarget, camDesired);
     camera.position.lerp(camDesired, Math.min(1, dt * 9));
     if (shake > 0) {
       shake = Math.max(0, shake - dt * 1.8);
@@ -1836,10 +1945,14 @@ export function startGame(canvas: HTMLCanvasElement): void {
     render: () => {
       renderer.render(scene, camera);
       // first rendered frame with the models in = the page is playable
-      if (modelsSettled) window.__GAME_READY__ = true;
+      if (modelsSettled && !window.__GAME_READY__) {
+        window.__GAME_READY__ = true;
+        ads.loadingFinished();
+      }
     },
   });
   loop.start();
+  void ads.init(); // only does anything when the site was built with an ad provider
 
   function teleportToFriend(q: Player, p1: Player): void {
     // q joins p1: into the car as a passenger when p1 is driving, otherwise beside them
@@ -1898,7 +2011,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
     song: audio.playingSong,
     bank,
     owned: [...owned],
-    jobTarget: job ? { name: job.target.def.name, x: job.target.p.pos.x, z: job.target.p.pos.z } : null,
+    jobTarget: jobs.id === "pizza" && jobs.left[0]?.npc ? { name: jobs.left[0].npc, x: jobs.left[0].x, z: jobs.left[0].z } : null,
+    job: jobs.id ? {
+      id: jobs.id, label: jobs.label(), reporting: jobs.reporting,
+      left: jobs.left.map((t) => ({ x: t.x, y: t.y, z: t.z, npc: t.npc, ride: t.ride, hold: t.hold })),
+    } : null,
+    jobsDone,
+    traffic: traffic.cars.map((c) => ({ x: c.group.position.x, z: c.group.position.z, v: c.v })),
     setBank: (n: number) => {
       bank = n;
       storage.set("bank", bank);
@@ -1926,8 +2045,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
       heli.speed = 0;
       camYaw = heading + Math.PI;
     },
-    warp: (x: number, z: number) => {
-      const y = world.groundAt(x, z, 50)?.y ?? 0;
+    warp: (x: number, z: number, near?: number) => {
+      const y = world.groundAt(x, z, near ?? 50)?.y ?? 0;
       players[0].respawn(x, y, z);
       players[0].invuln = 0;
     },
@@ -1959,6 +2078,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
       pickups.dispose();
       rings.dispose();
       fleet.dispose();
+      jobs.dispose();
+      traffic.dispose();
       blobGeo.dispose();
       blobMat.dispose();
       scene.traverse((o) => {

@@ -199,7 +199,7 @@ export class AudioSystem {
     if (!this.ctx) {
       this.ctx = new AudioContext();
       this.master = this.ctx.createGain();
-      this.master.gain.value = this.muted ? 0 : 0.5;
+      this.master.gain.value = this.muted || this.adMuted ? 0 : 0.5;
       this.master.connect(this.ctx.destination);
       // one second of white noise, reused for hi-hats, splashes and the sea
       const n = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate);
@@ -214,8 +214,16 @@ export class AudioSystem {
   toggleMute(): boolean {
     this.muted = !this.muted;
     writeMuted(this.muted);
-    if (this.master) this.master.gain.value = this.muted ? 0 : 0.5;
+    if (this.master) this.master.gain.value = this.muted || this.adMuted ? 0 : 0.5;
     return this.muted;
+  }
+
+  private adMuted = false;
+
+  /** Silence everything while an ad plays (the kid's own mute choice is left alone). */
+  setAdMute(on: boolean): void {
+    this.adMuted = on;
+    if (this.master) this.master.gain.value = this.muted || on ? 0 : 0.5;
   }
 
   /** One enveloped oscillator blip. */

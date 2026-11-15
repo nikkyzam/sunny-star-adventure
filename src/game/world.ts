@@ -28,6 +28,8 @@ import type { FoodDef } from "./food";
 import type { ShipDef } from "./ships";
 import { makeTextSprite, disposeSprite } from "./social";
 import { envReady, hasModel, Placer } from "./env";
+import type { JobId } from "./jobs";
+import type { TrafficLoop } from "./traffic";
 
 /** Something decorative to draw: by the code-built shapes, or by the models in env.ts once loaded. */
 type Decor =
@@ -35,7 +37,9 @@ type Decor =
   | { t: "flower"; color: number; x: number; y: number; z: number; rot: number; v: number }
   | { t: "rock"; x: number; y: number; z: number; size: number; rx: number; ry: number; rz: number; v: number }
   | { t: "grass"; x: number; y: number; z: number; rot: number; v: number; sand: boolean }
-  | { t: "building"; b: BuildingDef };
+  | { t: "building"; b: BuildingDef }
+  /** A model from the city kit (planters, bollards…), only drawn once the models load. */
+  | { t: "kit"; name: string; x: number; y: number; z: number; rot: number; scale: number };
 
 export interface Platform {
   kind: "disc" | "box";
@@ -56,7 +60,11 @@ export interface GroundHit {
   plat: Platform;
 }
 
-interface DiscDef { x: number; z: number; r: number; y: number; trees?: number; flowers?: number; rocks?: number; color?: number }
+interface DiscDef {
+  x: number; z: number; r: number; y: number; trees?: number; flowers?: number; rocks?: number; color?: number;
+  /** City pavement: no grass tufts. */
+  paved?: boolean;
+}
 interface BridgeDef { x: number; z: number; w: number; d: number; y: number; move?: { axis: "x" | "z"; amp: number; speed: number; phase?: number } }
 interface SpringDef { x: number; z: number; y: number; power: number }
 interface SlimeDef { ax: number; az: number; bx: number; bz: number; y: number; speed: number }
@@ -70,8 +78,10 @@ export interface NpcDef {
   lines: string[];
   /** Sells something for coins (until it has been bought). */
   sells?: { id: string; price: number; what: string };
-  /** Hands out a delivery job. */
-  job?: "pizza";
+  /** Hands out a job (see jobs.ts). */
+  job?: JobId;
+  /** Places their job uses: garden rows, litter, fishing spots, bus stops, drop rings… */
+  spots?: [number, number, number][];
 }
 export interface BuildingDef {
   x: number; z: number; w: number; d: number; h: number; color: number;
@@ -79,6 +89,8 @@ export interface BuildingDef {
   enter?: boolean;
   /** For sale: the door stays boarded up until the kid owns this id (bought from a villager). */
   lock?: string;
+  /** A glass skyscraper instead of brick. */
+  style?: "glass";
 }
 interface RoadDef { x: number; z: number; w: number; d: number }
 
@@ -143,6 +155,17 @@ export interface LevelDef {
   props?: PropDefs;
   /** Party balloons: touch one to float up for a few seconds. */
   balloons?: [number, number, number][];
+  /** Where the plaza fountain stands (levels with roads). */
+  fountain?: [number, number];
+  /** Sky color overhead (the horizon is `sky`), and the light's colors: a sunset city glows warm. */
+  skyTop?: number;
+  light?: { sun: number; sky: number; ground: number };
+  /** Street lamps and planters along every road. */
+  streetlife?: boolean;
+  /** A Ferris wheel: x, y, z and which way it faces. */
+  ferris?: [number, number, number, number];
+  /** Cars that drive around the city by themselves (traffic.ts). */
+  traffic?: TrafficLoop[];
 }
 
 export const LEVELS: LevelDef[] = [
@@ -373,6 +396,7 @@ export const LEVELS: LevelDef[] = [
     spawn: [0, 0, 18],
     freeGlide: true, // parachute town!
     carSpawn: [4, 0, 14, Math.PI],
+    fountain: [0, -8],
     food: [["pizza", -10, 1.0, -1], ["icecream", 17, 1.0, 8], ["cupcake", 0, 1.5, -36], ["apple", -16, 1.0, -4]],
     props: {
       cones: [[-3, 0, 6.8], [-1, 0, 5.2], [1, 0, 6.8], [3, 0, 5.2], [-4, 0, -18.6], [0, 0, -18], [4, 0, -17.4]],
@@ -856,7 +880,8 @@ const ADVENTURE_ISLAND: LevelDef = {
         "Welcome to Adventure Island! Find every star to open the portal in the meadow.",
         "Every house in the village is open. Walk in through the door and look around!",
         "The red car is for everyone. Drive around the island, then over the causeways to Coconut Cove and Pine Island!",
-        "Seventeen friends live on these islands. Can you say hello to all of us?",
+        "Want to earn coins? Villagers with a 💼 by their name have jobs for you!",
+        "Twenty-two friends live on these islands. Can you say hello to all of us?",
       ],
     },
     {
@@ -868,7 +893,8 @@ const ADVENTURE_ISLAND: LevelDef = {
       ],
     },
     {
-      name: "Farmer Fern", x: -13, y: 0.3, z: -13, outfit: 3, hat: 4, skin: 2,
+      name: "Farmer Fern", x: -13, y: 0.3, z: -13, outfit: 3, hat: 4, skin: 2, job: "farm",
+      spots: [[-8, 0.3, -17.5], [-6, 0.3, -17.5], [-4, 0.3, -17.5], [-8, 0.3, -20.5], [-6, 0.3, -20.5], [-4, 0.3, -20.5]],
       lines: [
         "Hello there! Your pet loves this forest. Listen to it hop!",
         "Try dancing with the 7 key. Pets love to dance too!",
@@ -898,7 +924,8 @@ const ADVENTURE_ISLAND: LevelDef = {
       ],
     },
     {
-      name: "Surfer Sky", x: 36, y: 0, z: -57, outfit: 1, hat: 4, skin: 2,
+      name: "Surfer Sky", x: 36, y: 0, z: -57, outfit: 1, hat: 4, skin: 2, job: "clean",
+      spots: [[46, 0, -51.5], [58.6, 0, -58.8], [58.6, 0, -73.2], [46, 0, -80.5], [33.4, 0, -73.2], [33.4, 0, -58.8]],
       lines: [
         "Welcome to Coconut Cove! You can walk or drive here over the sandy causeway.",
         "Climb the little hill for a star, and look inside the forest for treasure!",
@@ -946,7 +973,7 @@ const ADVENTURE_ISLAND: LevelDef = {
       sells: { id: "mansion", price: 60, what: "mansion" },
       lines: [
         "Enjoy your mansion! It has a sofa, a big TV and a golden trophy.",
-        "Coins you earn are saved, even when you stop playing.",
+        "Coins you earn are saved, even when you stop playing. Jobs are a great way to earn them!",
       ],
     },
     {
@@ -963,6 +990,30 @@ const ADVENTURE_ISLAND: LevelDef = {
         "Ready for space? Hop in the rocket and blast off to the Moon!",
         "On the Moon you can jump super high. Everything is floaty up there!",
       ],
+    },
+    // ── job givers ──
+    {
+      name: "Postie Pat", x: 11, y: 0.3, z: -9, outfit: 4, hat: 1, skin: 2, job: "mail",
+      lines: ["Letters, letters everywhere! Want to help me deliver them?"],
+    },
+    {
+      name: "Chief Blaze", x: 8, y: 0.3, z: -27, outfit: 0, hat: 3, skin: 3, job: "fire",
+      lines: ["I'm the fire chief. Brave helpers wanted!"],
+    },
+    {
+      name: "Driver Dee", x: -8.5, y: 0, z: 12.5, outfit: 3, hat: 1, skin: 1, job: "bus",
+      spots: [[31.5, 0, -25.6], [18.4, 0, -46.2], [-13.5, 0, -49], [-30.9, 0, -28.3]],
+      lines: ["Beep beep! The island bus needs a driver."],
+    },
+    {
+      name: "Fisher Flo", x: 8, y: 0, z: 14.2, outfit: 1, hat: 4, skin: 0, job: "fish",
+      spots: [[-20, -0.5, 26], [22, -0.5, 28], [-46, -0.5, 4], [40, -0.5, 2], [2, -0.5, 34]],
+      lines: ["The fish are jumping today!"],
+    },
+    {
+      name: "Cargo Cass", x: 10.5, y: 0, z: 7.5, outfit: 5, hat: 0, skin: 4, job: "cargo",
+      spots: [[30, 30, 0], [6, 9.2, -78], [64, 6.3, 16], [-66, 2.1, -60], [-12, 1.8, -32]],
+      lines: ["Parcels to fly! Can you fly a helicopter?"],
     },
     {
       name: "Diver Dot", x: -36.5, y: 0.2, z: 34.5, outfit: 2, hat: 0, skin: 0,
@@ -1035,7 +1086,8 @@ const MOON: LevelDef = {
       ],
     },
     {
-      name: "Blorp", x: -3.5, y: 0, z: -24, outfit: 5, hat: 1, skin: 5,
+      name: "Blorp", x: -3.5, y: 0, z: -24, outfit: 5, hat: 1, skin: 5, job: "moon",
+      spots: [[-6, 0, -6], [8, 0, -16], [-16, 0, -24], [18, 0, -14], [-20, 0, -10], [6, 0, -34]],
       lines: [
         "Blorp says hi! Our moon base doors are open. Come inside!",
         "That blue ball in the sky is your home. Pretty, isn't it?",
@@ -1044,6 +1096,212 @@ const MOON: LevelDef = {
   ],
 };
 LEVELS.push(MOON);
+
+/** n coins in a row from (x0, z0) to (x1, z1). */
+function line(n: number, x0: number, z0: number, x1: number, z1: number, y: number): [number, number, number][] {
+  return Array.from({ length: n }, (_, i) => {
+    const t = n === 1 ? 0.5 : i / (n - 1);
+    return [x0 + (x1 - x0) * t, y, z0 + (z1 - z0) * t] as [number, number, number];
+  });
+}
+
+const PAVEMENT = 0xd6d0c4;
+const PARK = 0x7ccf5a;
+
+/**
+ * Sunshine City: a seaside city at golden hour. A grid of streets with traffic, glass skyscrapers
+ * you can bounce up to (and glide off), parks, shops, homes, a fire station, a pier with a boat,
+ * a Ferris wheel on the beach, and a helicopter waiting on top of Sunshine Tower.
+ *
+ * Avenues run north–south at x = ±12, ±36 and streets east–west at z = ±12, ±36 (6 m wide), so the
+ * blocks between them are 18 m across and centered on x, z ∈ {-24, 0, 24}.
+ */
+const SUNSHINE_CITY: LevelDef = {
+  name: "Sunshine City",
+  sky: 0xffb88c, skyTop: 0x4f7fd0, fog: 0xffd9b8,
+  light: { sun: 0xffcf9a, sky: 0xffe6cc, ground: 0x9a8a7a },
+  grass: PARK, dirt: 0xb8a68a, foliage: 0x3fa34d,
+  flowerColors: [0xff6b9d, 0xffd93d, 0xffffff, 0xb197fc],
+  spawn: [0, 0, 46],
+  sea: -0.5,
+  freeGlide: true, // glide off the skyscrapers!
+  streetlife: true,
+  fountain: [0, 0],
+  carSpawn: [-12, 0, 46, Math.PI],
+  boatSpawn: [4.4, 75, 0],
+  heliSpawn: [24, 40.3, -24, Math.PI],
+  ferris: [64, -0.15, 0, Math.PI / 2],
+  pirates: [[0, 104, 12, 0.2]],
+  traffic: [
+    // the outer ring road, keeping right
+    { pts: [[37.5, 37.5], [37.5, -37.5], [-37.5, -37.5], [-37.5, 37.5]], cars: 5, speed: 7 },
+    // the inner ring around the plaza, the other way round
+    { pts: [[10.5, -10.5], [10.5, 10.5], [-10.5, 10.5], [-10.5, -10.5]], cars: 3, speed: 5.5 },
+  ],
+  discs: [
+    { x: 0, z: 0, r: 68, y: -0.15, color: SAND },                         // the beach all around
+    { x: 0, z: 0, r: 60, y: 0, color: PAVEMENT, paved: true },             // the city
+    { x: 0, z: -24, r: 8.6, y: 0.05, trees: 5, flowers: 12 },              // Maple Park
+    { x: 0, z: 24, r: 8.6, y: 0.05, flowers: 10 },                         // the Fun Park
+    { x: -24, z: 5.5, r: 3.2, y: 0.05, trees: 1, flowers: 3 },             // the fire station lawn
+    { x: 50, z: -20, r: 4.5, y: 0.05, trees: 2, flowers: 3 }, { x: 50, z: 20, r: 4.5, y: 0.05, trees: 2, flowers: 3 },
+    { x: -50, z: -20, r: 4.5, y: 0.05, trees: 2, flowers: 3 }, { x: -50, z: 20, r: 4.5, y: 0.05, trees: 2, flowers: 3 },
+    { x: -48, z: -46, r: 3, y: 0.05, trees: 1 }, { x: 48, z: -46, r: 3, y: 0.05, trees: 1 },
+  ],
+  bridges: [{ x: 0, z: 72, w: 4, d: 12, y: 0.15 }], // the pier
+  roads: [
+    ...[-36, -12, 12, 36].map((x) => ({ x, z: 0, w: 6, d: 96 })),
+    ...[-36, -12, 12, 36].map((z) => ({ x: 0, z, w: 96, d: 6 })),
+  ],
+  buildings: [
+    // downtown: glass towers
+    { x: 24, z: -24, w: 12, d: 12, h: 40, color: 0x8fd0ff, style: "glass" },  // Sunshine Tower (helipad on top)
+    { x: -28, z: -28, w: 8, d: 8, h: 28, color: 0xc7a8ff, style: "glass" },
+    { x: -20, z: -20, w: 6, d: 6, h: 18, color: 0x7ed9c4, style: "glass" },
+    { x: 24, z: -46, w: 12, d: 6, h: 6, color: 0xc98a5b },                   // harbor warehouses
+    { x: -24, z: -46, w: 12, d: 6, h: 6, color: 0x8a90a0 },
+    // the civic block: fire station and post office (walk in)
+    { x: -27, z: -3, w: 8, d: 6, h: 5, color: 0xff4757, enter: true },
+    { x: -18.5, z: -3.5, w: 5, d: 5, h: 4.5, color: 0x5cb8ff, enter: true },
+    // the east shops: pizza place (walk in), toy store, the long market
+    { x: 20, z: -3, w: 5, d: 5, h: 4, color: 0xffa94d, enter: true },
+    { x: 28, z: -3, w: 6, d: 6, h: 7, color: 0xff9ecf },
+    { x: 24, z: 5.5, w: 14, d: 5, h: 6, color: 0x7ed957 },
+    // homes (the lilac one is for sale) and apartments
+    { x: -28, z: 21, w: 6, d: 6, h: 4.5, color: 0xffd93d, enter: true },
+    { x: -19.5, z: 21, w: 5, d: 5, h: 4, color: 0xb197fc, enter: true, lock: "cityhouse" },
+    { x: -24, z: 30, w: 14, d: 4, h: 9, color: 0xff9ecf },
+    // shopping street
+    { x: 19.5, z: 20.5, w: 7, d: 7, h: 9, color: 0xffd93d },
+    { x: 28.5, z: 20.5, w: 7, d: 7, h: 12, color: 0x4ecbd9 },
+    { x: 24, z: 29, w: 16, d: 6, h: 7, color: 0xff8c42 },
+  ],
+  springs: [
+    { x: 24, z: -16.9, y: 0, power: 52 },     // → the top of Sunshine Tower (and the helicopter)
+    { x: -22.9, z: -28, y: 0, power: 43 },    // → the lilac tower
+    { x: -20, z: -15.9, y: 0, power: 35 },    // → the mint tower
+    { x: 31.9, z: -3, y: 0, power: 24 },      // → the toy store
+    { x: 19.5, z: 15.9, y: 0, power: 26 },    // → the yellow shop
+    { x: 28.5, z: 15.9, y: 0, power: 30 },    // → the blue shop
+    { x: -24, z: 26.9, y: 0, power: 26 },     // → the apartments
+    { x: -4, z: 24, y: 0.05, power: 18 },     // Fun Park trampolines
+    { x: 4, z: 24, y: 0.05, power: 14 },
+  ],
+  balloons: [[0, 1.6, 30]],
+  rings: [
+    [0, 22, -24, 0], [-24, 36, -24, 0.8], [24, 48, -24, 0], [36, 26, 0, 1.57],
+    [0, 28, 24, 0], [-36, 22, 0, 1.57], [0, 32, -48, 0], [48, 18, 48, 0.8],
+  ],
+  stars: [
+    // rooftops
+    [20.5, 41.6, -20.5], [-28, 29.6, -28], [-20, 19.6, -20], [28, 8.6, -3], [19.5, 10.6, 20.5],
+    [28.5, 13.6, 20.5], [24, 8.6, 29], [-24, 10.6, 30], [24, 7.6, -46],
+    // streets and plazas
+    [0, 2.1, 0], [-36, 1.2, 0], [36, 1.2, 0], [0, 1.2, -36], [24, 1.2, 12],
+    // the parks
+    [0, 1.3, -24], [-5, 1.3, -30], [3, 8.5, 30],
+    // the pier and the beach
+    [0, 1.4, 77], [63, 1.1, 12], [-63, 1.1, -10], [40, 1.1, -49], [-44, 1.1, 46],
+    // inside the fire station and the pizza place
+    [-27, 1.5, -3.5], [20, 1.5, -3.5],
+  ],
+  coins: [
+    ...line(6, -30, 46, -18, 46, 1.0), ...line(6, 18, 46, 30, 46, 1.0),
+    ...line(8, 36, 30, 36, -30, 1.0), ...line(8, -36, -30, -36, 30, 1.0),
+    ...line(6, -9, -36, 9, -36, 1.0), ...ring(10, 5, 0, 0, 1.0),
+    ...ring(8, 6.5, 0, -24, 1.05), ...line(5, 0, 67, 0, 77, 1.15),
+    [24, 41.6, -27.5], [-26, 29.6, -26], [-24, 10.6, 31],
+  ],
+  chests: [[-30, 28.25, -30], [27.5, 40.25, -27.5], [1.4, 0.15, 77.6], [-58, -0.15, 30]],
+  hearts: [[0, 1.3, -29], [-50, 1.3, 20]],
+  magnets: [[19.5, 10.6, 22.5]],
+  buddies: [],
+  slimes: [{ ax: -5, az: -21, bx: 5, bz: -21, y: 0.05, speed: 1.1 }],
+  checkpoints: [[3, 0, 42], [3, 0, 6.5], [27, 0, -14.5], [-14.5, 0, -24]],
+  portal: [0, 0, -50],
+  food: [["pizza", 18, 1.0, 1.8], ["icecream", 6, 1.05, 30], ["cupcake", -8, 1.0, 41], ["apple", -4, 1.05, -19], ["icecream", 1.2, 1.15, 70]],
+  props: {
+    balls: [[3, 0, 8], [-3, 0.05, 28]],
+    boxes: [[-30, 0, 8], [30, 0, 9.5], [8, 0, -42], [-46, 0, 0], [46, 0, -8]],
+    cones: [[-15.5, 0, 41], [-15.5, 0, 43], [-15.5, 0, 45]],
+  },
+  npcs: [
+    {
+      name: "Mayor Marigold", x: 3, y: 0, z: 43.5, outfit: 4, hat: 3, skin: 2,
+      lines: [
+        "Welcome to Sunshine City! Find every star to open the portal by the harbor.",
+        "The cars drive by themselves, and they always stop for kids. Still, look both ways!",
+        "Bounce on the red trampolines to reach the rooftops, then glide down!",
+        "There's a helicopter on top of Sunshine Tower. The big trampoline will get you up there!",
+        "Villagers with a 💼 by their name have jobs for you. Earn coins!",
+      ],
+    },
+    {
+      name: "Officer Ollie", x: -9, y: 0, z: 31, outfit: 5, hat: 1, skin: 3,
+      lines: [
+        "Hello, citizen! The crosswalks are the white stripes. Very safe!",
+        "The red car by the promenade is yours to drive. Stay on the roads!",
+        "Have you seen the Ferris wheel on the east beach? It never stops turning.",
+      ],
+    },
+    {
+      name: "Musician Milo", x: 3.2, y: 0, z: 6.6, outfit: 2, hat: 4, skin: 4,
+      lines: [
+        "🎵 La la la! This fountain is my stage. Try dancing with the 7 key!",
+        "Jump onto the fountain's edge. There's a star in the spray!",
+      ],
+    },
+    {
+      name: "Coach Kit", x: 6.5, y: 0.05, z: 21, outfit: 3, hat: 0, skin: 1,
+      lines: [
+        "Welcome to the Fun Park! The big trampoline sends you sky high.",
+        "Grab the balloon and float up to the star!",
+      ],
+    },
+    {
+      name: "Agent Aria", x: -16.6, y: 0, z: 26.4, outfit: 5, hat: 1, skin: 2,
+      sells: { id: "cityhouse", price: 80, what: "city house" },
+      lines: [
+        "Enjoy your city house! It's cozy inside.",
+        "Coins you earn are saved. Jobs are a great way to earn more!",
+      ],
+    },
+    // ── job givers ──
+    {
+      name: "Chef Pepper", x: 22.6, y: 0, z: 1.4, outfit: 0, hat: 1, skin: 3, job: "pizza",
+      lines: ["Hot pizza, coming up!"],
+    },
+    {
+      name: "Postie Paz", x: -15.6, y: 0, z: 0.8, outfit: 4, hat: 1, skin: 0, job: "mail",
+      lines: ["So many letters today!"],
+    },
+    {
+      name: "Chief Ember", x: -23.6, y: 0, z: 1.4, outfit: 0, hat: 3, skin: 1, job: "fire",
+      lines: ["The fire station is always ready!"],
+    },
+    {
+      name: "Driver Dash", x: -15.2, y: 0, z: 47, outfit: 3, hat: 1, skin: 4, job: "bus",
+      spots: [[37.5, 0, 24], [24, 0, -37.5], [-37.5, 0, -24], [-24, 0, 37.5]],
+      lines: ["The city bus needs a driver!"],
+    },
+    {
+      name: "Pilot Penny", x: 28, y: 0, z: -16.2, outfit: 1, hat: 0, skin: 2, job: "cargo",
+      spots: [[-28, 28, -28], [-20, 18, -20], [28.5, 12, 20.5], [-24, 9, 30], [19.5, 9, 20.5]],
+      lines: ["My helicopter is up on Sunshine Tower. Bounce up on the big trampoline!"],
+    },
+    {
+      name: "Ranger Rosa", x: 7.5, y: 0.05, z: -19, outfit: 3, hat: 4, skin: 0, job: "clean",
+      spots: [[-5, 0.05, -21], [4, 0.05, -28], [6, 0.05, -23], [-3, 0.05, -29.5], [0.5, 0.05, -17], [-6.5, 0.05, -26]],
+      lines: ["Maple Park is my favorite place!"],
+    },
+    {
+      name: "Fisher Fred", x: -1.2, y: 0.15, z: 68.5, outfit: 1, hat: 4, skin: 3, job: "fish",
+      spots: [[-20, -0.5, 82], [20, -0.5, 84], [40, -0.5, 70], [-42, -0.5, 64], [0, -0.5, 90]],
+      lines: ["The harbor is full of fish!"],
+    },
+  ],
+};
+LEVELS.push(SUNSHINE_CITY);
 
 const RAINBOW_COLORS = [0xff5f6d, 0xffa94d, 0xffe066, 0x7ed957, 0x5cb8ff, 0xb197fc];
 
@@ -1085,6 +1343,7 @@ export class World {
   private clouds: THREE.Group[] = [];
   private snow: THREE.Points | null = null;
   private ocean: THREE.Mesh | null = null;
+  private ferris: { wheel: THREE.Group; cabins: THREE.Object3D[] } | null = null;
   private oceanY = -7;
   private waveAmp = 0.1;
   private time = 0;
@@ -1113,6 +1372,21 @@ export class World {
       if (inside && (!best || p.topY > best.y)) best = { y: p.topY, plat: p };
     }
     return best;
+  }
+
+  /** Pull a third-person camera in so no building stands between it and the kid (cam is changed). */
+  clipCamera(target: THREE.Vector3, cam: THREE.Vector3): void {
+    const steps = 24;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const x = target.x + (cam.x - target.x) * t, y = target.y + (cam.y - target.y) * t, z = target.z + (cam.z - target.z) * t;
+      for (const s of this.solids) {
+        if (y > s.topY + 0.3 || x < s.minX - 0.3 || x > s.maxX + 0.3 || z < s.minZ - 0.3 || z > s.maxZ + 0.3) continue;
+        const k = Math.max(0.15, (i - 1) / steps);
+        cam.set(target.x + (cam.x - target.x) * k, target.y + (cam.y - target.y) * k, target.z + (cam.z - target.z) * k);
+        return;
+      }
+    }
   }
 
   /** The walk-in house whose room contains pos, or null. */
@@ -1404,7 +1678,7 @@ export class World {
         this.decor.push({ t: "rock", x: d.x + Math.cos(a) * rr, y: d.y, z: d.z + Math.sin(a) * rr, size: 0.3 + rng() * 0.25, rx: rng() * 3, ry: rng() * 3, rz: rng() * 3, v: rng() });
       }
       // grass tufts (only drawn with the nature models): lush meadows, a few on beaches, none on snow / the Moon
-      if (!def.snow && !def.space && !def.night) {
+      if (!def.snow && !def.space && !def.night && !d.paved) {
         const sand = d.color === SAND;
         const tufts = Math.min(36, Math.round(d.r * d.r * (sand ? 0.02 : 0.16)));
         for (let i = 0; i < tufts; i++) {
@@ -1443,47 +1717,7 @@ export class World {
     }
 
     // ── City: roads (visual), buildings (solid + landable), fountain ──
-    if (def.roads) {
-      const roadMat = new THREE.MeshStandardMaterial({ color: 0x8a93a6, flatShading: true, roughness: 1 });
-      const lineMat = new THREE.MeshStandardMaterial({ color: 0xfff6e5, roughness: 0.9 });
-      for (const r of def.roads) {
-        const road = new THREE.Mesh(new THREE.BoxGeometry(r.w, 0.06, r.d), roadMat);
-        road.position.set(r.x, 0.03, r.z);
-        road.receiveShadow = true;
-        this.group.add(road);
-        // dashed center line
-        const along = r.w > r.d ? "x" : "z";
-        const len = along === "x" ? r.w : r.d;
-        const dashes = Math.floor(len / 2.4);
-        for (let i = 0; i < dashes; i++) {
-          const dash = new THREE.Mesh(new THREE.BoxGeometry(along === "x" ? 1.1 : 0.16, 0.03, along === "x" ? 0.16 : 1.1), lineMat);
-          const off = -len / 2 + 1.4 + i * 2.4;
-          dash.position.set(r.x + (along === "x" ? off : 0), 0.075, r.z + (along === "x" ? 0 : off));
-          this.group.add(dash);
-        }
-      }
-      // fountain at the plaza center
-      const basin = new THREE.Mesh(
-        new THREE.CylinderGeometry(2.2, 2.5, 0.7, 20),
-        new THREE.MeshStandardMaterial({ color: 0xb8bec9, flatShading: true, roughness: 0.9 }),
-      );
-      basin.position.set(0, 0.35, -8);
-      basin.castShadow = true;
-      this.group.add(basin);
-      const water = new THREE.Mesh(
-        new THREE.CylinderGeometry(1.9, 1.9, 0.15, 20),
-        new THREE.MeshStandardMaterial({ color: 0x5cb8ff, roughness: 0.3 }),
-      );
-      water.position.set(0, 0.72, -8);
-      this.group.add(water);
-      // fountain rim is a tiny standable platform
-      this.platforms.push({
-        kind: "disc", x: 0, z: -8, r: 2.3, hw: 0, hd: 0, topY: 0.72, spring: 0,
-        baseX: 0, baseZ: -8, dx: 0, dz: 0, mesh: basin, squashT: 0,
-      });
-      // and its sides are solid so you can't clip through the basin
-      this.solids.push({ minX: -2.3, maxX: 2.3, minZ: -10.3, maxZ: -5.7, topY: 0.72 });
-    }
+    if (def.roads) this.buildStreets(def);
     if (def.buildings) {
       const trimMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 0.85 });
       const doorMat = new THREE.MeshStandardMaterial({ color: 0x7a4a2b, flatShading: true, roughness: 0.9 });
@@ -1507,6 +1741,9 @@ export class World {
         });
       }
     }
+
+    this.ferris = null;
+    if (def.ferris) this.buildFerris(...def.ferris);
 
     // ── Trampolines ──
     for (const s of def.springs) {
@@ -1585,6 +1822,8 @@ export class World {
     // ── Clouds ──
     const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 1 });
     const cloudCount = def.space ? 0 : def.buildings ? 10 : 6;
+    // clouds float above the tallest skyscraper
+    const cloudY = Math.max(14, ...(def.buildings ?? []).map((b) => b.h + 8));
     for (let i = 0; i < cloudCount; i++) {
       const cloud = new THREE.Group();
       const puffs = 3 + Math.floor(rng() * 3);
@@ -1594,7 +1833,7 @@ export class World {
         puff.position.set(j * 1.2 - puffs * 0.6, rng() * 0.5, rng() * 0.8 - 0.4);
         cloud.add(puff);
       }
-      cloud.position.set((rng() - 0.5) * 110, 14 + rng() * 10, -rng() * 70 + 16);
+      cloud.position.set((rng() - 0.5) * 110, cloudY + rng() * 10, -rng() * 70 + 16);
       this.group.add(cloud);
       this.clouds.push(cloud);
     }
@@ -1688,7 +1927,7 @@ export class World {
     if (!def.space && !def.night) {
       const skyGeo = new THREE.SphereGeometry(520, 24, 12);
       const horizon = new THREE.Color(def.sky).lerp(new THREE.Color(0xffffff), 0.35);
-      const zenith = new THREE.Color(def.sky).multiplyScalar(0.62);
+      const zenith = def.skyTop !== undefined ? new THREE.Color(def.skyTop) : new THREE.Color(def.sky).multiplyScalar(0.62);
       const pos = skyGeo.getAttribute("position");
       const colors = new Float32Array(pos.count * 3);
       const c = new THREE.Color();
@@ -1795,6 +2034,10 @@ export class World {
           const name = d.sand ? "Grass_Wispy_Tall" : pickOf(["Grass_Common_Short", "Grass_Common_Short", "Grass_Common_Tall", "Grass_Wispy_Tall"], d.v);
           placer.add(name, d.x, d.y, d.z, { rotY: d.rot, scale: (d.sand ? 0.28 : 0.32) * (0.8 + d.v * 0.5), shadow: false });
         }
+      } else if (d.t === "kit") {
+        placer.add(d.name, d.x, d.y, d.z, { rotY: d.rot, scale: d.scale });
+      } else if (d.b.style === "glass") {
+        g.add(glassTower(d.b));
       } else if (models && hasModel("Brick_Plain_3")) {
         this.facade(placer, d.b);
       } else {
@@ -1895,6 +2138,10 @@ export class World {
         p.mesh.scale.y = s;
       }
     }
+    if (this.ferris) {
+      this.ferris.wheel.rotation.z += dt * 0.12;
+      for (const c of this.ferris.cabins) c.rotation.z = -this.ferris.wheel.rotation.z;
+    }
     for (const c of this.clouds) {
       c.position.x += dt * 0.6;
       if (c.position.x > 80) c.position.x = -80;
@@ -1936,6 +2183,186 @@ export class World {
     }
   }
 
+  /**
+   * Roads with dashed center lines and zebra crossings at every junction, the plaza fountain, and
+   * (for big cities) street lamps and planters along the sidewalks. Lines, stripes and lamps are
+   * instanced, so a whole grid of streets costs a few draw calls.
+   */
+  private buildStreets(def: LevelDef): void {
+    const roads = def.roads ?? [];
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x8a93a6, flatShading: true, roughness: 1 });
+    const lineMat = new THREE.MeshStandardMaterial({ color: 0xfff6e5, roughness: 0.9 });
+    for (const r of roads) {
+      const road = new THREE.Mesh(new THREE.BoxGeometry(r.w, 0.06, r.d), roadMat);
+      road.position.set(r.x, 0.03, r.z);
+      road.receiveShadow = true;
+      this.group.add(road);
+    }
+    const alongX = (r: RoadDef) => r.w > r.d;
+    const inRoad = (x: number, z: number, r: RoadDef, pad = 0) => Math.abs(x - r.x) <= r.w / 2 + pad && Math.abs(z - r.z) <= r.d / 2 + pad;
+    const marks: THREE.Matrix4[] = [];
+    const mark = (x: number, z: number, sx: number, sz: number) => marks.push(new THREE.Matrix4().makeScale(sx, 1, sz).setPosition(x, 0.075, z));
+    for (const r of roads) {
+      const ax = alongX(r);
+      const len = ax ? r.w : r.d;
+      const dashes = Math.floor(len / 2.4);
+      for (let i = 0; i < dashes; i++) {
+        const off = -len / 2 + 1.4 + i * 2.4;
+        const x = r.x + (ax ? off : 0), z = r.z + (ax ? 0 : off);
+        if (roads.some((o) => alongX(o) !== ax && inRoad(x, z, o, 0.6))) continue; // no center line through junctions
+        mark(x, z, ax ? 1.1 : 0.16, ax ? 0.16 : 1.1);
+      }
+    }
+    // zebra crossings on every side of every junction
+    for (const h of roads.filter(alongX)) {
+      for (const v of roads.filter((r) => !alongX(r))) {
+        if (!inRoad(v.x, h.z, h) || !inRoad(v.x, h.z, v)) continue;
+        for (const sgn of [-1, 1]) {
+          const zc = h.z + sgn * (h.d / 2 + 1.4);
+          if (inRoad(v.x, zc, v)) for (let k = 0; k < 5; k++) mark(v.x - v.w / 2 + (k + 0.5) * (v.w / 5), zc, v.w / 10, 2.2);
+          const xc = v.x + sgn * (v.w / 2 + 1.4);
+          if (inRoad(xc, h.z, h)) for (let k = 0; k < 5; k++) mark(xc, h.z - h.d / 2 + (k + 0.5) * (h.d / 5), 2.2, h.d / 10);
+        }
+      }
+    }
+    if (marks.length) {
+      const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.03, 1), lineMat, marks.length);
+      marks.forEach((mm, i) => inst.setMatrixAt(i, mm));
+      inst.receiveShadow = true;
+      inst.computeBoundingSphere();
+      this.group.add(inst);
+    }
+
+    if (def.fountain) {
+      const [fx, fz] = def.fountain;
+      const basin = new THREE.Mesh(
+        new THREE.CylinderGeometry(2.2, 2.5, 0.7, 20),
+        new THREE.MeshStandardMaterial({ color: 0xb8bec9, flatShading: true, roughness: 0.9 }),
+      );
+      basin.position.set(fx, 0.35, fz);
+      basin.castShadow = true;
+      this.group.add(basin);
+      const water = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.9, 1.9, 0.15, 20),
+        new THREE.MeshStandardMaterial({ color: 0x5cb8ff, roughness: 0.3 }),
+      );
+      water.position.set(fx, 0.72, fz);
+      this.group.add(water);
+      if (def.streetlife) {
+        // big cities get a spouting jet in the middle
+        const jet = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.12, 0.45, 2.6, 12, 1, true),
+          new THREE.MeshStandardMaterial({ color: 0xcfeeff, transparent: true, opacity: 0.6, roughness: 0.2, depthWrite: false }),
+        );
+        jet.position.set(fx, 2.0, fz);
+        this.group.add(jet);
+      }
+      // the rim is a tiny standable platform, and its sides are solid so you can't clip through
+      this.platforms.push({
+        kind: "disc", x: fx, z: fz, r: 2.3, hw: 0, hd: 0, topY: 0.72, spring: 0,
+        baseX: fx, baseZ: fz, dx: 0, dz: 0, mesh: basin, squashT: 0,
+      });
+      this.solids.push({ minX: fx - 2.3, maxX: fx + 2.3, minZ: fz - 2.3, maxZ: fz + 2.3, topY: 0.72 });
+    }
+
+    if (!def.streetlife) return;
+    // street lamps every 24 m along both sidewalks, with a planter halfway between each pair
+    const clear = (x: number, z: number) =>
+      !roads.some((o) => inRoad(x, z, o, 0.5)) &&
+      !(def.buildings ?? []).some((b) => Math.abs(x - b.x) < b.w / 2 + 0.8 && Math.abs(z - b.z) < b.d / 2 + 0.8) &&
+      (this.groundAt(x, z, 1)?.y ?? -1) >= 0;
+    const lamps: [number, number][] = [];
+    for (const r of roads) {
+      const ax = alongX(r);
+      const len = ax ? r.w : r.d;
+      const side = (ax ? r.d : r.w) / 2 + 0.7;
+      for (let off = -len / 2 + 6, k = 0; off <= len / 2 - 3; off += 6, k++) {
+        if (k % 2 === 1) continue;
+        const lamp = k % 4 === 0;
+        for (const sgn of [-1, 1]) {
+          const x = r.x + (ax ? off : sgn * side), z = r.z + (ax ? sgn * side : off);
+          if (!clear(x, z)) continue;
+          if (lamp) lamps.push([x, z]);
+          else this.decor.push({ t: "kit", name: "Prop_Planter_Single", x, y: 0, z, rot: ax ? 0 : Math.PI / 2, scale: 1 });
+        }
+      }
+    }
+    const poleGeo = new THREE.CylinderGeometry(0.05, 0.08, 4.2, 8).translate(0, 2.1, 0);
+    const globeGeo = new THREE.SphereGeometry(0.18, 12, 8).translate(0, 4.3, 0);
+    const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshStandardMaterial({ color: 0x3a4250, roughness: 0.6, metalness: 0.4 }), lamps.length);
+    const globes = new THREE.InstancedMesh(globeGeo, new THREE.MeshStandardMaterial({ color: 0xfff1c4, emissive: 0xffc861, emissiveIntensity: 0.7 }), lamps.length);
+    const mm = new THREE.Matrix4();
+    lamps.forEach(([x, z], i) => {
+      mm.makeTranslation(x, 0, z);
+      poles.setMatrixAt(i, mm);
+      globes.setMatrixAt(i, mm);
+    });
+    poles.castShadow = true;
+    poles.computeBoundingSphere();
+    globes.computeBoundingSphere();
+    this.group.add(poles, globes);
+  }
+
+  /** A Ferris wheel that turns slowly; its cabins hang level. Decorative (walk right through it). */
+  private buildFerris(x: number, y: number, z: number, rot: number): void {
+    const g = new THREE.Group();
+    g.position.set(x, y, z);
+    g.rotation.y = rot;
+    const R = 9, hubY = R + 1.8;
+    const steel = new THREE.MeshStandardMaterial({ color: 0xf4f6fb, roughness: 0.5, metalness: 0.3 });
+    // A-frame legs on both sides
+    for (const side of [-1, 1]) {
+      for (const lean of [-1, 1]) {
+        const foot = new THREE.Vector3(lean * 5, 0, side * 1.4);
+        const top = new THREE.Vector3(0, hubY, side * 0.9);
+        const len = foot.distanceTo(top);
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, len, 8), steel);
+        leg.position.copy(foot).add(top).multiplyScalar(0.5);
+        leg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), top.clone().sub(foot).normalize());
+        leg.castShadow = true;
+        g.add(leg);
+      }
+    }
+    const wheel = new THREE.Group();
+    wheel.position.y = hubY;
+    const rimMat = new THREE.MeshStandardMaterial({ color: 0xff6b9d, roughness: 0.5, metalness: 0.2 });
+    for (const side of [-0.6, 0.6]) {
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(R, 0.14, 6, 56), rimMat);
+      rim.position.z = side;
+      wheel.add(rim);
+    }
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 2, 14).rotateX(Math.PI / 2), steel);
+    wheel.add(hub);
+    const spokes = new THREE.InstancedMesh(new THREE.BoxGeometry(0.08, R, 0.08).translate(0, R / 2, 0), steel, 24);
+    const cabins: THREE.Object3D[] = [];
+    const cabinGeo = new THREE.BoxGeometry(1.3, 1.1, 1.1).translate(0, -1.0, 0);
+    const roofGeo = new THREE.CylinderGeometry(0.2, 0.8, 0.4, 8).translate(0, -0.25, 0);
+    const n = 12;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      for (const [k, side] of [[0, -0.6], [1, 0.6]] as const) {
+        spokes.setMatrixAt(i * 2 + k, new THREE.Matrix4().makeRotationZ(a).setPosition(0, 0, side));
+      }
+      const cab = new THREE.Group();
+      cab.position.set(Math.sin(a) * R, Math.cos(a) * R, 0);
+      const body = new THREE.Mesh(cabinGeo, new THREE.MeshStandardMaterial({ color: RAINBOW_COLORS[i % RAINBOW_COLORS.length], roughness: 0.6 }));
+      const roof = new THREE.Mesh(roofGeo, steel);
+      cab.add(body, roof);
+      wheel.add(cab);
+      cabins.push(cab);
+    }
+    spokes.rotation.set(0, 0, 0);
+    wheel.add(spokes);
+    g.add(wheel);
+    this.group.add(g);
+    this.ferris = { wheel, cabins };
+    this.solids.push({ minX: x - 1.2, maxX: x + 1.2, minZ: z - 1.2, maxZ: z + 1.2, topY: 1 }); // the ticket booth at its foot
+    const booth = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2, 2.2), new THREE.MeshStandardMaterial({ color: 0xffd93d, roughness: 0.7 }));
+    booth.position.set(x, y + 1, z);
+    booth.castShadow = true;
+    this.group.add(booth);
+  }
+
   private disposeLevel(scene: THREE.Scene): void {
     scene.remove(this.group);
     this.group.traverse((o) => {
@@ -1958,6 +2385,89 @@ function swell(x: number, z: number, t: number): number {
 }
 
 /** The code-built building (used until the city models load). */
+/** One window tile (a pane with a glint, in a pale frame), repeated up a glass tower. */
+let windowTex: THREE.CanvasTexture | null = null;
+function windowTexture(): THREE.CanvasTexture {
+  if (windowTex) return windowTex;
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const x = c.getContext("2d")!;
+  x.fillStyle = "#eef2f6";
+  x.fillRect(0, 0, 64, 64);
+  const grad = x.createLinearGradient(0, 0, 64, 64);
+  grad.addColorStop(0, "#bfe3ff");
+  grad.addColorStop(0.55, "#4f86c0");
+  grad.addColorStop(1, "#9fd0f5");
+  x.fillStyle = grad;
+  x.fillRect(4, 8, 56, 50);
+  x.fillStyle = "rgba(255,255,255,0.45)";
+  x.fillRect(9, 12, 5, 40);
+  x.fillStyle = "#eef2f6";
+  x.fillRect(31, 8, 2, 50);
+  windowTex = new THREE.CanvasTexture(c);
+  windowTex.wrapS = windowTex.wrapT = THREE.RepeatWrapping;
+  windowTex.colorSpace = THREE.SRGBColorSpace;
+  windowTex.anisotropy = 4;
+  return windowTex;
+}
+
+/** A glass skyscraper: tinted window grid, a white lobby band with a door on its +z side, a
+ *  parapet you can land on, roof machinery, and a helipad and antenna on the tallest. */
+function glassTower(b: BuildingDef): THREE.Group {
+  const g = new THREE.Group();
+  const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
+  const uv = geo.getAttribute("uv");
+  for (let i = 0; i < uv.count; i++) {
+    const face = Math.floor(i / 4); // +x, -x, +y, -y, +z, -z
+    if (face === 2 || face === 3) { uv.setXY(i, 0.02, 0.02); continue; }
+    const across = face < 2 ? b.d : b.w;
+    uv.setXY(i, uv.getX(i) * Math.max(1, Math.round(across / 2.5)), uv.getY(i) * Math.max(1, Math.round(b.h / 3.2)));
+  }
+  const tint = new THREE.Color(b.color).lerp(new THREE.Color(0xffffff), 0.3);
+  const body = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: windowTexture(), color: tint, roughness: 0.2, metalness: 0.35 }));
+  body.position.set(b.x, b.h / 2, b.z);
+  body.castShadow = true;
+  body.receiveShadow = true;
+  g.add(body);
+  const trim = new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.8 });
+  const lobby = new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.3, 3.2, b.d + 0.3), trim);
+  lobby.position.set(b.x, 1.6, b.z);
+  lobby.castShadow = true;
+  g.add(lobby);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.5, 0.1), new THREE.MeshStandardMaterial({ color: 0x2b3a4e, roughness: 0.2, metalness: 0.5 }));
+  door.position.set(b.x, 1.25, b.z + b.d / 2 + 0.18);
+  g.add(door);
+  // the roof you land on is 0.25 above the walls: a parapet slab fills the gap
+  const parapet = new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.3, 0.5, b.d + 0.3), trim);
+  parapet.position.set(b.x, b.h, b.z);
+  parapet.receiveShadow = true;
+  g.add(parapet);
+  const dark = new THREE.MeshStandardMaterial({ color: 0x8a90a0, roughness: 0.7 });
+  const ac = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.9, 1.4), dark);
+  ac.position.set(b.x - b.w / 2 + 1.2, b.h + 0.7, b.z - b.d / 2 + 1.2);
+  ac.castShadow = true;
+  g.add(ac);
+  if (b.h >= 30) {
+    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.12, 7, 6), dark);
+    antenna.position.set(b.x + b.w / 2 - 1, b.h + 3.7, b.z - b.d / 2 + 1);
+    g.add(antenna);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff4757 }));
+    tip.position.set(b.x + b.w / 2 - 1, b.h + 7.3, b.z - b.d / 2 + 1);
+    g.add(tip);
+    // helipad
+    const pad = new THREE.Mesh(new THREE.RingGeometry(2.4, 2.8, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd93d }));
+    pad.position.set(b.x, b.h + 0.27, b.z);
+    g.add(pad);
+    const hMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    for (const [w, d, ox] of [[0.3, 2.2, -0.6], [0.3, 2.2, 0.6], [1.2, 0.3, 0]] as const) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(w, 0.02, d), hMat);
+      bar.position.set(b.x + ox, b.h + 0.27, b.z);
+      g.add(bar);
+    }
+  }
+  return g;
+}
+
 function cartoonBuilding(b: BuildingDef): THREE.Group {
   const g = new THREE.Group();
   const flat = (color: number, rough = 0.85) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: rough });

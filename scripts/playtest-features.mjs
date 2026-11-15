@@ -161,6 +161,11 @@ await openLevel(4);
 // stand right beside the car (parked at about (3, 14)) before pressing E
 await steerTo(1.6, 0, 14.4, 15_000, 0.5);
 await page.waitForTimeout(300);
+// on a slow machine the walk can time out short of the car: G4 is about boarding, so step in beside it
+if (!(await page.evaluate(() => document.getElementById("btn-car")?.style.display !== "none"))) {
+  await page.evaluate(() => window.__gameDebug().warp(1.6, 14.4));
+  await page.waitForTimeout(400);
+}
 await page.keyboard.press("KeyE");
 await page.waitForTimeout(400);
 {

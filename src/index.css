@@ -395,6 +395,13 @@ body.touch.playing .stick-base { display: flex; }
   border-color: #fff;
   color: #0c5a2e;
 }
+.btn-pair { display: flex; gap: 8px; width: min(100%, 440px); }
+.btn-pair .big-btn { flex: 1; min-width: 0; padding-left: 8px; padding-right: 8px; font-size: 17px; }
+.big-btn.city {
+  background: linear-gradient(180deg, #ffd9a8, #ff9a5c);
+  border-color: #fff;
+  color: #7a2e00;
+}
 
 /* ── title screen: compact so every button fits without scrolling ── */
 .title-panel { padding: 18px 36px; }
@@ -520,3 +527,6 @@ body.touch.playing .stick-base { display: flex; }
   .jump-btn { width: 92px; height: 92px; font-size: 16px; }
   .panel { padding: 22px 26px; }
 }
+
+.parents-link { display: inline-block; margin: 2px 0 4px; font-size: 13px; font-weight: 700; color: #8a7fb8; text-decoration: none; }
+.parents-link:hover { text-decoration: underline; }
