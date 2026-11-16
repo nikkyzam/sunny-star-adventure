@@ -88,7 +88,10 @@ export default function Home() {
                 <button className="big-btn ark" data-action="jonah">🐋 Jonah</button>
                 <button className="big-btn ark" data-action="david">🪨 David</button>
               </div>
-              <button className="big-btn" data-action="drive">🚗 Drive in Toy City</button>
+              <div className="btn-pair">
+                <button className="big-btn city" data-action="resort">🏖️ Resort</button>
+                <button className="big-btn" data-action="drive">🚗 Toy City</button>
+              </div>
               <button className="big-btn" data-action="play2">👥 2 Players (same keyboard)</button>
               <button id="btn-continue" className="big-btn" data-action="continue" style={{ display: 'none' }}>▶ Continue</button>
             </div>

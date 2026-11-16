@@ -128,7 +128,7 @@ const P2_JUMP = "Enter";
 const SONG_FOR: Record<string, SongId> = {
   "Sunny Meadow": "meadow", "Candy Canyon": "candy", "Rainbow Peak": "jungle", "Castle in the Clouds": "meadow",
   "Toy City": "city", "Frosty Mountain": "snow", "Bubbly Beach": "beach", "Jungle Vines": "jungle",
-  "Starlight Peak": "night", "Adventure Island": "island", "Moon Base": "space", "Sunshine City": "city", "Noah's Ark": "meadow", "Jonah and the Big Fish": "beach", "David and Goliath": "meadow",
+  "Starlight Peak": "night", "Adventure Island": "island", "Moon Base": "space", "Sunshine City": "city", "Noah's Ark": "meadow", "Jonah and the Big Fish": "beach", "David and Goliath": "meadow", "Paradise Resort": "beach",
 };
 const NET_SEND_EVERY = 4; // fixed steps between state packets (60 Hz / 4 = 15 Hz)
 const REMOTE_TIMEOUT = 6; // seconds without a packet before a friend's kid is removed
@@ -1035,6 +1035,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
         if (!sm.is("title")) break;
         startRun(LEVELS.findIndex((l) => l.ark), false);
         hud.showToast("🌈 Find Noah by the ark. The animals need your help!");
+        break;
+      case "resort":
+        if (!sm.is("title")) break;
+        startRun(LEVELS.findIndex((l) => l.name === "Paradise Resort"), false);
+        hud.showToast("🏖️ Welcome to Paradise Resort! Try the water slide by the pool");
         break;
       case "jonah":
       case "david": {

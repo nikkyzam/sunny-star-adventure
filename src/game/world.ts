@@ -174,6 +174,8 @@ export interface LevelDef {
   scrolls?: [number, number, number, string][];
   /** A great fish floating in the sea: x, z. Its back is a place to stand. */
   bigFish?: [number, number];
+  /** Beach umbrellas, each with a sun lounger: x, y, z, color. */
+  umbrellas?: [number, number, number, number][];
   /** Camp tents: x, y, z, color. */
   tents?: [number, number, number, number][];
   /** Shallow water lying on the ground (a brook): flat blue strips. */
@@ -1423,6 +1425,106 @@ const ARK_ISLAND: LevelDef = {
 LEVELS.push(ARK_ISLAND);
 
 /**
+ * Paradise Resort: a beach hotel with a pool and a water slide, a tiki snack bar, a spa, palm
+ * trees and umbrellas, a boat at the dock and a helicopter on the hotel roof.
+ */
+const RESORT: LevelDef = {
+  name: "Paradise Resort",
+  sky: 0x7fd4ff, fog: 0xcdeeff,
+  grass: 0x7ed957, dirt: 0xc9a26b, foliage: 0x3fa34d,
+  flowerColors: [0xff6b9d, 0xffd93d, 0xffffff, 0xff9f43],
+  spawn: [0, 0.3, 12],
+  sea: -0.5,
+  freeGlide: true,
+  boatSpawn: [3.4, 34, 0],
+  heliSpawn: [4, 20.25, -30, Math.PI],
+  pirates: [[0, 62, 10, 0.2]],
+  discs: [
+    { x: 0, z: -10, r: 40, y: 0, color: SAND },
+    { x: 0, z: -14, r: 25, y: 0.3, flowers: 16 },
+    { x: 0, z: -4, r: 9.5, y: 0.34, color: 0xf4efe6, paved: true },          // the pool deck
+    { x: -29, z: 4, r: 4, y: 0.05, trees: 3, color: SAND }, { x: 29, z: 4, r: 4, y: 0.05, trees: 3, color: SAND },
+    { x: -33, z: -22, r: 4, y: 0.05, trees: 3, color: SAND }, { x: 33, z: -22, r: 4, y: 0.05, trees: 3, color: SAND },
+    { x: -16, z: 22, r: 3, y: 0.05, trees: 2, color: SAND }, { x: 16, z: 22, r: 3, y: 0.05, trees: 2, color: SAND },
+  ],
+  brooks: [{ x: 0, z: -4, w: 11, d: 7 }],                                     // the swimming pool
+  umbrellas: [
+    [-10, 0, 19, 0xff6b9d], [-4, 0, 21, 0xffd93d], [4, 0, 21, 0x5cb8ff], [10, 0, 19, 0x7ed957],
+    [-22, 0, 12, 0xff9f43], [22, 0, 12, 0xb197fc], [-8.2, 0.34, -9.5, 0xffffff], [8.2, 0.34, 1.5, 0xffffff],
+  ],
+  bridges: [
+    { x: 0, z: 32, w: 2.4, d: 8, y: 0.1 },                                    // the dock
+    // the water slide: from the pink tower down into the pool
+    ...Array.from({ length: 8 }, (_, i) => ({ x: -9.6 + i * 0.75, z: -4, w: 0.8, d: 1.6, y: 5.7 - i * 0.68 })),
+  ],
+  buildings: [
+    { x: 0, z: -30, w: 16, d: 8, h: 20, color: 0xfff1c9, style: "glass" },    // the hotel
+    { x: -14, z: -24, w: 6, d: 5, h: 4, color: 0xffd9a8, enter: true },       // the lobby
+    { x: 14, z: -24, w: 5, d: 5, h: 4, color: 0x9df2ff, enter: true },        // the spa
+    { x: 15, z: -6, w: 4, d: 3.5, h: 3, color: 0xffa94d, enter: true },       // the tiki snack bar
+    { x: -12, z: -4, w: 3, d: 3, h: 6, color: 0xff9ecf },                     // the slide tower
+  ],
+  springs: [
+    { x: -12, z: -1.4, y: 0.3, power: 21 },     // → the slide tower
+    { x: 0, z: -24.9, y: 0.3, power: 38 },      // → the hotel roof (and the helicopter)
+    { x: 5.5, z: 6.5, y: 0.3, power: 15 },      // a trampoline by the pool
+  ],
+  balloons: [[-20, 1.6, 16]],
+  rings: [[0, 26, -30, 0], [20, 16, -10, 0.8], [-20, 16, -10, -0.8], [0, 12, 20, 0], [0, 18, 50, 0]],
+  stars: [
+    [0, 1.5, 6], [0, 1.4, -4], [-12, 7.6, -4], [-6.6, 4.9, -4], [0, 21.6, -27.5], [-6, 21.6, -31],
+    [-14, 1.5, -24.3], [14, 1.5, -24.3], [15, 1.5, -6.3], [15, 4.6, -6],
+    [0, 1.3, 35], [-29, 1.2, 4], [29, 1.2, 4], [-30, 1.1, -32], [30, 1.1, -32], [0, 1.1, 24],
+  ],
+  coins: [...ring(12, 7.5, 0, -4, 1.4), ...line(8, -14, 18, 14, 18, 1.0), ...line(5, 0, 29, 0, 35, 1.2), [-9.6, 7, -4], [-8.1, 5.6, -4], [-6.6, 4.3, -4]],
+  chests: [[6.5, 20.25, -32], [-33, 0.05, -24]],
+  hearts: [[-20, 1.3, -14]],
+  magnets: [[20, 1.5, -14]],
+  buddies: [],
+  slimes: [],
+  checkpoints: [[2.5, 0.3, 9], [3, 0.3, -18]],
+  portal: [22, 0.3, -14],
+  food: [["icecream", 12, 1.3, -4.5], ["pizza", 12, 1.3, -7], ["cupcake", -4, 1.4, 2], ["apple", -20, 1.3, -8]],
+  scrolls: [
+    [-14, 1.4, -25, "Psalm 118:24"],         // the lobby
+    [3, 21.5, -32.5, "Psalm 19:1"],          // the hotel roof
+    [-29, 1.2, 6, "Philippians 4:4"],
+  ],
+  npcs: [
+    {
+      name: "Manager Mia", x: -10.6, y: 0.3, z: -19.5, outfit: 4, hat: 0, skin: 2, job: "mail",
+      lines: ["Welcome to Paradise Resort! So many welcome letters to hand out."],
+    },
+    {
+      name: "Lifeguard Leo", x: 6.5, y: 0.34, z: -8.6, outfit: 0, hat: 1, skin: 3, job: "clean",
+      spots: [[-14, 0, 22], [-6, 0, 24.5], [8, 0, 24], [18, 0, 20], [26, 0, 10], [-25, 0, 13]],
+      lines: ["Walk, don't run by the pool! The slide tower has a trampoline beside it."],
+    },
+    {
+      name: "Chef Coco", x: 12.4, y: 0.3, z: -9.6, outfit: 3, hat: 1, skin: 4, job: "pizza",
+      lines: ["Room service! Fresh pizza for our guests."],
+    },
+    {
+      name: "Captain Kai", x: -2.4, y: 0, z: 27, outfit: 1, hat: 4, skin: 1, job: "fish",
+      spots: [[-22, -0.5, 44], [20, -0.5, 46], [0, -0.5, 52], [36, -0.5, 30], [-38, -0.5, 26]],
+      lines: ["The resort boat is at the dock. Mind the pirate ship out there!"],
+    },
+    {
+      name: "Pilot Skye", x: 4, y: 0.3, z: -22.6, outfit: 5, hat: 0, skin: 0, job: "cargo",
+      spots: [[-12, 6, -4], [15, 3, -6], [14, 4, -24], [0, 2, 24], [-29, 2, 4]],
+      lines: ["My helicopter is up on the hotel roof. The big trampoline will take you up!"],
+    },
+    {
+      name: "Guest Gus", x: 3.2, y: 0, z: 20.4, outfit: 2, hat: 4, skin: 2,
+      lines: [
+        "Ahh, what a holiday! Have you tried the water slide yet?",
+        "Jump off the hotel roof and hold JUMP to glide all the way to the beach!",
+      ],
+    },
+  ],
+};
+
+/**
  * Jonah and the Big Fish (the book of Jonah): the harbor town of Joppa, a great fish out at sea,
  * and the city of Nineveh on the far shore. Sail there with God's message.
  */
@@ -1593,6 +1695,7 @@ const ELAH: LevelDef = {
   ],
 };
 LEVELS.push(ELAH);
+LEVELS.push(RESORT);
 
 const RAINBOW_COLORS = [0xff5f6d, 0xffa94d, 0xffe066, 0x7ed957, 0x5cb8ff, 0xb197fc];
 
@@ -2094,6 +2197,23 @@ export class World {
       flap.rotation.x = -0.6;
       this.group.add(flap);
       this.solids.push({ minX: tx - 0.9, maxX: tx + 0.9, minZ: tz - 0.9, maxZ: tz + 0.9, topY: ty + 2 });
+    }
+    for (const [ux, uy, uz, color] of def.umbrellas ?? []) {
+      const g = new THREE.Group();
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4, 8), new THREE.MeshStandardMaterial({ color: 0xf4f6fb, roughness: 0.5 }));
+      pole.position.y = 1.2;
+      const shade = new THREE.Mesh(new THREE.ConeGeometry(1.5, 0.6, 10), new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.8 }));
+      shade.position.y = 2.5;
+      shade.castShadow = true;
+      const lounger = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.25, 1.8), new THREE.MeshStandardMaterial({ color: 0xfdf6ec, roughness: 0.8 }));
+      lounger.position.set(1.0, 0.2, 0);
+      lounger.castShadow = true;
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.1, 0.8), lounger.material);
+      back.position.set(1.0, 0.5, -0.75);
+      back.rotation.x = 0.9;
+      g.add(pole, shade, lounger, back);
+      g.position.set(ux, uy, uz);
+      this.group.add(g);
     }
     for (const w of def.brooks ?? []) {
       const y = (this.groundAt(w.x, w.z, 2)?.y ?? 0) + 0.04;

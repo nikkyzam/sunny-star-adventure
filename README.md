@@ -127,6 +127,12 @@ off, streets with crosswalks and traffic that stops for kids, parks, shops, a fi
 office to walk into, a pier with a boat, a Ferris wheel, a helicopter on top of Sunshine Tower, and
 a city house to buy for 80 coins.
 
+## Paradise Resort 🏖️
+
+A beach hotel world from the title screen: a pool with a water slide, a tiki snack bar, a spa and a
+lobby to walk into, palm trees and umbrellas, the resort boat, a helicopter on the hotel roof, sky
+rings, and five jobs (welcome letters, beach cleanup, room-service pizza, fishing, sky cargo).
+
 ## Ads and selling the game
 
 Ad breaks between levels are built in but switched off. See [MONETIZATION.md](MONETIZATION.md).

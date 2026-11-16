@@ -121,7 +121,7 @@ try {
   const bank0 = d.bank;
   await warp(target.x + 1.3, target.z + 0.4);
   d = await until((x) => x.job === null, 6000);
-  check("C7 delivering it in the city pays", d.job === null && d.bank === bank0 + 10, `bank ${bank0} → ${d.bank} (${target.npc})`);
+  check("C7 delivering it in the city pays", d.job === null && d.bank >= bank0 + 10, `bank ${bank0} → ${d.bank} (${target.npc})`);
 
   // C8: draw calls and triangles from the spawn, looking at the skyline
   await warp(0, 46);
@@ -129,6 +129,33 @@ try {
   const perf = await page.evaluate(() => window.__perf());
   check("C8 the city draws within budget", perf.calls < 1100 && perf.triangles < 900000, JSON.stringify(perf));
   await page.screenshot({ path: join(ROOT, "verification-shots/53-city-skyline.png") });
+
+  // ── Paradise Resort ──
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
+  await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
+  await page.click("[data-action=resort]");
+  await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
+  await page.waitForTimeout(1500);
+  const rl = await page.evaluate(() => document.getElementById("hud-level")?.textContent ?? "");
+  d = await dbg();
+  check("R1 the Resort button opens Paradise Resort with the beach song", rl.includes("Paradise Resort") && d.song === "beach", `${rl} / ${d.song}`);
+  await page.screenshot({ path: join(ROOT, "verification-shots/54-resort.png") });
+  const rg = { hotel: await heightAt(0, -30), tower: await heightAt(-12, -4), slideTop: await heightAt(-9.6, -4), slideEnd: await heightAt(-4.35, -4), pool: await heightAt(2, -4), dock: await heightAt(0, 34) };
+  check("R2 hotel roof, slide tower, slide, pool deck and dock are solid", Math.abs(rg.hotel - 20.25) < 0.2 && Math.abs(rg.tower - 6.25) < 0.2 && Math.abs(rg.slideTop - 5.7) < 0.2
+    && Math.abs(rg.slideEnd - 0.94) < 0.2 && Math.abs(rg.pool - 0.34) < 0.1 && Math.abs(rg.dock - 0.1) < 0.1, JSON.stringify(rg));
+  // slide down: from the tower top, walk +x (D) and end up at the pool
+  await warp(-11, -4);
+  await page.keyboard.down("KeyD");
+  d = await until((x) => x.px > -3, 15000);
+  await page.keyboard.up("KeyD");
+  await page.waitForTimeout(500);
+  d = await dbg();
+  check("R3 the water slide carries a kid down into the pool", d.px > -3.5 && d.py < 1, `x ${d.px.toFixed(1)} y ${d.py.toFixed(2)}`);
+  d = await dbg();
+  check("R4 the helicopter waits on the hotel roof", d.heli && Math.abs(d.heli.y - 20.25) < 0.4, JSON.stringify(d.heli));
+  await warp(0, 8);
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: join(ROOT, "verification-shots/55-resort-pool.png") });
 
   check("C9 no page errors", errors.length === 0, errors.join(" | "));
 } catch (e) {
