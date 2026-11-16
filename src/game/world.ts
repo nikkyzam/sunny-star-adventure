@@ -27,7 +27,7 @@ import type { PropDefs } from "./props";
 import type { FoodDef } from "./food";
 import type { ShipDef } from "./ships";
 import { makeTextSprite, disposeSprite } from "./social";
-import { envReady, hasModel, Placer } from "./env";
+import { envReady, hasModel, brickTexture, Placer } from "./env";
 import type { JobId } from "./jobs";
 import type { TrafficLoop } from "./traffic";
 
@@ -1623,6 +1623,8 @@ export class World {
   def: LevelDef = LEVELS[0];
   solids: Solid[] = [];
   private houses: House[] = [];
+  /** Walk-in houses' outside walls: they get the city kit's brick once it has loaded. */
+  private houseWalls: { mat: THREE.MeshStandardMaterial; color: number }[] = [];
   private decor: Decor[] = [];
   private decorGroup = new THREE.Group();
   /** Ids of things the kid has bought (set by boot.ts before a level is built). */
@@ -1737,14 +1739,25 @@ export class World {
     };
 
     // ── outside ──
-    const bodyMat = flat(b.color);
-    box(shell, bodyMat, b.w, b.h, WALL, 0, b.h / 2, -hd + WALL / 2);                 // back
-    box(shell, bodyMat, WALL, b.h, b.d - 2 * WALL, -hw + WALL / 2, b.h / 2, 0);      // left
-    box(shell, bodyMat, WALL, b.h, b.d - 2 * WALL, hw - WALL / 2, b.h / 2, 0);       // right
-    box(shell, bodyMat, side, b.h, WALL, -hw + side / 2, b.h / 2, hd - WALL / 2);    // front, left of the door
-    box(shell, bodyMat, side, b.h, WALL, hw - side / 2, b.h / 2, hd - WALL / 2);     // front, right of the door
-    box(shell, bodyMat, DOORWAY, b.h - doorTop, WALL, 0, (b.h + doorTop) / 2, hd - WALL / 2); // above the door
-    box(shell, bodyMat, b.w - 0.02, 0.2, b.d - 0.02, 0, b.h - 0.1, 0);               // roof slab
+    const bodyMat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.85 });
+    this.houseWalls.push({ mat: bodyMat, color: b.color });
+    // a wall: its texture repeats every 2.5 m whatever the wall's size, so bricks are the same size everywhere
+    const brickWall = (w: number, h: number, d: number, x: number, y: number, z: number) => {
+      const m = box(shell, bodyMat, w, h, d, x, y, z);
+      const uv = m.geometry.getAttribute("uv");
+      for (let i = 0; i < uv.count; i++) {
+        const face = Math.floor(i / 4); // +x, -x, +y, -y, +z, -z
+        const across = face < 2 ? d : w, up = face === 2 || face === 3 ? d : h;
+        uv.setXY(i, uv.getX(i) * across / 2.5, uv.getY(i) * up / 2.5);
+      }
+    };
+    brickWall(b.w, b.h, WALL, 0, b.h / 2, -hd + WALL / 2);                 // back
+    brickWall(WALL, b.h, b.d - 2 * WALL, -hw + WALL / 2, b.h / 2, 0);      // left
+    brickWall(WALL, b.h, b.d - 2 * WALL, hw - WALL / 2, b.h / 2, 0);       // right
+    brickWall(side, b.h, WALL, -hw + side / 2, b.h / 2, hd - WALL / 2);    // front, left of the door
+    brickWall(side, b.h, WALL, hw - side / 2, b.h / 2, hd - WALL / 2);     // front, right of the door
+    brickWall(DOORWAY, b.h - doorTop, WALL, 0, (b.h + doorTop) / 2, hd - WALL / 2); // above the door
+    box(shell, flat(0x6b5a4e), b.w - 0.02, 0.2, b.d - 0.02, 0, b.h - 0.1, 0);        // roof slab
     box(shell, trimMat, b.w + 0.3, 0.25, b.d + 0.3, 0, b.h + 0.12, 0);
     for (const sx of [-1, 1]) {
       box(shell, doorMat, 0.14, doorTop, 0.12, (DOORWAY / 2 + 0.07) * sx, doorTop / 2, hd + 0.03, false); // door frame
@@ -1935,6 +1948,7 @@ export class World {
     this.checkpoints = [];
     this.solids = [];
     this.houses = [];
+    this.houseWalls = [];
     this.decor = [];
     for (const l of this.locks.values()) disposeSprite(l.sign);
     this.locks.clear();
@@ -2214,7 +2228,8 @@ export class World {
       this.ocean = new THREE.Mesh(
         geo,
         new THREE.MeshStandardMaterial({
-          vertexColors: true, emissive: 0x06304e, roughness: 0.5, metalness: 0.05, flatShading: true,
+          // smooth enough to mirror the sky: each little wave facet catches the light
+          vertexColors: true, emissive: 0x04263f, roughness: 0.18, metalness: 0.25, flatShading: true,
           transparent: true, opacity: 0.93,
         }),
       );
@@ -2284,6 +2299,14 @@ export class World {
       sky.position.set(0, -20, -25);
       sky.renderOrder = -1;
       this.group.add(sky);
+      // the sun itself, with a soft glow around it (it sits where the sunlight comes from)
+      const sunDir = new THREE.Vector3(18, 30, 28).normalize().multiplyScalar(430);
+      const disc = new THREE.Mesh(new THREE.SphereGeometry(13, 16, 12), new THREE.MeshBasicMaterial({ color: 0xfffbe6, fog: false, toneMapped: false }));
+      disc.position.copy(sunDir);
+      const glow = new THREE.Mesh(new THREE.SphereGeometry(34, 16, 12),
+        new THREE.MeshBasicMaterial({ color: def.light?.sun ?? 0xfff1c4, fog: false, transparent: true, opacity: 0.28, depthWrite: false }));
+      glow.position.copy(sunDir);
+      this.group.add(glow, disc);
     }
 
     // ── Rainbow (big, far, decorative) ──
@@ -2303,8 +2326,21 @@ export class World {
     this.decorGroup = new THREE.Group();
     this.group.add(this.decorGroup);
     this.buildDecor(def);
+    this.textureHouses();
 
     scene.add(this.group);
+  }
+
+  /** Brick for the walk-in houses' outside walls, tinted with each house's color. */
+  private textureHouses(): void {
+    const brick = brickTexture();
+    if (!brick) return;
+    for (const h of this.houseWalls) {
+      h.mat.map = brick;
+      // (the grey brick reads darker than its color, so tint with a light pastel, as the city walls do)
+      h.mat.color.set(h.color).lerp(new THREE.Color(0xffffff), 0.2).multiplyScalar(1.5);
+      h.mat.needsUpdate = true;
+    }
   }
 
   /** Redraw trees, plants, rocks and city buildings (call when the world models finish loading). */
@@ -2322,6 +2358,7 @@ export class World {
     free(this.decorGroup);
     this.decorGroup.clear();
     this.buildDecor(this.def);
+    this.textureHouses();
   }
 
   private buildDecor(def: LevelDef): void {

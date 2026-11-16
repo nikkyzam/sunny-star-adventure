@@ -65,6 +65,21 @@ export function loadEnvKit(): Promise<boolean> {
   return loading;
 }
 
+/** The (grey) brick texture from the city kit, for walls built in code; null until the kit loads. */
+export function brickTexture(): THREE.Texture | null {
+  if (!models) return null;
+  for (const parts of models.values()) {
+    for (const p of parts) {
+      const m = p.material as THREE.MeshStandardMaterial;
+      if (/Brick/i.test(m.name) && m.map) {
+        m.map.wrapS = m.map.wrapT = THREE.RepeatWrapping;
+        return m.map;
+      }
+    }
+  }
+  return null;
+}
+
 export function hasModel(name: string): boolean {
   return models?.has(name) ?? false;
 }

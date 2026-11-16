@@ -170,11 +170,39 @@ export function startGame(canvas: HTMLCanvasElement): void {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // film-style color: bright skies and sunlit walls roll off softly instead of clipping to white
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  let skyEnv: THREE.WebGLRenderTarget | null = null;
+
+  /** Light every surface with the level's own sky (and reflect it in glass, paint and water). */
+  function makeSkyLight(top: number, horizon: number, ground: number): void {
+    const geo = new THREE.SphereGeometry(10, 24, 12);
+    const pos = geo.getAttribute("position");
+    const colors = new Float32Array(pos.count * 3);
+    const cTop = new THREE.Color(top), cHor = new THREE.Color(horizon), cGround = new THREE.Color(ground), c = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const h = pos.getY(i) / 10;
+      if (h >= 0) c.copy(cHor).lerp(cTop, Math.pow(h, 0.6));
+      else c.copy(cHor).lerp(cGround, Math.min(1, -h * 4));
+      colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+    }
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide });
+    const sky = new THREE.Scene();
+    sky.add(new THREE.Mesh(geo, mat));
+    skyEnv?.dispose();
+    skyEnv = pmrem.fromScene(sky, 0.02);
+    scene.environment = skyEnv.texture;
+    geo.dispose();
+    mat.dispose();
+  }
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 600);
 
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x88aa66, 0.85);
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x88aa66, 0.45); // (the sky light does the rest)
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff5dd, 1.7);
   sun.position.set(18, 30, 6);
@@ -487,6 +515,16 @@ export function startGame(canvas: HTMLCanvasElement): void {
     sun.color.setHex(light?.sun ?? 0xfff5dd);
     hemi.color.setHex(light?.sky ?? 0xffffff);
     hemi.groundColor.setHex(light?.ground ?? 0x88aa66);
+    {
+      const d = world.def;
+      const dark = d.space || d.night;
+      makeSkyLight(
+        d.skyTop ?? new THREE.Color(d.sky).multiplyScalar(dark ? 1 : 0.62).getHex(),
+        dark ? d.sky : new THREE.Color(d.sky).lerp(new THREE.Color(0xffffff), 0.45).getHex(),
+        new THREE.Color(d.grass).multiplyScalar(0.55).getHex(),
+      );
+      scene.environmentIntensity = dark ? 0.4 : 0.55;
+    }
     traffic.build(world.def.traffic ?? []);
     scrolls.build((world.def.scrolls ?? []).flatMap(([x, y, z, ref]) => {
       const k = LIBRARY.findIndex((v) => v.ref === ref);
@@ -2418,6 +2456,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
       jobs.dispose();
       traffic.dispose();
       scrolls.dispose();
+      skyEnv?.dispose();
+      pmrem.dispose();
       blobGeo.dispose();
       blobMat.dispose();
       scene.traverse((o) => {
