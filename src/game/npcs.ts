@@ -8,6 +8,7 @@ import * as THREE from "three";
 import { Player } from "./player";
 import { lookOf, safeHat, safeLook } from "./profile";
 import { makeTextSprite, disposeSprite } from "./social";
+import { adultKindFor, peopleReady } from "./people";
 import type { NpcDef } from "./world";
 
 const TALK_RADIUS = 2.6;
@@ -24,11 +25,11 @@ interface Npc {
 
 function makeVillager(def: NpcDef): { p: Player; tag: THREE.Sprite } {
   // villagers get a mix of hair, glasses and clothes from their other choices
-  const p = new Player(lookOf(safeLook({
+  const p = new Player({ ...lookOf(safeLook({
     body: (def.outfit + def.skin + def.hat) % 2,
     outfit: def.outfit, skin: def.skin, hair: def.outfit + def.hat, hairColor: def.skin * 2 + def.outfit,
     glasses: (def.outfit + def.skin) % 3 === 0 ? 1 : 0, clothes: def.hat + def.skin,
-  })));
+  })), adult: peopleReady() ? adultKindFor(def.name) : null });
   p.setHat(safeHat(def.hat));
   p.pos.set(def.x, def.y, def.z);
   p.facing = 0;
@@ -137,6 +138,9 @@ export class Npcs {
         n.p.facing += d * Math.min(1, dt * 5);
         n.p.group.rotation.y = n.p.facing;
       }
+      // look the kid in the face when they come close
+      if (d2 < 36 && !n.fallen) n.p.lookTarget = (n.p.lookTarget ?? new THREE.Vector3()).set(look.x, look.y + 1.35, look.z);
+      else n.p.lookTarget = null;
       n.p.applyRemote(dt, n.def.x, n.def.y, n.def.z, 0, 0, 0, true, false, false, n.p.facing, false);
       if (n.def.scale) n.p.group.scale.setScalar(n.def.scale); // (the kid model resets its own size each frame)
       const lean = n.fallen ? -Math.PI / 2 : 0;

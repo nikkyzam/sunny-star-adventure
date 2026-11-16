@@ -13,6 +13,7 @@
 import * as THREE from "three";
 import type { World, Platform } from "./world";
 import { makeHuman, type Human, type Move } from "./humans";
+import { makeAdult, type Adult, type AdultKind } from "./people";
 
 const SPEED = 7;
 const ACCEL_GROUND = 70;
@@ -150,6 +151,8 @@ export interface KidPalette {
   style?: number;
   /** Human body (0 girl, 1 boy), used when human characters are loaded. */
   body?: number;
+  /** A grown-up villager's body (people.ts), used once those models are loaded. */
+  adult?: AdultKind | null;
 }
 
 export class Player {
@@ -182,11 +185,21 @@ export class Player {
   private balloon!: THREE.Group;
   private hat: THREE.Group | null = null;
   /** The human-looking model (humans.ts), or null for the code-built cartoon kid. */
-  private human: Human | null = null;
+  private human: Human | Adult | null = null;
+  /** A grown-up (their own hair: no kid's cap). */
+  private grownUp = false;
   /** Where hats, glasses and the cap go: the cartoon body, or the human's head. */
   private headParent: THREE.Object3D = this.body;
   /** Far from the camera: animate less often. */
   near = true;
+  /** Something nearby worth a look (a villager, an animal, a friend): the head turns to it. */
+  lookTarget: THREE.Vector3 | null = null;
+  /** Ground height under a point, so feet can stand on steps and edges (set by update). */
+  groundFn: ((x: number, z: number) => number | null) | null = null;
+  private lastFacing = 0;
+  private lastSpeed = 0;
+  private turnRate = 0;
+  private accelRate = 0;
   private cap = new THREE.Group();
   private lids: THREE.Mesh[] = [];
   private blinkT = 1 + Math.random() * 3;
@@ -200,7 +213,9 @@ export class Player {
   private wasAirborne = false;
 
   constructor(palette: KidPalette = { jacket: 0xff8c42, cap: 0xff4757, pants: 0x4a69bd }) {
-    this.human = makeHuman({
+    const adult = palette.adult ? makeAdult({ kind: palette.adult, skin: palette.skin ?? 0xd9a273, top: palette.jacket, bottom: palette.pants, accent: palette.cap }) : null;
+    this.grownUp = adult !== null;
+    this.human = adult ?? makeHuman({
       body: palette.body ?? 0, skinColor: palette.skin ?? 0xffd9b3, hair: palette.hairStyle ?? 0, hairColor: palette.hair ?? 0x5a3a22,
       top: palette.style === 3 ? palette.cap : palette.jacket, bottom: palette.pants, accent: palette.cap, style: palette.style ?? 0,
     });
@@ -212,6 +227,7 @@ export class Player {
       this.cap.add(makeCap(palette.cap));
       this.cap.position.y = 0.07; // sits higher on the human head, clear of the eyes
       this.headParent.add(this.cap);
+      this.cap.visible = !this.grownUp; // grown-ups have their own hair
     } else {
       this.buildToy(palette);
     }
@@ -430,7 +446,7 @@ export class Player {
     this.hat = makeHat(i);
     if (this.hat) this.headParent.add(this.hat);
     // the cap comes off for a crown, wizard hat or bunny ears; a flower tucks onto it
-    this.cap.visible = i === 0 || i === 4;
+    this.cap.visible = !this.grownUp && (i === 0 || i === 4);
   }
 
   /** Grab a balloon: rise gently for a few seconds. */
@@ -488,6 +504,7 @@ export class Player {
    */
   update(dt: number, wishX: number, wishZ: number, wantJump: boolean, glideHeld: boolean, world: World): PlayerEvents {
     const e = this.events;
+    if (!this.groundFn) this.groundFn = (x, z) => world.groundAt(x, z, this.pos.y + 0.5)?.y ?? null;
     e.jumped = false; e.doubleJumped = false; e.landed = false; e.sprung = 0;
 
     if (this.invuln > 0) this.invuln -= dt;
@@ -609,6 +626,16 @@ export class Player {
     this.animate(dt);
   }
 
+  /** What the human model shows right now (for tests). */
+  debugMove(): string {
+    return this.human?.move ?? "";
+  }
+
+  /** Ankle heights above the ground under each foot (for tests). */
+  debugFeet(): number[] {
+    return this.human && this.groundFn ? this.human.debugFeet(this.groundFn) : [];
+  }
+
   /** Pick the human's animation from what the kid is doing. */
   private animateHuman(dt: number, hSpeed: number): void {
     const h = this.human!;
@@ -621,15 +648,30 @@ export class Player {
       move = "drive";
     } else if (!this.onGround) {
       move = this.glideActive || this.floatT > 0 ? "float" : this.vel.y > 2 && h.move !== "fall" ? "jump" : "fall";
-    } else if (hSpeed > 0.6) {
-      if (hSpeed < 3.2) { move = "walk"; rate = THREE.MathUtils.clamp(hSpeed / 1.6, 0.6, 1.6); }
-      else if (hSpeed < 9) { move = "jog"; rate = THREE.MathUtils.clamp(hSpeed / 4.6, 0.8, 1.7); }
-      else { move = "sprint"; rate = THREE.MathUtils.clamp(hSpeed / 7.5, 0.9, 1.6); }
     } else {
-      move = "idle";
+      move = "walk"; // on foot: idle, walk, jog and sprint blend by speed
     }
-    h.play(move, rate);
+    if (move === "walk") h.moveAt(hSpeed);
+    else h.play(move, rate);
     h.update(dt, this.near);
+    // how fast the kid is turning and speeding up, smoothed (for leaning)
+    if (dt > 0) {
+      let df = this.facing - this.lastFacing;
+      while (df > Math.PI) df -= Math.PI * 2;
+      while (df < -Math.PI) df += Math.PI * 2;
+      const k = Math.min(1, dt * 10);
+      this.turnRate += (THREE.MathUtils.clamp(df / dt, -8, 8) - this.turnRate) * k;
+      this.accelRate += (THREE.MathUtils.clamp((hSpeed - this.lastSpeed) / dt, -40, 40) - this.accelRate) * k;
+    }
+    this.lastFacing = this.facing;
+    this.lastSpeed = hSpeed;
+    if (this.near) {
+      const grounded = this.onGround && !this.riding && this.danceT <= 0;
+      h.pose(dt, {
+        turnRate: grounded ? this.turnRate : 0, accel: grounded ? this.accelRate : 0, grounded,
+        ground: this.groundFn, baseY: this.pos.y, look: this.riding ? null : this.lookTarget,
+      });
+    }
 
     // pizza: grow giant, then shrink back
     const size = this.group.scale.x + ((this.bigT > 0 ? 1.7 : 1) - this.group.scale.x) * Math.min(1, dt * 5);

@@ -12,6 +12,7 @@ import * as THREE from "three";
 import type { RideKind } from "./car";
 import type { Particles } from "./particles";
 import { makeTextSprite, disposeSprite } from "./social";
+import { loadAnimal, makeAnimal, type AnimalKind } from "./critters";
 
 export type JobId = "pizza" | "mail" | "fire" | "farm" | "clean" | "fish" | "bus" | "cargo" | "moon" | "care" | "ark" | "jonah" | "david";
 
@@ -188,14 +189,17 @@ export const JOBS: Record<JobId, JobDef> = {
   },
 };
 
-/** The ark's passengers: simple blocky animals, a pair of each. */
-const ANIMALS = [
+/**
+ * The ark's passengers, a pair of each. Pairs with `models` use the real animated animals (and
+ * show the blocky shape only if those can't load); the rest are simple blocky animals.
+ */
+const ANIMALS: { color: number; dark: number; size: number; leg: number; neck: number; mane: boolean; trunk: boolean; models?: [AnimalKind, AnimalKind] }[] = [
   { color: 0xe0a84a, dark: 0x9a6a2a, size: 1.0, leg: 0.35, neck: 0.1, mane: true, trunk: false },   // lions
   { color: 0x9aa3b0, dark: 0x7c8592, size: 1.7, leg: 0.6, neck: 0.1, mane: false, trunk: true },    // elephants
   { color: 0xf2c94c, dark: 0xa8742a, size: 1.0, leg: 0.9, neck: 1.2, mane: false, trunk: false },   // giraffes
   { color: 0xfdfdfd, dark: 0x33323e, size: 0.8, leg: 0.3, neck: 0.1, mane: false, trunk: false },   // sheep
-  { color: 0xf4f4f4, dark: 0x2b2b33, size: 1.0, leg: 0.5, neck: 0.3, mane: true, trunk: false },    // zebras
-  { color: 0x8a5a33, dark: 0x5e3b1f, size: 1.2, leg: 0.4, neck: 0.1, mane: false, trunk: false },   // bears
+  { color: 0x8a5a33, dark: 0x5e3b1f, size: 1.1, leg: 0.6, neck: 0.4, mane: true, trunk: false, models: ["horse", "horse_white"] }, // horses
+  { color: 0xc98a5b, dark: 0x5e3b1f, size: 1.0, leg: 0.6, neck: 0.4, mane: false, trunk: false, models: ["stag", "deer"] },        // deer
 ];
 
 interface Live {
@@ -236,6 +240,8 @@ export class Jobs {
   /** Shared meshes for the things at stops, made the first time they're needed. */
   private kit = new Map<string, { geo: THREE.BufferGeometry; mat: THREE.Material }>();
   private signs: THREE.Sprite[] = [];
+  /** Real animated animals at stops, and the stop group each belongs to. */
+  private mixers: { mixer: THREE.AnimationMixer; root: THREE.Object3D }[] = [];
 
   constructor(private readonly fx: Particles) {
     const cone = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.9, 12).rotateX(Math.PI / 2), this.arrowMat);
@@ -485,6 +491,22 @@ export class Jobs {
       case "animals": {
         // two of a kind, side by side
         const a = ANIMALS[kind % ANIMALS.length];
+        if (a.models) {
+          a.models.forEach((k, n) => {
+            const spot = new THREE.Group();
+            spot.position.x = (n ? 0.8 : -0.8) * 1.2;
+            g.add(spot);
+            loadAnimal(k).then((kit) => {
+              if (!kit) return;
+              const m = makeAnimal(kit);
+              m.root.rotation.y = n ? -0.4 : 0.4; // turned a little towards each other
+              m.play(n ? "Eating" : "Idle", 0);
+              spot.add(m.root);
+              this.mixers.push({ mixer: m.mixer, root: g });
+            });
+          });
+          break;
+        }
         for (const sx of [-0.55, 0.55]) {
           const one = new THREE.Group();
           const fur = std(a.color), dark = std(a.dark);
@@ -539,6 +561,11 @@ export class Jobs {
   }
 
   private animate(dt: number, t: number, kid: THREE.Vector3, oneBeam: boolean): void {
+    if (this.mixers.length) {
+      // drop animals whose stop is gone (done, or the job ended)
+      this.mixers = this.mixers.filter((m) => m.root.parent === this.group);
+      for (const m of this.mixers) m.mixer.update(dt);
+    }
     let nearest: Live | null = null;
     let nearD = Infinity;
     for (const l of this.live) {

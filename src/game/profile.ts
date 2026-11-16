@@ -30,7 +30,7 @@ export const GLASSES = ["🚫", "👓", "🕶️", "❤️"];
 export const CLOTHES = ["🧥", "👗", "🩳", "👖"];
 
 /** Pets that follow you everywhere; index matches makePet() in pets.ts (0 = no pet). */
-export const PETS = ["🚫", "🐶", "🐱", "🐥", "🐲"];
+export const PETS = ["🚫", "🐶", "🐱", "🐥", "🐲", "🐺"];
 
 export const NAME_ADJ = [
   "Bouncy", "Happy", "Sunny", "Zippy", "Giggly", "Sparkly", "Brave", "Fluffy",

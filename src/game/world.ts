@@ -30,6 +30,7 @@ import { makeTextSprite, disposeSprite } from "./social";
 import { envReady, hasModel, brickTexture, Placer } from "./env";
 import type { JobId } from "./jobs";
 import type { TrafficLoop } from "./traffic";
+import type { HerdDef } from "./critters";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 /** Something decorative to draw: by the code-built shapes, or by the models in env.ts once loaded. */
@@ -171,6 +172,8 @@ export interface LevelDef {
   ferris?: [number, number, number, number];
   /** Cars that drive around the city by themselves (traffic.ts). */
   traffic?: TrafficLoop[];
+  /** Real animals that graze and wander in their own patch (critters.ts). */
+  herds?: HerdDef[];
   /** Scripture scrolls to find: x, y, z and the reference of the library verse (verses.ts) written on it. */
   scrolls?: [number, number, number, string][];
   /** A great fish floating in the sea: x, z. Its back is a place to stand. */
@@ -760,6 +763,11 @@ const ADVENTURE_ISLAND: LevelDef = {
     [-66, 17, -60, 0], [-56, 9, -14, 1.57], [62, 14, 22, 0], [0, 24, 22, 1.57], [22, 31, 0, 1.57],
   ],
   rainbow: true,
+  herds: [
+    { kinds: ["donkey", "alpaca", "alpaca"], x: -3, z: -17, r: 4.5 },          // by Farmer Fern's field
+    { kinds: ["cow", "cow", "bull", "horse_white", "horse"], x: 61, z: 25, r: 7 }, // the farm on East Isle
+    { kinds: ["deer", "stag", "deer", "fox"], x: -73, z: -66, r: 8 },           // the woods on West Isle
+  ],
   discs: [
     { x: 0, z: -20, r: 36, y: 0, color: SAND },                      // the beach
     { x: 0, z: -20, r: 28, y: 0.3, flowers: 26, rocks: 5 },           // the meadow
@@ -1181,6 +1189,7 @@ const SUNSHINE_CITY: LevelDef = {
     // the inner ring around the plaza, the other way round
     { pts: [[10.5, -10.5], [10.5, 10.5], [-10.5, 10.5], [-10.5, -10.5]], cars: 3, speed: 5.5 },
   ],
+  herds: [{ kinds: ["shibainu", "husky"], x: 0, z: -24, r: 5 }], // dogs playing in Maple Park
   discs: [
     { x: 0, z: 0, r: 68, y: -0.15, color: SAND },                         // the beach all around
     { x: 0, z: 0, r: 60, y: 0, color: PAVEMENT, paved: true },             // the city
@@ -1373,6 +1382,11 @@ const ARK_ISLAND: LevelDef = {
   ark: [0, -30],
   playground: [-18, -30],
   station: [-4.5, 8],
+  herds: [
+    // more animals waiting for the ark, two by two
+    { kinds: ["cow", "bull", "donkey", "donkey"], x: -12, z: 2, r: 6 },
+    { kinds: ["alpaca", "alpaca", "fox", "fox", "wolf", "wolf"], x: 18, z: -36, r: 6 },
+  ],
   discs: [
     { x: 0, z: -20, r: 40, y: 0, color: SAND },
     { x: 0, z: -20, r: 33, y: 0.3, flowers: 24, rocks: 5 },
@@ -1642,6 +1656,7 @@ const ELAH: LevelDef = {
   spawn: [-6, 0.3, 12],
   sea: -0.5,
   station: [-1.5, 14],
+  herds: [{ kinds: ["donkey", "donkey"], x: -19, z: 11, r: 3.5 }], // Jesse's donkeys
   discs: [
     { x: 0, z: -20, r: 48, y: 0, color: SAND },
     { x: 0, z: -20, r: 43, y: 0.3, flowers: 22, rocks: 8 },

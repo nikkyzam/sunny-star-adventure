@@ -6,6 +6,7 @@
 
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { carModel } from "./critters";
 
 export interface TrafficLoop {
   /** Lane corners in driving order; the loop closes back to the first. */
@@ -22,6 +23,9 @@ interface TCar {
   v: number;
   top: number;
   heading: number;
+  /** Which city car model it wears; `dressed` once the real model replaced the simple shape. */
+  look: number;
+  dressed: boolean;
 }
 
 const COLORS = [0xff4757, 0x5cb8ff, 0xffd93d, 0x7ed957, 0xffffff, 0xb197fc, 0xff9f43, 0x2f3542];
@@ -70,12 +74,28 @@ export class Traffic {
         group.add(body, cabin, dark);
         group.position.y = groundY;
         this.group.add(group);
-        const car: TCar = { group, loop, s: (i / l.cars) * total, v: 0, top: l.speed * (0.85 + ((k * 37) % 10) / 33), heading: 0 };
+        const car: TCar = { group, loop, s: (i / l.cars) * total, v: 0, top: l.speed * (0.85 + ((k * 37) % 10) / 33), heading: 0, look: k * 3 + i, dressed: false };
+        this.dress(car);
         this.place(car);
         car.group.rotation.y = car.heading;
         this.cars.push(car);
       }
     }
+  }
+
+  /** Swap the simple shape for a real city car, if the models have loaded. */
+  private dress(c: TCar): void {
+    if (c.dressed) return;
+    const m = carModel(c.look);
+    if (!m) return;
+    c.group.clear();
+    c.group.add(m);
+    c.dressed = true;
+  }
+
+  /** The city car models just arrived: dress every car that's already driving. */
+  dressAll(): void {
+    for (const c of this.cars) this.dress(c);
   }
 
   clear(): void {

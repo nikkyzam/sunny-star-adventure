@@ -5,6 +5,10 @@
  */
 
 import * as THREE from "three";
+import { loadAnimal, makeAnimal, type AnimalKind, type AnimalModel } from "./critters";
+
+/** Pets that have a real animated model (shown once it has loaded; the blocky one until then). */
+const REAL: Partial<Record<number, AnimalKind>> = { 1: "shibainu", 5: "husky" };
 
 function mat(color: number): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.8 });
@@ -25,9 +29,9 @@ function makePet(kind: number): THREE.Group | null {
   const eyes = (y: number, z: number, dx: number) => {
     for (const sx of [-1, 1]) part(g, new THREE.SphereGeometry(0.035, 6, 6), dark, dx * sx, y, z);
   };
-  if (kind === 1) {
-    // puppy
-    const fur = mat(0xd9a066), ear = mat(0x8a5a33);
+  if (kind === 1 || kind === 5) {
+    // puppy (5: a grey husky puppy)
+    const fur = mat(kind === 5 ? 0xb8bec9 : 0xd9a066), ear = mat(kind === 5 ? 0x4a4f5c : 0x8a5a33);
     part(g, new THREE.CapsuleGeometry(0.17, 0.3, 4, 8), fur, 0, 0.3, 0).rotation.x = Math.PI / 2;
     part(g, new THREE.SphereGeometry(0.19, 10, 8), fur, 0, 0.5, 0.3);
     part(g, new THREE.SphereGeometry(0.09, 8, 6), mat(0xfff1dc), 0, 0.45, 0.46);
@@ -93,12 +97,20 @@ export class Pet {
   private phase = Math.random() * 6;
   private happyT = 0;
   private placed = false;
+  /** The real animated pet, once loaded (its meshes are shared, so never disposed here). */
+  private real: AnimalModel | null = null;
+  private lastX = 0;
+  private lastZ = 0;
+  private speed = 0;
 
   /** Change the pet (0 = none). */
   setKind(kind: number): void {
     if (kind === this.kind) return;
     this.kind = kind;
-    if (this.mesh) {
+    this.real = null;
+    if (this.mesh && this.mesh.userData.shared) {
+      this.group.remove(this.mesh);
+    } else if (this.mesh) {
       this.mesh.traverse((o) => {
         if (o instanceof THREE.Mesh) {
           o.geometry.dispose();
@@ -109,6 +121,23 @@ export class Pet {
     }
     this.mesh = makePet(kind);
     if (this.mesh) this.group.add(this.mesh);
+    const real = REAL[kind];
+    if (real) {
+      loadAnimal(real).then((kit) => {
+        if (!kit || this.kind !== kind || !this.mesh) return;
+        // swap the blocky pet for the real one
+        this.mesh.traverse((o) => {
+          if (o instanceof THREE.Mesh) { o.geometry.dispose(); (o.material as THREE.Material).dispose(); }
+        });
+        this.group.remove(this.mesh);
+        const m = makeAnimal(kit, kind === 5 ? 0.85 : 0.9);
+        m.play("Idle", 0);
+        m.root.userData.shared = true;
+        this.mesh = m.root;
+        this.real = m;
+        this.group.add(m.root);
+      });
+    }
   }
 
   get active(): boolean {
@@ -142,7 +171,16 @@ export class Pet {
       this.group.rotation.y = Math.atan2(dx, dz);
     }
     p.y += (groundY - p.y) * Math.min(1, dt * 6);
-    const hop = dist > 1.3 ? Math.abs(Math.sin(t * 8 + this.phase)) * 0.22 : 0;
+    if (this.real && dt > 0) {
+      // steps timed to how fast the pet really moved this frame
+      const moved = Math.hypot(p.x - this.lastX, p.z - this.lastZ) / dt;
+      this.speed += (Math.min(moved, 12) - this.speed) * Math.min(1, dt * 8);
+      this.real.moveAt(this.speed < 0.3 ? 0 : this.speed, 0.2);
+      this.real.mixer.update(dt);
+    }
+    this.lastX = p.x;
+    this.lastZ = p.z;
+    const hop = this.real ? 0 : dist > 1.3 ? Math.abs(Math.sin(t * 8 + this.phase)) * 0.22 : 0;
     this.mesh.position.y = hop;
     if (this.happyT > 0) {
       this.happyT = Math.max(0, this.happyT - dt);

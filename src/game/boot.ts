@@ -37,7 +37,9 @@ import { Fleet } from "./ships";
 import { verseFor, grade, LIBRARY, type Verse } from "./verses";
 import { loadPlan, savePlan, planVerses, safePicks, cleanOwn, loadMemorized, saveMemorized, makeGate, ownHash, encodePlan, planFromLink, MAX_PICKS, MAX_OWN, CLASS_MAX_KIDS, VERSE_PAY } from "./lesson";
 import { showGate, gateAnswer, setGateStatus, drawTeach, ownInput, clearOwnInput, setTeachStatus, setTeachButton, showClassLink, drawBook, drawTravel, type BoardRow } from "./lessonui";
-import { loadHumanKit } from "./humans";
+import { loadHumanKit, gaitInfo, gaitTrace } from "./humans";
+import { Herds, loadCarKit } from "./critters";
+import { loadPeopleKit } from "./people";
 import { loadEnvKit } from "./env";
 import { Props } from "./props";
 import { Particles } from "./particles";
@@ -257,6 +259,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const props = new Props();
   const npcs = new Npcs();
   const traffic = new Traffic();
+  const herds = new Herds((x, z) => world.groundAt(x, z, 40)?.y ?? 0);
   const scrolls = new Scrolls();
   const scrollsFound = new Set<string>(storage.get<string[]>("scrolls", []));
   const pet = new Pet();
@@ -273,7 +276,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const blobGeo = new THREE.CircleGeometry(0.5, 20);
   const blobMat = new THREE.MeshBasicMaterial({ color: 0x1a2a1a, transparent: true, opacity: 0.28, depthWrite: false });
 
-  scene.add(jobs.group, traffic.group, scrolls.group);
+  scene.add(jobs.group, traffic.group, scrolls.group, herds.group);
   scene.add(...spareCars.map((c) => c.group));
   scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, boat.group, heli.group, jet.group, rocket, rings.group, foods.group, fleet.group, props.group, npcs.group, pet.group, particles.points);
 
@@ -443,6 +446,12 @@ export function startGame(canvas: HTMLCanvasElement): void {
     loadHumanKit().then((ok) => {
       if (ok && !disposed) swapInHumans();
     }),
+    loadPeopleKit().then((ok) => {
+      if (ok && !disposed) npcs.refreshLooks(); // grown-up villagers
+    }),
+    loadCarKit().then((ok) => {
+      if (ok && !disposed) traffic.dressAll();
+    }),
   ]).finally(() => {
     modelsSettled = true;
     clearTimeout(settleTimer);
@@ -552,6 +561,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       scene.environmentIntensity = dark ? 0.4 : 0.55;
     }
     traffic.build(world.def.traffic ?? []);
+    herds.build(world.def.herds ?? []);
     scrolls.build((world.def.scrolls ?? []).flatMap(([x, y, z, ref]) => {
       const k = LIBRARY.findIndex((v) => v.ref === ref);
       return k >= 0 ? [[x, y, z, k] as [number, number, number, number]] : [];
@@ -1831,12 +1841,30 @@ export function startGame(canvas: HTMLCanvasElement): void {
     for (const b of bubbles) b.update(dt);
     updateRemotes(dt);
     npcs.update(dt, players[0].pos);
+    // each kid glances at whoever is close by: a villager, a friend, or an animal
+    for (const k of players) {
+      const n = npcs.nearest(k.pos);
+      let target: THREE.Vector3 | null = null;
+      if (n) target = (k.lookTarget ?? new THREE.Vector3()).set(n.p.pos.x, n.p.pos.y + 1.4 * (n.def.scale ?? 1), n.p.pos.z);
+      else {
+        for (const o of [...players, ...[...remotes.values()].filter((r) => r.level === levelIdx).map((r) => r.p)]) {
+          if (o !== k && o.pos.distanceToSquared(k.pos) < 16) { target = (k.lookTarget ?? new THREE.Vector3()).set(o.pos.x, o.pos.y + 1.35, o.pos.z); break; }
+        }
+        if (!target && herds.count) target = herds.nearestHead(k.pos, 5, k.lookTarget ?? new THREE.Vector3());
+      }
+      k.lookTarget = target;
+    }
     if (traffic.cars.length) {
       // city cars wait for kids and rides in front of them
       const blockers = players.map((p) => (p.riding ? (rideOf(p) ?? car).pos : p.pos));
       for (const v of rides) if (v.group.visible && !v.occupied) blockers.push(v.pos);
       for (const r of remotes.values()) if (r.level === levelIdx) blockers.push(r.p.pos);
       traffic.update(dt, blockers);
+    }
+    if (herds.count) {
+      const kids = players.map((p) => p.pos);
+      for (const r of remotes.values()) if (r.level === levelIdx) kids.push(r.p.pos);
+      herds.update(dt, kids, camera);
     }
     world.updateCutaway(players.map((p) => p.pos));
     {
@@ -1953,6 +1981,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       const ev = p.update(dt, a.wishX * pace, a.wishZ * pace, wantJump, glideHeld, world);
       npcs.pushOut(p.pos);
       if (traffic.cars.length) traffic.pushOut(p.pos, 0.4);
+      if (herds.count) herds.pushOut(p.pos, 0.35);
       if (wading && Math.random() < dt * 5 && Math.hypot(p.vel.x, p.vel.z) > 1) {
         particles.burst(p.pos.x, world.def.sea! + 0.05, p.pos.z, 0xdff6ff, 3, 1.5, 0.4, 3);
         audio.sfx("splash");
@@ -2559,6 +2588,32 @@ export function startGame(canvas: HTMLCanvasElement): void {
     } : null,
     jobsDone,
     traffic: traffic.cars.map((c) => ({ x: c.group.position.x, z: c.group.position.z, v: c.v })),
+    herds: herds.positions(),
+    gaits: gaitInfo(),
+    npcBoxes: () => npcs.items.slice(0, 4).map((n) => {
+      const b = new THREE.Box3().setFromObject(n.p.group, true);
+      let meshes = 0, skinned = 0;
+      const sk: unknown[] = [];
+      n.p.group.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh) meshes++;
+        const m = o as THREE.SkinnedMesh;
+        if (m.isSkinnedMesh) {
+          skinned++;
+          const bb = new THREE.Box3().setFromObject(m, true);
+          const mat = m.material as THREE.MeshStandardMaterial;
+          sk.push({ mat: mat.name, vis: m.visible && mat.visible, op: mat.opacity, side: mat.side, color: mat.color.getHexString(), bones: m.skeleton.bones.length,
+            ws: m.getWorldScale(new THREE.Vector3()).toArray().map((v) => +v.toExponential(2)), min: bb.min.toArray().map((v) => +v.toFixed(2)), max: bb.max.toArray().map((v) => +v.toFixed(2)), bindMode: m.bindMode });
+        }
+      });
+      const acc = n.p.group.getObjectByName("headAcc");
+      const head = n.p.group.getObjectByName("Head");
+      if (acc && head) return { name: n.def.name, acc: acc.getWorldPosition(new THREE.Vector3()).toArray().map((v) => +v.toFixed(2)), head: head.getWorldPosition(new THREE.Vector3()).toArray().map((v) => +v.toFixed(2)), hatKids: acc.children.length };
+      if (sk.length) return { name: n.def.name, sk: sk.length };
+      return { name: n.def.name, min: b.min.toArray().map((v) => +v.toFixed(2)), max: b.max.toArray().map((v) => +v.toFixed(2)), meshes, skinned };
+    }),
+    gaitTrace,
+    move: players[0].debugMove(),
+    feet: players[0].debugFeet(),
     setBank: (n: number) => {
       bank = n;
       storage.set("bank", bank);
