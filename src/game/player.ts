@@ -626,6 +626,12 @@ export class Player {
     this.animate(dt);
   }
 
+  /** Inside a ride (the ride moves the kid): keep the seated, steering animation going. */
+  rideTick(dt: number): void {
+    this.vel.set(0, 0, 0);
+    this.animate(dt);
+  }
+
   /** What the human model shows right now (for tests). */
   debugMove(): string {
     return this.human?.move ?? "";

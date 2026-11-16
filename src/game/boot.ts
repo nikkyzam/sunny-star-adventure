@@ -1971,7 +1971,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
-      if (p.riding) continue;
+      if (p.riding) {
+        if (p.group.visible) p.rideTick(dt); // sitting and steering
+        continue;
+      }
       const a = axesOf(i);
       const wantJump = i === 0 ? jumpNow : jump2Now;
       const glideHeld = i === 0 ? input.isHeld("Space") || hud.jumpHeld : input.isHeld(P2_JUMP);
