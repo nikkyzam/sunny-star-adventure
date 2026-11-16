@@ -160,7 +160,7 @@ try {
   await page.click("[data-action=island]");
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
   d = await dbg(page);
-  check("L6 turning it off hides the book and brings back the game's own verse", !(await shown(page, "#btn-book")) && d.lesson.refs.length === 0 && d.verse.ref === "John 3:16", d.verse.ref);
+  check("L6 turning it off leaves just today's verse in the book, and the game's own verse at the gate", (await text(page, "#btn-book")).includes("0/1") && d.lesson.refs.length === 0 && d.verse.ref === "John 3:16", d.verse.ref);
   check("L7 no page errors on one device", home.errors.length === 0, home.errors.join(" | "));
   await home.ctx.close();
 

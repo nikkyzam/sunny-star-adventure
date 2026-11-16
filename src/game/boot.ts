@@ -776,6 +776,23 @@ export function startGame(canvas: HTMLCanvasElement): void {
     return linkPlan ? planVerses(linkPlan) : plan.on ? planVerses(plan) : [];
   }
 
+  /** Today's verse: a different library verse each day, the same for everyone. */
+  function dailyVerse(): Verse {
+    return LIBRARY[Math.floor(Date.now() / 86400000) % LIBRARY.length];
+  }
+
+  /** What the verse book holds: a grown-up's verses, or else today's verse and every scroll verse found so far. */
+  function bookVerses(): Verse[] {
+    const l = lessonVerses();
+    if (l.length) return l;
+    const out = [dailyVerse()];
+    for (const key of scrollsFound) {
+      const v = LIBRARY.find((x) => x.ref === key.slice(key.indexOf(":") + 1));
+      if (v && !out.includes(v)) out.push(v);
+    }
+    return out;
+  }
+
   /** The verse that opens the next level: a picked verse if there are any, else the level's own. */
   function gateVerse(): Verse {
     const l = lessonVerses();
@@ -783,7 +800,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   function refreshBook(): void {
-    const l = lessonVerses();
+    const l = bookVerses();
     hud.setBook(l.length ? `📖 ${l.filter((v) => doneNow.has(v.ref)).length}/${l.length}` : null);
   }
 
@@ -855,11 +872,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   function showBook(): void {
-    const l = lessonVerses();
+    const l = bookVerses();
     const left = l.filter((v) => !doneNow.has(v.ref)).length;
     const note = left === 0
       ? "You know them all by heart! 🏆 Practice any time."
-      : "Tap a verse to learn it, then type it from memory. New verses earn coins!";
+      : lessonVerses().length
+        ? "Tap a verse to learn it, then type it from memory. New verses earn coins!"
+        : `The first one is today's verse. Find golden scrolls to add more! You know ${memorized.size} by heart.`;
     drawBook(l, (v) => doneNow.has(v.ref), note, practiceVerse, classHost && net ? { code: net.code, rows: boardRows() } : null);
     hud.showOverlay("book");
   }
@@ -867,7 +886,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   /** Open the verse book (pausing play), or go back to it from a verse. */
   function openBook(): void {
     if (sm.is("playing")) {
-      if (lessonVerses().length === 0) return;
+      if (bookVerses().length === 0) return;
       sm.transition("paused");
       ads.gameplayStop();
       hud.setPlayingUi(false);
@@ -879,7 +898,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   function practiceVerse(i: number): void {
-    const verse = lessonVerses()[i];
+    const verse = bookVerses()[i];
     if (!verse || !bookOpen || !sm.is("paused")) return;
     verseNow = { verse, practice: true, then: showBook };
     hud.showVerse(verse.ref, verse.text, true);
@@ -2109,7 +2128,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
         score += 50;
         hud.setCoins(bank);
         hud.setScore(score);
-        hud.showToast(`📜 You found a scroll! +5 coins · ${scrollsFound.size} found`);
+        hud.showToast(`📜 You found a scroll! +5 coins · it's in your 📖 verse book now`);
+        refreshBook();
+      } else if (!memorized.has(verse.ref)) {
+        hud.showToast(`📖 Type it from memory in your verse book for ${VERSE_PAY} coins!`);
       }
     }
 

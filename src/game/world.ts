@@ -30,6 +30,7 @@ import { makeTextSprite, disposeSprite } from "./social";
 import { envReady, hasModel, brickTexture, Placer } from "./env";
 import type { JobId } from "./jobs";
 import type { TrafficLoop } from "./traffic";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 /** Something decorative to draw: by the code-built shapes, or by the models in env.ts once loaded. */
 type Decor =
@@ -174,6 +175,8 @@ export interface LevelDef {
   scrolls?: [number, number, number, string][];
   /** A great fish floating in the sea: x, z. Its back is a place to stand. */
   bigFish?: [number, number];
+  /** A playground (slide, swings, roundabout, seesaw, sandbox): x, z of its middle. */
+  playground?: [number, number];
   /** Beach umbrellas, each with a sun lounger: x, y, z, color. */
   umbrellas?: [number, number, number, number][];
   /** Camp tents: x, y, z, color. */
@@ -742,6 +745,7 @@ const ADVENTURE_ISLAND: LevelDef = {
     ["apple", -78, 1.3, -57], ["icecream", -70, 1.3, -67], ["pizza", 60, 1.3, 20], ["cupcake", 30, 31, 3],
   ],
   pirates: [[0, 50, 10, 0.22], [-48, 12, 8, -0.26], [46, -6, 6, 0.3]],
+  playground: [8, -1],
   heliSpawn: [13, 0, 10, Math.PI],
   jetSpawn: [-31, 0, -12, Math.PI],
   rocket: [-70, 0, -40.5],
@@ -1358,6 +1362,7 @@ const ARK_ISLAND: LevelDef = {
   sea: -0.5,
   rainbow: true,
   ark: [0, -30],
+  playground: [-18, -30],
   discs: [
     { x: 0, z: -20, r: 40, y: 0, color: SAND },
     { x: 0, z: -20, r: 33, y: 0.3, flowers: 24, rocks: 5 },
@@ -1437,6 +1442,7 @@ const RESORT: LevelDef = {
   sea: -0.5,
   freeGlide: true,
   boatSpawn: [3.4, 34, 0],
+  playground: [-17, -8],
   heliSpawn: [4, 20.25, -30, Math.PI],
   pirates: [[0, 62, 10, 0.2]],
   discs: [
@@ -1726,6 +1732,8 @@ export class World {
   def: LevelDef = LEVELS[0];
   solids: Solid[] = [];
   private houses: House[] = [];
+  /** Little animations of this level's scenery (swings, dishes, shooting stars): called with time and dt. */
+  private anim: ((t: number, dt: number) => void)[] = [];
   /** Walk-in houses' outside walls: they get the city kit's brick once it has loaded. */
   private houseWalls: { mat: THREE.MeshStandardMaterial; color: number }[] = [];
   private decor: Decor[] = [];
@@ -1977,6 +1985,7 @@ export class World {
       room.add(leaves);
     }
 
+    this.houseDetail(shell, b, floorY, index);
     g.add(shell, room);
     g.position.set(b.x, 0, b.z);
     this.group.add(g);
@@ -2052,6 +2061,7 @@ export class World {
     this.solids = [];
     this.houses = [];
     this.houseWalls = [];
+    this.anim = [];
     this.decor = [];
     for (const l of this.locks.values()) disposeSprite(l.sign);
     this.locks.clear();
@@ -2429,6 +2439,9 @@ export class World {
       this.group.add(glow, disc);
     }
 
+    if (def.space) this.buildSpaceDetail(rng);
+    if (def.playground) this.buildPlayground(def.playground[0], def.playground[1]);
+
     // ── Rainbow (big, far, decorative) ──
     if (def.rainbow) {
       const rainbow = new THREE.Group();
@@ -2449,6 +2462,408 @@ export class World {
     this.textureHouses();
 
     scene.add(this.group);
+  }
+
+  /**
+   * The outside details of a walk-in house: a stone base, corner boards, shuttered windows with
+   * sills on the sides and back, flower boxes, an awning and a lamp by the door, and a chimney.
+   * Everything of one material is merged into one mesh, so a house stays a handful of draw calls.
+   */
+  private houseDetail(shell: THREE.Group, b: BuildingDef, floorY: number, index: number): void {
+    const hw = b.w / 2, hd = b.d / 2;
+    const parts = new Map<string, { mat: THREE.Material; geos: THREE.BufferGeometry[] }>();
+    const accent = new THREE.Color(b.color).multiplyScalar(0.55).getHex();
+    const mats: Record<string, () => THREE.Material> = {
+      white: () => new THREE.MeshStandardMaterial({ color: 0xfdf6ec, roughness: 0.8 }),
+      stone: () => new THREE.MeshStandardMaterial({ color: 0x9a9690, roughness: 1, flatShading: true }),
+      glass: () => new THREE.MeshStandardMaterial({ color: 0x9fd0f0, roughness: 0.08, metalness: 0.5 }),
+      accent: () => new THREE.MeshStandardMaterial({ color: accent, roughness: 0.8 }),
+      wood: () => new THREE.MeshStandardMaterial({ color: 0x7a4a2b, roughness: 0.9 }),
+      leaf: () => new THREE.MeshStandardMaterial({ color: 0x3fa34d, roughness: 0.9, flatShading: true }),
+      bloom: () => new THREE.MeshStandardMaterial({ color: RUG_COLORS[index % RUG_COLORS.length], roughness: 0.8, flatShading: true }),
+      lamp: () => new THREE.MeshStandardMaterial({ color: 0xfff1c4, emissive: 0xffc861, emissiveIntensity: 0.9 }),
+    };
+    const add = (key: string, geo: THREE.BufferGeometry, x: number, y: number, z: number, ry = 0, rx = 0) => {
+      let e = parts.get(key);
+      if (!e) parts.set(key, (e = { mat: mats[key](), geos: [] }));
+      if (rx) geo.rotateX(rx);
+      if (ry) geo.rotateY(ry);
+      e.geos.push(geo.translate(x, y, z).toNonIndexed());
+    };
+    const boxAt = (key: string, w: number, h: number, d: number, x: number, y: number, z: number, ry = 0, rx = 0) =>
+      add(key, new THREE.BoxGeometry(w, h, d), x, y, z, ry, rx);
+
+    // stone base (leaving the doorway open) and white corner boards
+    boxAt("stone", b.w + 0.14, 0.4, 0.1, 0, floorY + 0.2, -hd - 0.02);
+    for (const sx of [-1, 1]) {
+      boxAt("stone", 0.1, 0.4, b.d + 0.14, sx * (hw + 0.02), floorY + 0.2, 0);
+      const side = (b.w - DOORWAY) / 2;
+      boxAt("stone", side, 0.4, 0.1, sx * (DOORWAY / 2 + side / 2), floorY + 0.2, hd + 0.02);
+      for (const sz of [-1, 1]) boxAt("white", 0.16, b.h, 0.16, sx * hw, b.h / 2, sz * hd);
+    }
+    // a window: frame, pane, cross bars, sill and two shutters, on a wall facing (nx, nz)
+    const windowAt = (x: number, y: number, z: number, ry: number) => {
+      const fx = Math.sin(ry), fz = Math.cos(ry); // the way the wall faces
+      const ax = Math.cos(ry), az = -Math.sin(ry); // along the wall
+      boxAt("white", 1.1, 1.1, 0.08, x + fx * 0.03, y, z + fz * 0.03, ry);
+      boxAt("glass", 0.9, 0.9, 0.06, x + fx * 0.07, y, z + fz * 0.07, ry);
+      boxAt("white", 0.05, 0.9, 0.04, x + fx * 0.1, y, z + fz * 0.1, ry);
+      boxAt("white", 0.9, 0.05, 0.04, x + fx * 0.1, y, z + fz * 0.1, ry);
+      boxAt("white", 1.3, 0.08, 0.2, x + fx * 0.1, y - 0.6, z + fz * 0.1, ry);
+      for (const s of [-1, 1]) boxAt("accent", 0.34, 1.1, 0.05, x + ax * s * 0.74 + fx * 0.04, y, z + az * s * 0.74 + fz * 0.04, ry);
+    };
+    const flowerBox = (x: number, y: number, z: number, ry: number) => {
+      const fx = Math.sin(ry), fz = Math.cos(ry), ax = Math.cos(ry), az = -Math.sin(ry);
+      boxAt("wood", 1.0, 0.2, 0.24, x + fx * 0.16, y, z + fz * 0.16, ry);
+      for (const k of [-0.3, 0, 0.3]) {
+        add("leaf", new THREE.IcosahedronGeometry(0.14, 0), x + fx * 0.16 + ax * k, y + 0.16, z + fz * 0.16 + az * k);
+        add("bloom", new THREE.IcosahedronGeometry(0.09, 0), x + fx * 0.2 + ax * k, y + 0.27, z + fz * 0.2 + az * k);
+      }
+    };
+    const wy = floorY + 1.55;
+    const floors = b.h >= 5.6 ? 2 : 1;
+    for (let f = 0; f < floors; f++) {
+      const y = wy + f * 2.4;
+      for (const sx of [-1, 1]) {
+        const n = b.d >= 6 ? 2 : 1;
+        for (let k = 0; k < n; k++) {
+          const z = n === 1 ? 0 : (k - 0.5) * (b.d / 2);
+          windowAt(sx * hw, y, z, sx * Math.PI / 2);
+          if (f === 0) flowerBox(sx * hw, y - 0.72, z, sx * Math.PI / 2);
+        }
+      }
+      const nb = b.w >= 5 ? 2 : 1;
+      for (let k = 0; k < nb; k++) windowAt(nb === 1 ? 0 : (k - 0.5) * (b.w / 2), y, -hd, Math.PI);
+      if (f > 0) for (const sx of [-1, 1]) if ((b.w - DOORWAY) / 2 > 0.9) windowAt(sx * (DOORWAY / 2 + (b.w - DOORWAY) / 4), y, hd, 0);
+    }
+    // by the door: a striped awning, a lamp, and flower boxes under the front windows
+    if (!b.church) {
+      for (let k = 0; k < 5; k++) boxAt(k % 2 ? "white" : "accent", (DOORWAY + 0.6) / 5, 0.06, 0.9, -(DOORWAY + 0.6) / 2 + (k + 0.5) * (DOORWAY + 0.6) / 5, floorY + 2.5, hd + 0.42, 0, 0.35);
+      const side = (b.w - DOORWAY) / 2;
+      if (side > 0.9) for (const sx of [-1, 1]) flowerBox(sx * (DOORWAY / 2 + side / 2), floorY + 1.0, hd, 0);
+      // chimney
+      boxAt("stone", 0.6, 1.1, 0.6, -hw + 0.8, b.h + 0.75, -hd + 0.8);
+      boxAt("accent", 0.76, 0.14, 0.76, -hw + 0.8, b.h + 1.34, -hd + 0.8);
+    }
+    add("lamp", new THREE.SphereGeometry(0.11, 8, 6), DOORWAY / 2 + 0.3, floorY + 2.0, hd + 0.14);
+    boxAt("wood", 0.06, 0.06, 0.16, DOORWAY / 2 + 0.3, floorY + 2.12, hd + 0.08);
+
+    for (const e of parts.values()) {
+      const mesh = new THREE.Mesh(mergeGeometries(e.geos), e.mat);
+      for (const g of e.geos) g.dispose();
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      shell.add(mesh);
+    }
+  }
+
+  /**
+   * A playground on a soft red surface: a slide with steps up the back, two swings, a roundabout
+   * to stand on, a seesaw and a sandbox.
+   */
+  private buildPlayground(x: number, z: number): void {
+    const y = this.groundAt(x, z, 2)?.y ?? 0;
+    const g = new THREE.Group();
+    const m = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.6, ...extra });
+    const red = m(0xff4757), blue = m(0x2f80ed), yellow = m(0xffd93d), green = m(0x3fbf6b), steel = m(0xc9d1da, { metalness: 0.6, roughness: 0.35 }), wood = m(0xb9834f, { roughness: 0.9 });
+    const put = (geo: THREE.BufferGeometry, mat: THREE.Material, px: number, py: number, pz: number, parent: THREE.Object3D = g) => {
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(px, py, pz);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      parent.add(mesh);
+      return mesh;
+    };
+    const plat = (px: number, pz: number, hw: number, hd: number, topY: number, mesh: THREE.Object3D) => this.platforms.push({
+      kind: "box", x: x + px, z: z + pz, r: 0, hw, hd, topY: y + topY, spring: 0, baseX: x + px, baseZ: z + pz, dx: 0, dz: 0, mesh, squashT: 0,
+    });
+    // soft surface
+    put(new THREE.BoxGeometry(11, 0.05, 9), m(0xd9785f, { roughness: 1 }), 0, 0.03, 0).castShadow = false;
+
+    // slide: steps up the back (−z), a deck, and a chute down toward +x
+    const sx = -3.4, sz = -1.6, DECK = 2.2;
+    for (const [px, pz] of [[-0.75, -0.75], [0.75, -0.75], [-0.75, 0.75], [0.75, 0.75]]) put(new THREE.CylinderGeometry(0.07, 0.07, DECK + 1.1, 8), blue, sx + px, (DECK + 1.1) / 2, sz + pz);
+    const deck = put(new THREE.BoxGeometry(1.7, 0.12, 1.7), yellow, sx, DECK - 0.06, sz);
+    plat(sx, sz, 0.85, 0.85, DECK, deck);
+    put(new THREE.ConeGeometry(1.3, 0.8, 4).rotateY(Math.PI / 4), red, sx, DECK + 1.5, sz);
+    const steps = 6;
+    for (let i = 0; i < steps; i++) {
+      const top = DECK - (i + 1) * (DECK / (steps + 0.5));
+      const st = put(new THREE.BoxGeometry(1.2, 0.1, 0.45), wood, sx, top - 0.05, sz - 0.85 - 0.22 - i * 0.45);
+      plat(sx, sz - 1.07 - i * 0.45, 0.6, 0.23, top, st);
+    }
+    for (let i = 0; i < 6; i++) {
+      const top = DECK - 0.3 - i * 0.34;
+      const ch = put(new THREE.BoxGeometry(0.7, 0.1, 1.0), red, sx + 1.2 + i * 0.66, top - 0.05, sz);
+      ch.rotation.z = -0.47;
+      plat(sx + 1.2 + i * 0.66, sz, 0.36, 0.5, top, ch);
+    }
+    for (const s of [-1, 1]) {
+      const rail = put(new THREE.BoxGeometry(4.4, 0.22, 0.06), yellow, sx + 2.85, DECK - 1.05, sz + s * 0.53);
+      rail.rotation.z = -0.47;
+    }
+
+    // swings: an A-frame with two seats that swing back and forth
+    const wx = 2.6, wz = -2.2, TOP = 2.7;
+    put(new THREE.CylinderGeometry(0.07, 0.07, 3.6, 8).rotateZ(Math.PI / 2), steel, wx, TOP, wz);
+    for (const s of [-1, 1]) for (const l of [-1, 1]) {
+      const leg = put(new THREE.CylinderGeometry(0.06, 0.06, TOP + 0.25, 8), steel, wx + s * 1.8, TOP / 2, wz + l * 0.55);
+      leg.rotation.x = -l * 0.4;
+    }
+    const swings: THREE.Group[] = [];
+    for (const s of [-0.8, 0.8]) {
+      const sw = new THREE.Group();
+      sw.position.set(wx + s, TOP, wz);
+      for (const c of [-0.25, 0.25]) put(new THREE.CylinderGeometry(0.015, 0.015, 2.0, 5), steel, c, -1.0, 0, sw).castShadow = false;
+      put(new THREE.BoxGeometry(0.7, 0.06, 0.3), s < 0 ? red : green, 0, -2.0, 0, sw);
+      g.add(sw);
+      swings.push(sw);
+    }
+    // roundabout: a spinning disc with handles (stand on it)
+    const rx = 2.8, rz = 2.2;
+    const spin = new THREE.Group();
+    spin.position.set(rx, 0, rz);
+    put(new THREE.CylinderGeometry(1.4, 1.4, 0.14, 20), blue, 0, 0.28, 0, spin);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      put(new THREE.CylinderGeometry(0.04, 0.04, 0.8, 6), yellow, Math.cos(a) * 1.1, 0.75, Math.sin(a) * 1.1, spin);
+      put(new THREE.BoxGeometry(0.5, 0.02, 1.38), i % 2 ? red : yellow, Math.cos(a + 0.78) * 0.7, 0.36, Math.sin(a + 0.78) * 0.7, spin).rotation.y = -a - 0.78 + Math.PI / 2;
+    }
+    put(new THREE.CylinderGeometry(0.1, 0.1, 0.9, 8), steel, 0, 0.6, 0, spin);
+    g.add(spin);
+    this.platforms.push({ kind: "disc", x: x + rx, z: z + rz, r: 1.4, hw: 0, hd: 0, topY: y + 0.35, spring: 0, baseX: x + rx, baseZ: z + rz, dx: 0, dz: 0, mesh: spin, squashT: 0 });
+    // seesaw
+    const ex = -2.6, ez = 2.4;
+    put(new THREE.CylinderGeometry(0.3, 0.4, 0.55, 8), steel, ex, 0.28, ez);
+    const plank = new THREE.Group();
+    plank.position.set(ex, 0.6, ez);
+    put(new THREE.BoxGeometry(3.4, 0.08, 0.36), green, 0, 0, 0, plank);
+    for (const s of [-1, 1]) {
+      put(new THREE.BoxGeometry(0.36, 0.06, 0.36), yellow, s * 1.45, 0.07, 0, plank);
+      put(new THREE.TorusGeometry(0.13, 0.025, 6, 10, Math.PI), steel, s * 1.1, 0.06, 0, plank).rotation.y = Math.PI / 2;
+    }
+    g.add(plank);
+    // sandbox with a bucket
+    const bx = 0.2, bz = 0.4;
+    put(new THREE.BoxGeometry(2.2, 0.1, 2.2), m(SAND, { roughness: 1 }), bx, 0.1, bz).castShadow = false;
+    for (const [w, d, ox, oz] of [[2.5, 0.16, 0, -1.17], [2.5, 0.16, 0, 1.17], [0.16, 2.5, -1.17, 0], [0.16, 2.5, 1.17, 0]]) put(new THREE.BoxGeometry(w, 0.22, d), wood, bx + ox, 0.14, bz + oz);
+    put(new THREE.CylinderGeometry(0.16, 0.12, 0.26, 10), red, bx + 0.5, 0.28, bz - 0.3);
+    put(new THREE.ConeGeometry(0.28, 0.3, 10), m(SAND, { roughness: 1 }), bx - 0.4, 0.3, bz + 0.3);
+    // a bench
+    put(new THREE.BoxGeometry(1.8, 0.08, 0.45), wood, 0, 0.5, 3.9);
+    put(new THREE.BoxGeometry(1.8, 0.5, 0.08), wood, 0, 0.85, 4.15);
+    for (const s of [-0.75, 0.75]) put(new THREE.BoxGeometry(0.08, 0.5, 0.4), steel, s, 0.25, 3.9);
+
+    g.position.set(x, y, z);
+    this.group.add(g);
+    this.anim.push((t) => {
+      swings[0].rotation.x = Math.sin(t * 1.9) * 0.5;
+      swings[1].rotation.x = Math.sin(t * 1.7 + 1.3) * 0.38;
+      spin.rotation.y = t * 0.7;
+      plank.rotation.z = Math.sin(t * 1.3) * 0.2;
+    });
+  }
+
+  /**
+   * Deep space around the Moon: thousands of stars in three sizes and colors, the band of the
+   * Milky Way, glowing nebulae, a ringed planet, the Sun, shooting stars and a satellite; and on
+   * the ground craters, a lunar lander with a flag, glass garden domes, solar panels, a turning
+   * radio dish and a lit path.
+   */
+  private buildSpaceDetail(rng: () => number): void {
+    const far = (yMin = -0.15) => {
+      const a = rng() * Math.PI * 2, yy = yMin + rng() * (1 - yMin), r = Math.sqrt(Math.max(0, 1 - yy * yy));
+      return new THREE.Vector3(Math.cos(a) * r, yy, Math.sin(a) * r);
+    };
+    const points = (count: number, size: number, tint: (i: number) => THREE.Color, place: () => THREE.Vector3) => {
+      const pos = new Float32Array(count * 3), col = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        const p = place().multiplyScalar(255), c = tint(i);
+        pos.set([p.x, p.y, p.z - 14], i * 3);
+        col.set([c.r, c.g, c.b], i * 3);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+      const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size, sizeAttenuation: false, vertexColors: true, fog: false, transparent: true }));
+      this.group.add(pts);
+      return pts;
+    };
+    const tints = [0xffffff, 0xcfe3ff, 0xfff1c4, 0xffd0b0, 0xaecbff];
+    points(2600, 1.3, () => new THREE.Color(tints[Math.floor(rng() * tints.length)]).multiplyScalar(0.55 + rng() * 0.45), () => far());
+    const bright = points(260, 3.2, () => new THREE.Color(tints[Math.floor(rng() * tints.length)]), () => far());
+    // the Milky Way: a dense, tilted band of faint stars
+    const tilt = new THREE.Euler(0.9, 0.4, 0.3);
+    points(2400, 1.1, () => new THREE.Color(0xdfe6ff).multiplyScalar(0.35 + rng() * 0.4), () => {
+      const a = rng() * Math.PI * 2, spread = (rng() + rng() + rng() - 1.5) * 0.16;
+      const v = new THREE.Vector3(Math.cos(a), spread, Math.sin(a)).normalize().applyEuler(tilt);
+      return v.y > -0.15 ? v : v.multiplyScalar(-1);
+    });
+    this.anim.push((t) => { (bright.material as THREE.PointsMaterial).opacity = 0.8 + Math.sin(t * 2.3) * 0.2; }); // twinkle
+
+    // nebulae: soft glowing clouds
+    const cloudTex = (() => {
+      const c = document.createElement("canvas");
+      c.width = c.height = 128;
+      const ctx = c.getContext("2d")!;
+      const grad = ctx.createRadialGradient(64, 64, 4, 64, 64, 64);
+      grad.addColorStop(0, "rgba(255,255,255,0.9)");
+      grad.addColorStop(0.4, "rgba(255,255,255,0.35)");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 128, 128);
+      return new THREE.CanvasTexture(c);
+    })();
+    for (const [color, n, cx, cy, cz] of [[0x9b5cff, 9, -150, 120, -160], [0x2fd6c9, 7, 170, 70, -40], [0xff6fa8, 6, -60, 60, 190]] as const) {
+      for (let i = 0; i < n; i++) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTex, color, transparent: true, opacity: 0.16 + rng() * 0.12, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+        sp.position.set(cx + (rng() - 0.5) * 90, cy + (rng() - 0.5) * 50, cz + (rng() - 0.5) * 90);
+        sp.scale.setScalar(50 + rng() * 70);
+        this.group.add(sp);
+      }
+    }
+    // the Sun, a ringed planet, and a glow of air around the Earth
+    const basic = (color: number, extra: THREE.MeshBasicMaterialParameters = {}) => new THREE.MeshBasicMaterial({ color, fog: false, ...extra });
+    const sun = new THREE.Mesh(new THREE.SphereGeometry(9, 16, 12), basic(0xfffbe6, { toneMapped: false }));
+    sun.position.set(110, 150, 150);
+    const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTex, color: 0xfff1c4, transparent: true, opacity: 0.9, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+    sunGlow.position.copy(sun.position);
+    sunGlow.scale.setScalar(90);
+    const planet = new THREE.Group();
+    planet.add(new THREE.Mesh(new THREE.SphereGeometry(12, 20, 14), new THREE.MeshStandardMaterial({ color: 0xe0b878, roughness: 0.9, fog: false })));
+    for (const [r0, r1, c, o] of [[15, 19, 0xf2dcb0, 0.7], [20, 23.5, 0xcaa56a, 0.45]] as const) {
+      const ring = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 48), basic(c, { side: THREE.DoubleSide, transparent: true, opacity: o }));
+      ring.rotation.x = Math.PI / 2;
+      planet.add(ring);
+    }
+    planet.position.set(-150, 70, -120);
+    planet.rotation.set(0.5, 0, 0.35);
+    const air = new THREE.Mesh(new THREE.SphereGeometry(23.6, 20, 14), basic(0x8fd0ff, { transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }));
+    air.position.set(70, 85, -150);
+    this.group.add(sun, sunGlow, planet, air);
+    // a shooting star every few seconds, and a satellite crossing the sky
+    const streak = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 22), basic(0xffffff, { transparent: true }));
+    streak.visible = false;
+    const sat = new THREE.Group();
+    sat.add(new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.8), basic(0xdfe6ee)));
+    for (const s of [-1, 1]) sat.add(new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 1.3), basic(0x3a6fd8)).translateX(s * 2.4));
+    this.group.add(streak, sat);
+    let next = 3, from = new THREE.Vector3(), dir = new THREE.Vector3(), born = 0;
+    this.anim.push((t) => {
+      sat.position.set(Math.cos(t * 0.08) * 90, 55 + Math.sin(t * 0.05) * 6, -14 + Math.sin(t * 0.08) * 90);
+      sat.rotation.y = t * 0.3;
+      if (t > next) {
+        from = far(0.25).multiplyScalar(170);
+        dir = new THREE.Vector3(rng() - 0.5, -0.25 - rng() * 0.3, rng() - 0.5).normalize();
+        born = t;
+        next = t + 4 + rng() * 6;
+      }
+      const age = t - born;
+      streak.visible = age < 0.9;
+      if (!streak.visible) return;
+      streak.position.copy(from).addScaledVector(dir, age * 140);
+      streak.lookAt(streak.position.clone().add(dir));
+      (streak.material as THREE.MeshBasicMaterial).opacity = 1 - age / 0.9;
+    });
+
+    // ── on the ground ──
+    const groundY = (gx: number, gz: number) => this.groundAt(gx, gz, 0.2)?.y ?? null;
+    // craters: a pale raised rim around a dark floor
+    const rims: THREE.Matrix4[] = [], floors: THREE.Matrix4[] = [];
+    for (let i = 0; i < 46; i++) {
+      const a = rng() * Math.PI * 2, rr = 4 + rng() * 24, size = 0.7 + rng() * 2.3;
+      const cx = Math.cos(a) * rr, cz = -14 + Math.sin(a) * rr;
+      if (groundY(cx, cz) !== 0 || Math.abs(cx) < 2.2) continue; // flat ground only, and keep the main path clear
+      rims.push(new THREE.Matrix4().makeScale(size, 1, size).setPosition(cx, 0.03, cz));
+      floors.push(new THREE.Matrix4().makeScale(size, 1, size).setPosition(cx, 0.025, cz));
+    }
+    const inst = (geo: THREE.BufferGeometry, mat: THREE.Material, ms: THREE.Matrix4[]) => {
+      const im = new THREE.InstancedMesh(geo, mat, ms.length);
+      ms.forEach((mm, i) => im.setMatrixAt(i, mm));
+      im.receiveShadow = true;
+      im.computeBoundingSphere();
+      this.group.add(im);
+    };
+    inst(new THREE.RingGeometry(0.78, 1, 20).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xdde1ea, roughness: 1 }), rims);
+    inst(new THREE.CircleGeometry(0.8, 20).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x8e94a3, roughness: 1 }), floors);
+
+    const std = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.6, ...extra });
+    const put = (geo: THREE.BufferGeometry, mat: THREE.Material, px: number, py: number, pz: number, parent: THREE.Object3D = this.group) => {
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(px, py, pz);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      parent.add(mesh);
+      return mesh;
+    };
+    const gold = std(0xe2b23a, { metalness: 0.7, roughness: 0.35 }), grey = std(0xc9d1da, { metalness: 0.5, roughness: 0.4 }), dark = std(0x30343c);
+    // the lunar lander, with its ladder, dish and flag
+    const lander = new THREE.Group();
+    lander.position.set(13, 0, 3);
+    put(new THREE.CylinderGeometry(1.5, 1.5, 1.1, 8), gold, 0, 1.45, 0, lander);
+    put(new THREE.CylinderGeometry(0.9, 1.25, 1.2, 8), grey, 0, 2.6, 0, lander);
+    put(new THREE.BoxGeometry(0.6, 0.5, 0.1), dark, 0, 2.6, 1.02, lander);
+    put(new THREE.ConeGeometry(0.7, 0.7, 10, 1, true), dark, 0, 0.7, 0, lander);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const leg = put(new THREE.CylinderGeometry(0.06, 0.06, 2.2, 6), grey, Math.cos(a) * 1.7, 0.85, Math.sin(a) * 1.7, lander);
+      leg.rotation.set(Math.sin(a) * 0.55, 0, -Math.cos(a) * 0.55);
+      put(new THREE.CylinderGeometry(0.34, 0.34, 0.08, 10), gold, Math.cos(a) * 2.3, 0.04, Math.sin(a) * 2.3, lander);
+    }
+    for (let k = 0; k < 5; k++) put(new THREE.BoxGeometry(0.5, 0.04, 0.06), grey, 0, 0.3 + k * 0.3, 1.62 + (4 - k) * 0.08, lander);
+    const dish = put(new THREE.SphereGeometry(0.5, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2.4), grey, 0.5, 3.6, 0, lander);
+    dish.rotation.x = Math.PI + 0.6;
+    this.group.add(lander);
+    this.solids.push({ minX: 11.4, maxX: 14.6, minZ: 1.4, maxZ: 4.6, topY: 3 });
+    put(new THREE.CylinderGeometry(0.03, 0.03, 2.4, 6), grey, 9.6, 1.2, 4.6);
+    const flag = put(new THREE.PlaneGeometry(1.1, 0.7, 6, 1), new THREE.MeshStandardMaterial({ color: 0xfdf6ec, side: THREE.DoubleSide, roughness: 0.8 }), 10.17, 2.0, 4.6);
+    put(new THREE.CircleGeometry(0.16, 5), new THREE.MeshBasicMaterial({ color: 0xffc93c, side: THREE.DoubleSide }), 10.17, 2.0, 4.62);
+    flag.castShadow = false;
+    // glass garden domes with plants growing inside
+    const glass = new THREE.MeshStandardMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.28, roughness: 0.05, metalness: 0.3, side: THREE.DoubleSide, depthWrite: false });
+    for (const [dx, dz] of [[-22, -18], [20, -21]]) {
+      if (groundY(dx, dz) !== 0) continue;
+      put(new THREE.SphereGeometry(2.6, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), glass, dx, 0, dz).castShadow = false;
+      put(new THREE.TorusGeometry(2.6, 0.12, 6, 28).rotateX(Math.PI / 2), grey, dx, 0.1, dz);
+      put(new THREE.CylinderGeometry(2.4, 2.4, 0.12, 20), std(0x6b4a2b, { roughness: 1 }), dx, 0.06, dz).castShadow = false;
+      for (let k = 0; k < 7; k++) {
+        const a = (k / 7) * Math.PI * 2, r = k === 0 ? 0 : 1.4;
+        put(new THREE.ConeGeometry(0.35, 0.9 + (k % 3) * 0.3, 6), std(k % 2 ? 0x3fa34d : 0x7ed957, { flatShading: true }), dx + Math.cos(a) * r, 0.6, dz + Math.sin(a) * r);
+      }
+      this.solids.push({ minX: dx - 1.9, maxX: dx + 1.9, minZ: dz - 1.9, maxZ: dz + 1.9, topY: 2.4 });
+    }
+    // solar panels in two rows
+    const cell = std(0x1f3f8f, { metalness: 0.8, roughness: 0.25 });
+    for (let r = 0; r < 2; r++) for (let k = 0; k < 4; k++) {
+      const px = 15 + k * 2.3, pz = -2 - r * 3;
+      put(new THREE.CylinderGeometry(0.05, 0.05, 1.0, 6), grey, px, 0.5, pz);
+      const panel = put(new THREE.BoxGeometry(2.0, 0.06, 1.3), cell, px, 1.1, pz);
+      panel.rotation.x = -0.5;
+      put(new THREE.BoxGeometry(2.06, 0.03, 0.04), grey, px, 1.1, pz).rotation.x = -0.5;
+    }
+    // a radio dish that slowly turns
+    const mast = new THREE.Group();
+    mast.position.set(-15, 0, 3);
+    put(new THREE.CylinderGeometry(0.12, 0.2, 2.4, 8), grey, 0, 1.2, 0, mast);
+    const head = new THREE.Group();
+    head.position.y = 2.5;
+    const bowl = put(new THREE.SphereGeometry(1.3, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2.6), grey, 0, 0, 0, head);
+    bowl.rotation.x = Math.PI + 0.9;
+    put(new THREE.CylinderGeometry(0.03, 0.03, 1.2, 5), dark, 0, 0.5, 0.6, head).rotation.x = 0.9;
+    mast.add(head);
+    this.group.add(mast);
+    this.solids.push({ minX: -15.4, maxX: -14.6, minZ: 2.6, maxZ: 3.4, topY: 2.4 });
+    this.anim.push((t) => {
+      head.rotation.y = t * 0.25;
+      const p = flag.geometry.getAttribute("position");
+      for (let i = 0; i < p.count; i++) p.setZ(i, Math.sin(p.getX(i) * 5 + t * 1.2) * 0.04 * (p.getX(i) + 0.55)); // (a flag on a wire, barely stirring)
+      p.needsUpdate = true;
+    });
+    // lights along the path from the base to the portal
+    const lamps: THREE.Matrix4[] = [];
+    for (let lz = 4; lz >= -40; lz -= 6) for (const lx of [-2.4, 2.4]) if (groundY(lx, lz) === 0) lamps.push(new THREE.Matrix4().makeTranslation(lx, 0, lz));
+    inst(new THREE.CylinderGeometry(0.04, 0.06, 0.7, 6).translate(0, 0.35, 0), grey, lamps);
+    inst(new THREE.SphereGeometry(0.13, 8, 6).translate(0, 0.76, 0), new THREE.MeshStandardMaterial({ color: 0xbfe8ff, emissive: 0x6fd0ff, emissiveIntensity: 1.2 }), lamps);
   }
 
   /** Brick for the walk-in houses' outside walls, tinted with each house's color. */
@@ -2618,6 +3033,7 @@ export class World {
   update(dt: number): void {
     this.time += dt;
     const t = this.time;
+    for (const a of this.anim) a(t, dt);
     for (const p of this.platforms) {
       if (p.move) {
         const off = Math.sin(t * p.move.speed + p.move.phase) * p.move.amp;
