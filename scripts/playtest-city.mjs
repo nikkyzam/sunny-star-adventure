@@ -46,7 +46,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 800, height: 450 } });
   const errors = [];
   page.on("pageerror", (e) => { errors.push(String(e)); if (errors.length === 1) console.log(e.stack); });
-  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
+  await page.goto(`http://127.0.0.1:${port}/?level=11`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
   const dbg = () => page.evaluate(() => { const d = window.__gameDebug(); return { ...d, placeCar: undefined, placeHeli: undefined, placeBoat: undefined, warp: undefined, setBank: undefined, groundAt: undefined }; });
   const warp = (x, z) => page.evaluate(([x, z]) => window.__gameDebug().warp(x, z), [x, z]);
@@ -57,9 +57,10 @@ try {
     return d;
   };
 
-  await page.click("[data-action=city]");
+  await page.click("[data-action=play]"); // (a real tap, so the music may start)
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
-  await page.waitForTimeout(1500);
+  await page.mouse.click(400, 220); // (music starts on the first real tap)
+  await page.waitForTimeout(2000);
   const lvl = await page.evaluate(() => document.getElementById("hud-level")?.textContent ?? "");
   let d = await dbg();
   check("C1 the city button opens Sunshine City with the city song", lvl.includes("Sunshine City") && d.song === "city", `${lvl} / ${d.song}`);
@@ -131,11 +132,12 @@ try {
   await page.screenshot({ path: join(ROOT, "verification-shots/53-city-skyline.png") });
 
   // ── Paradise Resort ──
-  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
+  await page.goto(`http://127.0.0.1:${port}/?level=15`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
-  await page.click("[data-action=resort]");
+  await page.click("[data-action=play]");
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
-  await page.waitForTimeout(1500);
+  await page.mouse.click(400, 220);
+  await page.waitForTimeout(2000);
   const rl = await page.evaluate(() => document.getElementById("hud-level")?.textContent ?? "");
   d = await dbg();
   check("R1 the Resort button opens Paradise Resort with the beach song", rl.includes("Paradise Resort") && d.song === "beach", `${rl} / ${d.song}`);
@@ -156,6 +158,59 @@ try {
   await warp(0, 8);
   await page.waitForTimeout(1500);
   await page.screenshot({ path: join(ROOT, "verification-shots/55-resort-pool.png") });
+
+  // ── Travel: places are linked by gates, and a verse opens each new one ──
+  const ctx2 = await browser.newContext({ viewport: { width: 800, height: 450 } });
+  const tp = await ctx2.newPage();
+  tp.on("pageerror", (e) => errors.push(String(e)));
+  const tdbg = () => tp.evaluate(() => { const d = window.__gameDebug(); return { state: d.state, places: d.places, station: d.station, level: document.getElementById("hud-level").textContent }; });
+  const open2 = async () => {
+    await tp.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
+    await tp.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
+  };
+  const shown2 = (sel) => tp.evaluate((s) => getComputedStyle(document.querySelector(s)).display !== "none", sel);
+  const toGate = async () => {
+    const st = (await tdbg()).station;
+    await tp.evaluate(([x, z]) => window.__gameDebug().warp(x + 8, z), [st.x, st.z]);
+    await tp.waitForTimeout(300);
+    await tp.evaluate(([x, z]) => window.__gameDebug().warp(x, z), [st.x, st.z]);
+    await tp.waitForFunction(() => getComputedStyle(document.getElementById("ov-travel")).display !== "none", null, { timeout: 5000 }).catch(() => {});
+  };
+  await open2();
+  check("T1 the title has no place buttons any more", (await tp.locator("[data-action=city], [data-action=island], [data-action=resort], [data-action=ark]").count()) === 0);
+  await tp.click("[data-action=play]");
+  await tp.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
+  let t = await tdbg();
+  check("T2 Play starts on Adventure Island, the only place open", t.level.includes("Adventure Island") && t.places.join() === "Adventure Island", `${t.level} · ${t.places}`);
+  await toGate();
+  const rows = await tp.evaluate(() => [...document.querySelectorAll("#travel-list .book-verse")].map((b) => b.textContent));
+  check("T3 the travel gate lists every place, locked until a verse", (await shown2("#ov-travel")) && rows.length === 8 && rows.some((r) => r.includes("Sunshine City") && r.includes("Say a verse"))
+    && rows.some((r) => r.includes("Adventure Island") && r.includes("You are here")), rows.join(" | "));
+  await tp.screenshot({ path: join(ROOT, "verification-shots/56-travel-gate.png") });
+  await tp.click("#travel-list .book-verse:has-text('Sunshine City')");
+  check("T4a a locked place asks for its verse", await shown2("#ov-verse"));
+  await tp.click("[data-action=verse-ready]");
+  await tp.fill("#verse-input", "i do not know it");
+  await tp.click("[data-action=verse-check]");
+  await tp.waitForTimeout(300);
+  check("T4b a wrong verse does not open the way", (await tdbg()).level.includes("Adventure Island") && (await shown2("#ov-verse")));
+  await tp.click("[data-action=verse-peek]");
+  const tv = await tp.textContent("#verse-text");
+  await tp.click("[data-action=verse-ready]");
+  await tp.fill("#verse-input", tv.toLowerCase().replace(/[^a-z0-9 ]/g, ""));
+  await tp.click("[data-action=verse-check]");
+  await tp.waitForFunction(() => document.getElementById("hud-level").textContent.includes("Sunshine City"), null, { timeout: 10000 }).catch(() => {});
+  t = await tdbg();
+  check("T4 the right verse opens Sunshine City and takes you there", t.level.includes("Sunshine City") && t.places.includes("Sunshine City") && t.state === "playing", `${t.level} · ${t.places}`);
+  await open2();
+  await tp.click("[data-action=play]");
+  await tp.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
+  check("T5 Play carries on from the last place", (await tdbg()).level.includes("Sunshine City"), (await tdbg()).level);
+  await toGate();
+  await tp.click("#travel-list .book-verse:has-text('Adventure Island')");
+  await tp.waitForFunction(() => document.getElementById("hud-level").textContent.includes("Adventure Island"), null, { timeout: 10000 }).catch(() => {});
+  check("T6 an open place needs no verse", (await tdbg()).level.includes("Adventure Island") && !(await shown2("#ov-verse")));
+  await ctx2.close();
 
   check("C9 no page errors", errors.length === 0, errors.join(" | "));
 } catch (e) {

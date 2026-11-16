@@ -131,6 +131,22 @@ export function setTeachButton(plan: Plan, fromLink = 0): void {
     : "👩‍🏫 Teachers & parents: pick the verses";
 }
 
+// ── Travel gate ────────────────────────────────────────────────────────────
+
+export interface TravelRow { label: string; here: boolean; open: boolean }
+
+export function drawTravel(rows: TravelRow[], onPick: (i: number) => void): void {
+  const list = el("travel-list");
+  list.textContent = "";
+  rows.forEach((r, i) => {
+    const b = button("book-verse" + (r.open ? " done" : ""), "", () => onPick(i));
+    b.disabled = r.here;
+    b.append(span("book-tick", r.here ? "📍" : r.open ? "🔓" : "🔒"), span("teach-ref", r.label),
+      span("book-go", r.here ? "You are here" : r.open ? "Go ➜" : "Say a verse ➜"));
+    list.append(b);
+  });
+}
+
 // ── Verse book ─────────────────────────────────────────────────────────────
 
 export interface BoardRow {

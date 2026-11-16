@@ -175,6 +175,10 @@ export interface LevelDef {
   scrolls?: [number, number, number, string][];
   /** A great fish floating in the sea: x, z. Its back is a place to stand. */
   bigFish?: [number, number];
+  /** The travel gate to the other places: x, z. Worlds with one can be travelled to and from. */
+  station?: [number, number];
+  /** More cars to drive, parked here: x, y, z, heading. */
+  extraCars?: [number, number, number, number][];
   /** A playground (slide, swings, roundabout, seesaw, sandbox): x, z of its middle. */
   playground?: [number, number];
   /** Beach umbrellas, each with a sun lounger: x, y, z, color. */
@@ -746,6 +750,8 @@ const ADVENTURE_ISLAND: LevelDef = {
   ],
   pirates: [[0, 50, 10, 0.22], [-48, 12, 8, -0.26], [46, -6, 6, 0.3]],
   playground: [8, -1],
+  station: [-2.8, 16.4],
+  extraCars: [[38, 0, -62, 0]],
   heliSpawn: [13, 0, 10, Math.PI],
   jetSpawn: [-31, 0, -12, Math.PI],
   rocket: [-70, 0, -40.5],
@@ -1070,6 +1076,7 @@ const MOON: LevelDef = {
   gravity: 0.3,
   space: true,
   carSpawn: [5, 0, 8, Math.PI], // the moon buggy
+  station: [-3, 5.5],
   food: [["cupcake", 3, 1.0, -5], ["icecream", -10, 1.0, -9], ["pizza", 14, 1.0, -14]],
   rocket: [-7, 0, 9],
   discs: [
@@ -1162,6 +1169,8 @@ const SUNSHINE_CITY: LevelDef = {
   streetlife: true,
   fountain: [0, 0],
   carSpawn: [-12, 0, 46, Math.PI],
+  station: [7, 48.5],
+  extraCars: [[-24, 0, 42, Math.PI / 2], [28, 0, 42, -Math.PI / 2]],
   boatSpawn: [4.4, 75, 0],
   heliSpawn: [24, 40.3, -24, Math.PI],
   ferris: [64, -0.15, 0, Math.PI / 2],
@@ -1363,6 +1372,7 @@ const ARK_ISLAND: LevelDef = {
   rainbow: true,
   ark: [0, -30],
   playground: [-18, -30],
+  station: [-4.5, 8],
   discs: [
     { x: 0, z: -20, r: 40, y: 0, color: SAND },
     { x: 0, z: -20, r: 33, y: 0.3, flowers: 24, rocks: 5 },
@@ -1443,6 +1453,9 @@ const RESORT: LevelDef = {
   freeGlide: true,
   boatSpawn: [3.4, 34, 0],
   playground: [-17, -8],
+  station: [-4.5, 10.5],
+  extraCars: [[8, 0.3, -17, 0]],
+  props: { balls: [[3, 0.34, 3.5], [-12, 0.3, -5]], boxes: [[20, 0.3, -8], [-6, 0, 22]], cones: [[5, 0.3, -17], [11, 0.3, -17]] },
   heliSpawn: [4, 20.25, -30, Math.PI],
   pirates: [[0, 62, 10, 0.2]],
   discs: [
@@ -1543,6 +1556,8 @@ const JONAH_SEA: LevelDef = {
   sea: -0.5,
   boatSpawn: [3.4, 21, 0],
   bigFish: [0, 56],
+  station: [-4, 6],
+  extraCars: [[5, 0.3, 101, 0]],
   discs: [
     { x: 0, z: 0, r: 17, y: 0, color: SAND },                               // Joppa
     { x: 0, z: -1, r: 11.5, y: 0.3, trees: 3, flowers: 10, rocks: 2 },
@@ -1626,6 +1641,7 @@ const ELAH: LevelDef = {
   flowerColors: [0xffd93d, 0xffffff, 0xff9f43],
   spawn: [-6, 0.3, 12],
   sea: -0.5,
+  station: [-1.5, 14],
   discs: [
     { x: 0, z: -20, r: 48, y: 0, color: SAND },
     { x: 0, z: -20, r: 43, y: 0.3, flowers: 22, rocks: 8 },
@@ -1732,6 +1748,8 @@ export class World {
   def: LevelDef = LEVELS[0];
   solids: Solid[] = [];
   private houses: House[] = [];
+  /** Where this world's travel gate stands (null: none). */
+  stationPos: THREE.Vector3 | null = null;
   /** Little animations of this level's scenery (swings, dishes, shooting stars): called with time and dt. */
   private anim: ((t: number, dt: number) => void)[] = [];
   /** Walk-in houses' outside walls: they get the city kit's brick once it has loaded. */
@@ -2441,6 +2459,8 @@ export class World {
 
     if (def.space) this.buildSpaceDetail(rng);
     if (def.playground) this.buildPlayground(def.playground[0], def.playground[1]);
+    this.stationPos = null;
+    if (def.station) this.buildStation(def.station[0], def.station[1]);
 
     // ── Rainbow (big, far, decorative) ──
     if (def.rainbow) {
@@ -2488,7 +2508,8 @@ export class World {
       if (!e) parts.set(key, (e = { mat: mats[key](), geos: [] }));
       if (rx) geo.rotateX(rx);
       if (ry) geo.rotateY(ry);
-      e.geos.push(geo.translate(x, y, z).toNonIndexed());
+      geo.translate(x, y, z);
+      e.geos.push(geo.index ? geo.toNonIndexed() : geo);
     };
     const boxAt = (key: string, w: number, h: number, d: number, x: number, y: number, z: number, ry = 0, rx = 0) =>
       add(key, new THREE.BoxGeometry(w, h, d), x, y, z, ry, rx);
@@ -2555,6 +2576,37 @@ export class World {
       mesh.receiveShadow = true;
       shell.add(mesh);
     }
+  }
+
+  /** The travel gate: a stone arch with a swirling light in it and a sign. Walk in to travel. */
+  private buildStation(x: number, z: number): void {
+    const y = this.groundAt(x, z, 2)?.y ?? 0;
+    const g = new THREE.Group();
+    const stone = new THREE.MeshStandardMaterial({ color: 0xcfc6b8, flatShading: true, roughness: 0.95 });
+    for (const sx of [-1, 1]) {
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 2.6, 0.6), stone);
+      pillar.position.set(sx * 1.15, 1.3, 0);
+      pillar.castShadow = true;
+      g.add(pillar);
+    }
+    const top = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.28, 8, 16, Math.PI), stone);
+    top.position.y = 2.6;
+    top.castShadow = true;
+    g.add(top);
+    const swirl = new THREE.Mesh(new THREE.CircleGeometry(1.1, 24), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.75, side: THREE.DoubleSide }));
+    swirl.position.y = 1.9;
+    swirl.scale.y = 1.5;
+    g.add(swirl);
+    const sign = makeTextSprite("🧭 Travel", { bg: "rgba(41,98,255,0.95)", fg: "#ffffff", size: 44, height: 0.5 });
+    sign.position.y = 4.3;
+    g.add(sign);
+    g.position.set(x, y, z);
+    this.group.add(g);
+    this.stationPos = new THREE.Vector3(x, y, z);
+    this.anim.push((t) => {
+      swirl.rotation.z = t * 0.8;
+      (swirl.material as THREE.MeshBasicMaterial).opacity = 0.6 + Math.sin(t * 2.2) * 0.15;
+    });
   }
 
   /**

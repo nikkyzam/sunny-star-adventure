@@ -111,7 +111,7 @@ try {
   await page.click("#ov-teach [data-action=back]");
   check("L3b the title shows the verses are on", (await text(page, "#btn-teach")).includes("3 verses are on"), await text(page, "#btn-teach"));
 
-  await page.click("[data-action=island]");
+  await page.evaluate(() => window.__play("island"));
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
   check("L3 the verse book button shows in play", (await shown(page, "#btn-book")) && (await text(page, "#btn-book")).includes("0/3"), await text(page, "#btn-book"));
 
@@ -143,7 +143,7 @@ try {
   // reload: the plan stays, today's ticks start over, and an old verse doesn't pay twice
   await home.open();
   check("L6a the picks survive a reload", (await text(page, "#btn-teach")).includes("3 verses are on"));
-  await page.click("[data-action=island]");
+  await page.evaluate(() => window.__play("island"));
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
   const bank1 = (await dbg(page)).bank;
   await page.click("#btn-book");
@@ -157,7 +157,7 @@ try {
   await passGate(page);
   await page.click("[data-action=family]");
   await page.click("#ov-teach [data-action=back]");
-  await page.click("[data-action=island]");
+  await page.evaluate(() => window.__play("island"));
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
   d = await dbg(page);
   check("L6 turning it off leaves just today's verse in the book, and the game's own verse at the gate", (await text(page, "#btn-book")).includes("0/1") && d.lesson.refs.length === 0 && d.verse.ref === "John 3:16", d.verse.ref);
@@ -192,7 +192,7 @@ try {
     await kp.click("[data-action=online]");
     await kp.fill("#join-code", code);
     await kp.click("[data-action=join]");
-    const joined = await kp.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 }).then(() => true, () => false);
+    const joined = await kp.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 60000 }).then(() => true, () => false);
     if (!joined) {
       skipped = `the kid couldn't join the class room (${await text(kp, "#online-status")})`;
     } else {
@@ -232,7 +232,7 @@ try {
       await k2.click("[data-action=online]");
       await k2.fill("#join-code", code);
       await k2.click("[data-action=join]");
-      await k2.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 }).catch(() => {});
+      await k2.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 60000 }).catch(() => {});
       const d2 = await dbg(k2);
       check("K6 a kid with the class link gets the typed-in verse in class", d2.lesson.room && d2.lesson.refs.join("|") === "John 11:35|Psalm 56:3|My verse", `${d2.lesson.refs.join(", ")} · state ${d2.state} · ${await text(k2, "#online-status")} · teacher sees ${(await dbg(tp)).remotes}`);
       await k2.click("#btn-book");

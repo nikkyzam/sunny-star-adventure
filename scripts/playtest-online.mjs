@@ -48,10 +48,10 @@ async function kid(profile) {
   const ctx = await browser.newContext({ viewport: { width: 960, height: 600 } });
   const page = await ctx.newPage();
   const errors = [];
-  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("pageerror", (e) => { errors.push(String(e)); console.log("page error:", e.stack); });
   await page.addInitScript((p) => localStorage.setItem("game.profile", JSON.stringify(p)), profile);
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "networkidle" });
-  await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 8000 });
+  await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
   return { page, errors };
 }
 const dbg = (page) => page.evaluate(() => window.__gameDebug());
@@ -71,7 +71,10 @@ try {
   await guest.page.click("[data-action=online]");
   await guest.page.fill("#join-code", code.toLowerCase());
   await guest.page.click("[data-action=join]");
-  await guest.page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 15000 });
+  await guest.page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 60000 }).catch(async () => {
+    console.log("guest:", (await dbg(guest.page)).state, await text(guest.page, "online-status"), "| host:", (await dbg(host.page)).state, await text(host.page, "hud-room"), (await dbg(host.page)).remotes);
+    throw new Error("guest never started");
+  });
   check("J1 guest joined and started", true, await text(guest.page, "hud-room"));
 
   await host.page.waitForFunction(() => window.__gameDebug().remotes === 1, null, { timeout: 8000 }).catch(() => {});

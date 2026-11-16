@@ -67,7 +67,7 @@ export default function Home() {
         <div id="ov-title" className="overlay">
           <div className="panel title-panel">
             <h1 className="game-title">Sunny Star Adventure</h1>
-            <p className="tagline">Explore sky islands, Adventure Island, Sunshine City and Bible stories — collect every ★, bring your pet, sail the boat, drive the car, meet the villagers and play with friends!</p>
+            <p className="tagline">Start on Adventure Island. Walk into a 🧭 travel gate and say a Bible verse from memory to open the way to new places: the city, the Moon, the resort and Bible stories!</p>
             <div className="kid-setup">
               <div className="name-row">
                 <span id="kid-name" className="kid-name" />
@@ -79,19 +79,6 @@ export default function Home() {
             <div className="btn-col">
               <button className="big-btn primary" data-action="play">▶ Play</button>
               <button className="big-btn primary2" data-action="online">🌐 Play with friends</button>
-              <div className="btn-pair">
-                <button className="big-btn island" data-action="island">🏝️ Adventure Island</button>
-                <button className="big-btn city" data-action="city">🏙️ Sunshine City</button>
-              </div>
-              <div className="btn-pair stories">
-                <button className="big-btn ark" data-action="ark">🌈 Noah's Ark</button>
-                <button className="big-btn ark" data-action="jonah">🐋 Jonah</button>
-                <button className="big-btn ark" data-action="david">🪨 David</button>
-              </div>
-              <div className="btn-pair">
-                <button className="big-btn city" data-action="resort">🏖️ Resort</button>
-                <button className="big-btn" data-action="drive">🚗 Toy City</button>
-              </div>
               <button className="big-btn" data-action="play2">👥 2 Players (same keyboard)</button>
               <button id="btn-continue" className="big-btn" data-action="continue" style={{ display: 'none' }}>▶ Continue</button>
             </div>
@@ -200,6 +187,18 @@ export default function Home() {
             </div>
             <div className="btn-col">
               <button className="big-btn primary" data-action="book-close">▶ Back to the game</button>
+            </div>
+          </div>
+        </div>
+
+        {/* the travel gate: every place, and which ones a verse has opened */}
+        <div id="ov-travel" className="overlay" style={{ display: 'none' }}>
+          <div className="panel teach-panel">
+            <h2>Where to? 🧭</h2>
+            <p className="tagline">Say a Bible verse from memory to open the way to a new place. Once it's open, it stays open.</p>
+            <div id="travel-list" className="book-list" />
+            <div className="btn-col">
+              <button className="big-btn primary" data-action="travel-close">▶ Stay here</button>
             </div>
           </div>
         </div>

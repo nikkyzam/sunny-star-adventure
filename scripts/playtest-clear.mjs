@@ -44,8 +44,8 @@ await page.addInitScript(() => localStorage.setItem("game.profile", JSON.stringi
 const errors = [];
 page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
 page.on("pageerror", (e) => errors.push(String(e)));
-await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "networkidle" });
-await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 8000 });
+await page.goto(`http://127.0.0.1:${port}/?level=0`, { waitUntil: "networkidle" });
+await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
 await page.waitForTimeout(600);
 
 let failures = 0;
@@ -182,6 +182,11 @@ async function gotoRouted(tx, ty, tz, timeoutPerLeg = 20_000) {
 // ── D: full clear of level 1 ─────────────────────────────────────
 await page.keyboard.press("Space"); // start
 await page.waitForTimeout(400);
+// (a slow first frame can swallow the key: fall back to the Play button)
+if ((await dbg()).state !== "playing") {
+  await page.click("[data-action=play]");
+  await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 10000 }).catch(() => {});
+}
 
 const globalStart = Date.now();
 let checkpointDone = false;

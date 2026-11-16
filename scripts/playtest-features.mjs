@@ -207,7 +207,7 @@ await page.keyboard.up("KeyS");
 }
 
 // ── G6: co-op ────────────────────────────────────────────────────
-await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "networkidle" });
+await page.goto(`http://127.0.0.1:${port}/?level=0`, { waitUntil: "networkidle" });
 await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 8000 });
 await page.waitForTimeout(500);
 await page.click('[data-action="play2"]');

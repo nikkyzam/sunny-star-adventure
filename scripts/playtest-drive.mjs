@@ -51,7 +51,7 @@ try {
   const dbg = () => page.evaluate(() => { const d = window.__gameDebug(); return { ...d, placeCar: undefined, placeHeli: undefined, placeBoat: undefined, warp: undefined, groundAt: undefined }; });
   const visible = (sel) => page.evaluate((s) => document.querySelector(s)?.style.display !== "none", sel);
 
-  await page.click("[data-action=drive]");
+  await page.evaluate(() => window.__play("drive"));
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
   const lvl = await page.evaluate(() => document.getElementById("hud-level")?.textContent ?? "");
   check("D1 Drive button starts Toy City", lvl.includes("Toy City") && (await dbg()).car !== null, lvl);

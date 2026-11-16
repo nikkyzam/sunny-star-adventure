@@ -85,6 +85,21 @@ and answer the grown-up sum.
 - Through the game, only library verses travel to other devices, as numbers. Nothing typed is ever
   sent between players; typed-in verses travel only inside the link you share.
 
+## One linked world 🧭
+
+The title screen has no list of places. **Play** starts on Adventure Island (or wherever you were
+last). Every big place has a **travel gate**, a stone arch with a swirling light. Walk into it to
+see every place: Sky Islands, Adventure Island, Moon Base, Sunshine City, Noah's Ark, Jonah and the
+Big Fish, David and Goliath, and Paradise Resort.
+
+- A place that isn't open yet asks for a Bible verse, typed from memory. Get it right and the way
+  opens for good.
+- The rocket to the Moon asks for the Moon's verse the same way.
+- The verse book (📖, top left) is always there: today's verse, plus the verse from every golden
+  scroll you have found. Each verse pays 15 coins the first time you type it.
+- Bigger worlds have extra cars parked around to drive, playgrounds, and villagers who dance when
+  you honk or wave at them.
+
 ## Faith in the game ✝️
 
 - **Noah's Ark** 🌈 (title screen): an island with the great ark. Walk up the ramp to the deck, talk

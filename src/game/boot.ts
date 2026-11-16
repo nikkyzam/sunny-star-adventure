@@ -36,12 +36,12 @@ import { Foods } from "./food";
 import { Fleet } from "./ships";
 import { verseFor, grade, LIBRARY, type Verse } from "./verses";
 import { loadPlan, savePlan, planVerses, safePicks, cleanOwn, loadMemorized, saveMemorized, makeGate, ownHash, encodePlan, planFromLink, MAX_PICKS, MAX_OWN, CLASS_MAX_KIDS, VERSE_PAY } from "./lesson";
-import { showGate, gateAnswer, setGateStatus, drawTeach, ownInput, clearOwnInput, setTeachStatus, setTeachButton, showClassLink, drawBook, type BoardRow } from "./lessonui";
+import { showGate, gateAnswer, setGateStatus, drawTeach, ownInput, clearOwnInput, setTeachStatus, setTeachButton, showClassLink, drawBook, drawTravel, type BoardRow } from "./lessonui";
 import { loadHumanKit } from "./humans";
 import { loadEnvKit } from "./env";
 import { Props } from "./props";
 import { Particles } from "./particles";
-import { Hud } from "./hud";
+import { Hud, type HudAction } from "./hud";
 import { storage, highScore } from "./storage";
 import {
   OUTFITS, HATS, SKINS, PETS, HAIR_COLORS, HAIR_STYLES, GLASSES, CLOTHES, BODIES, loadProfile, saveProfile, rerollName, nameText,
@@ -64,6 +64,7 @@ declare global {
     __GAME_READY__?: boolean;
     /** Perf probe — draw calls / triangles of the last rendered frame. */
     __perf?: () => { calls: number; triangles: number };
+    __play?: (action: string) => void;
     /** Test hook — positions/state for the automated playtests. */
     __gameDebug?: () => {
       state: string;
@@ -95,6 +96,10 @@ declare global {
       board: BoardRow[];
       scrolls: { x: number; y: number; z: number; ref: string }[];
       scrollsFound: number;
+      places: string[];
+      station: { x: number; z: number } | null;
+      /** Test hook: open every place without typing verses. */
+      unlockPlaces: () => void;
       setBank: (n: number) => void;
       shipsSunk: number;
       shipsAfloat: number;
@@ -174,10 +179,17 @@ export function startGame(canvas: HTMLCanvasElement): void {
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1.05;
   const pmrem = new THREE.PMREMGenerator(renderer);
+  // without a real graphics chip (software rendering), sky lighting costs too much: use plain lights
+  const softwareGl = (() => {
+    const gl = renderer.getContext();
+    const info = gl.getExtension("WEBGL_debug_renderer_info");
+    return /swiftshader|llvmpipe|software/i.test(info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : "");
+  })();
   let skyEnv: THREE.WebGLRenderTarget | null = null;
 
   /** Light every surface with the level's own sky (and reflect it in glass, paint and water). */
   function makeSkyLight(top: number, horizon: number, ground: number): void {
+    if (softwareGl) return;
     const geo = new THREE.SphereGeometry(10, 24, 12);
     const pos = geo.getAttribute("position");
     const colors = new Float32Array(pos.count * 3);
@@ -202,7 +214,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 600);
 
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x88aa66, 0.45); // (the sky light does the rest)
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x88aa66, softwareGl ? 0.85 : 0.45); // (the sky light does the rest)
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff5dd, 1.7);
   sun.position.set(18, 30, 6);
@@ -232,7 +244,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const boat = new Car("boat");
   const heli = new Car("heli");
   const jet = new Car("jet");
-  const rides = [car, boat, heli, jet];
+  const spareCars = [new Car("car", 0x2f80ed), new Car("car", 0xffd93d)]; // more cars parked around the bigger worlds
+  const rides = [car, boat, heli, jet, ...spareCars];
   const RIDE_ICON: Record<RideKind, string> = { car: "🚗", boat: "⛵", heli: "🚁", jet: "✈️" };
   const rocket = makeRocket();
   rocket.visible = false;
@@ -261,6 +274,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const blobMat = new THREE.MeshBasicMaterial({ color: 0x1a2a1a, transparent: true, opacity: 0.28, depthWrite: false });
 
   scene.add(jobs.group, traffic.group, scrolls.group);
+  scene.add(...spareCars.map((c) => c.group));
   scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, boat.group, heli.group, jet.group, rocket, rings.group, foods.group, fleet.group, props.group, npcs.group, pet.group, particles.points);
 
   // ── Run state ────────────────────────────────────────────────────────────
@@ -313,6 +327,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const linkPlan = planFromLink(location.search);
   let teachOpen = false;
   let bookOpen = false;
+  // travel: places a verse has opened (saved), and the gate's menu
+  const HUB = "Adventure Island";
+  const places = new Set<string>([HUB, ...storage.get<string[]>("places", [])]);
+  let travelOpen = false;
+  let stationArmed = false;
   let gate: { question: string; answer: number } | null = null;
   /** Teacher's scoreboard: who is in the class and which class verses they've typed from memory. */
   const board = new Map<string, { name: string; done: Set<number>; here: boolean }>();
@@ -471,6 +490,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
     return LEVELS.findIndex((l) => l.sea !== undefined);
   }
 
+  /** Where Play begins: the level a link asks for, else the last place visited, else Adventure Island. */
+  function startLevel(): number {
+    if (new URLSearchParams(location.search).has("level")) return requestedStartLevel();
+    const last = storage.get<number>("lastPlace", -1);
+    return Number.isInteger(last) && last >= 0 && last < LEVELS.length ? last : islandLevel();
+  }
+
   function requestedStartLevel(): number {
     // ?level=N jumps straight into a level (used by the playtest harness; harmless for players)
     const raw = Number(new URLSearchParams(location.search).get("level") ?? "0");
@@ -567,6 +593,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
     audio.engineStop();
     car.group.visible = world.def.carSpawn !== undefined;
     car.shoreY = world.def.sea !== undefined ? world.def.sea - 0.3 : null;
+    spareCars.forEach((c, k) => {
+      const at = world.def.extraCars?.[k];
+      c.group.visible = at !== undefined;
+      c.shoreY = car.shoreY;
+      if (at) c.place(at[0], at[1], at[2], at[3]);
+    });
+    stationArmed = false; // (walk away from the gate you arrived at before it opens again)
     if (world.def.carSpawn) {
       const [cx, cy, cz, ch] = world.def.carSpawn;
       car.place(cx, cy, cz, ch);
@@ -615,6 +648,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     buddies.resetRun();
     makePlayers(coop);
     loadLevel(level);
+    storage.set("lastPlace", level);
     onlineMenuOpen = false;
     dressOpen = false;
     teachOpen = false;
@@ -735,6 +769,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   function backToPlay(): void {
     bookOpen = false;
+    travelOpen = false;
     if (verseNow?.practice) verseNow = null;
     ads.gameplayStart();
     sm.transition("playing");
@@ -761,6 +796,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (!sm.is("levelclear")) return;
     const to = levelIdx + 1;
     openVerse(() => adBreak("next", `level-${to + 1}`, () => {
+      if (LEVELS[to].station) unlockPlace(to);
+      storage.set("lastPlace", to);
       loadLevel(to);
       backToPlay();
     }));
@@ -883,8 +920,73 @@ export function startGame(canvas: HTMLCanvasElement): void {
     hud.showOverlay("book");
   }
 
+  // ── Travel: every place is linked, and a verse opens the way ────────────
+  const PLACE_ICON: Record<string, string> = {
+    "Adventure Island": "🏝️", "Moon Base": "🌙", "Sunshine City": "🏙️", "Noah's Ark": "🌈",
+    "Jonah and the Big Fish": "🐋", "David and Goliath": "🪨", "Paradise Resort": "🏖️",
+  };
+  /** Where the travel gate can take you: the sky islands (as far as you've got), then every place with a gate. */
+  function travelTargets(): { level: number; label: string; open: boolean }[] {
+    const first = LEVELS.findIndex((l) => l.station);
+    const sky = Math.min(unlockedLevel(), first - 1);
+    return [
+      { level: sky, label: `⛅ Sky Islands · ${LEVELS[sky].name}`, open: true },
+      ...LEVELS.flatMap((l, i) => (l.station ? [{ level: i, label: `${PLACE_ICON[l.name] ?? "🧭"} ${l.name}`, open: places.has(l.name) }] : [])),
+    ];
+  }
+
+  function unlockPlace(level: number): void {
+    places.add(LEVELS[level].name);
+    storage.set("places", [...places]);
+  }
+
+  function travelTo(level: number): void {
+    net?.send({ t: "level", i: level });
+    loadLevel(level);
+    storage.set("lastPlace", level);
+    backToPlay();
+    audio.sfx("portal");
+    hud.showToast(`${PLACE_ICON[LEVELS[level].name] ?? "⛅"} Welcome to ${LEVELS[level].name}!`);
+  }
+
+  function showTravel(): void {
+    const t = travelTargets();
+    drawTravel(t.map((r) => ({ label: r.label, open: r.open, here: r.level === levelIdx })), (k) => {
+      const to = t[k];
+      if (!to || !travelOpen || !sm.is("paused") || to.level === levelIdx) return;
+      if (to.open) { travelTo(to.level); return; }
+      askVerseFor(to.level, () => travelTo(to.level));
+    });
+    hud.showOverlay("travel");
+  }
+
+  /** A place that isn't open yet: type its verse from memory, then `then` runs. (Play is paused.) */
+  function askVerseFor(level: number, then: () => void): void {
+    const l = lessonVerses();
+    const verse = l.length ? l[level % l.length] : verseFor(level);
+    verseNow = { verse, practice: true, then: () => { unlockPlace(level); then(); } };
+    hud.showVerse(verse.ref, verse.text, true);
+    hud.showOverlay("verse");
+  }
+
+  function openTravel(): void {
+    if (!sm.is("playing")) return;
+    sm.transition("paused");
+    ads.gameplayStop();
+    hud.setPlayingUi(false);
+    audio.sfx("ui");
+    travelOpen = true;
+    showTravel();
+  }
+
   /** Open the verse book (pausing play), or go back to it from a verse. */
   function openBook(): void {
+    if (travelOpen && sm.is("paused")) {
+      // "back" from a place's verse: the list of places again (or back to the game, at the rocket)
+      verseNow = null;
+      if (rocketAsk) { rocketAsk = false; resumePlay(); } else showTravel();
+      return;
+    }
     if (sm.is("playing")) {
       if (bookVerses().length === 0) return;
       sm.transition("paused");
@@ -1005,7 +1107,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     hud.showOverlay("title");
     hud.setPlayingUi(false);
     hud.setBest(highScore.get());
-    hud.showContinue(unlockedLevel() > 0, LEVELS[unlockedLevel()].name);
+    hud.showContinue(false, ""); // (Play itself carries on from the last place)
     audio.sfx("ui");
     adBreak("browse", "title", () => {});
   }
@@ -1016,10 +1118,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   // ── Button / action routing ──────────────────────────────────────────────
-  hud.onAction((a) => {
+  const route = (a: HudAction): void => {
     switch (a) {
-      case "play": startRun(requestedStartLevel(), false); break;
-      case "play2": startRun(requestedStartLevel(), true); break;
+      case "play": startRun(startLevel(), false); break;
+      case "play2": startRun(startLevel(), true); break;
       case "continue": if (sm.is("title")) startRun(unlockedLevel(), false); break;
       case "island":
         if (!sm.is("title")) break;
@@ -1038,6 +1140,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       case "verse-peek": if (verseNow) hud.verseStage(false); break;
       case "book": openBook(); break;
       case "book-close": if (bookOpen) resumePlay(); break;
+      case "travel-close": if (travelOpen) resumePlay(); break;
       case "teach": openGate(); break;
       case "gate-ok": gateOk(); break;
       case "own-add": addOwnVerse(); break;
@@ -1111,18 +1214,19 @@ export function startGame(canvas: HTMLCanvasElement): void {
       case "host": hostRoom(); break;
       case "join": joinRoom(); break;
     }
-  });
+  };
+  hud.onAction(route);
+  window.__play = (a: string) => route(a as HudAction); // test hook: start a place straight from the title
 
   /** Space / Enter context action, by state. */
   function primaryAction(): void {
     if (sm.is("title")) {
       if (onlineMenuOpen || dressOpen || teachOpen) return; // those screens are waiting on a button, not Space
-      const u = unlockedLevel();
-      startRun(u > 0 ? u : requestedStartLevel(), false);
+      startRun(startLevel(), false);
     } else if (sm.is("playing")) {
       pendingJump = true;
     } else if (sm.is("paused")) {
-      if (!bookOpen) resumePlay(); // (the verse book closes with its own button, not a stray Space)
+      if (!bookOpen && !travelOpen) resumePlay(); // (the verse book and travel gate close with their own buttons)
     } else if (sm.is("gameover")) {
       retryLevel();
     } else if (sm.is("levelclear")) {
@@ -1160,6 +1264,19 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   /** Blast off: everyone climbs in, the rocket rises, and the next world loads (see step()). */
+  let rocketAsk = false;
+
+  /** The rocket flies to the Moon (or home): a place not open yet needs its verse first. */
+  function boardRocket(): void {
+    const to = world.def.space ? islandLevel() : LEVELS.findIndex((l) => l.space);
+    if (places.has(LEVELS[to].name)) { startLaunch(); return; }
+    sm.transition("paused");
+    hud.setPlayingUi(false);
+    travelOpen = true;
+    rocketAsk = true;
+    askVerseFor(to, () => { rocketAsk = false; backToPlay(); startLaunch(); });
+  }
+
   function startLaunch(): void {
     for (const v of rides) for (const p of players) if (v.has(p)) v.exit(p);
     audio.engineStop();
@@ -1185,7 +1302,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
     const near = rideInReach();
     if (!near) {
-      if (nearRocket()) startLaunch();
+      if (nearRocket()) boardRocket();
       return;
     }
     const seat = near.ride.board(near.kid);
@@ -1208,11 +1325,17 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
   }
 
+  /** Villagers close by notice you and do a happy dance (a honk, a wave). */
+  function cheerNear(at: THREE.Vector3, reach: number): void {
+    for (const n of npcs.items) if (!n.fallen && n.p.pos.distanceToSquared(at) < reach * reach) n.p.dance();
+  }
+
   function honk(): void {
     const v = rides.find((r) => r.group.visible && r.driver);
     if (!sm.is("playing") || !v) return;
     audio.sfx("honk");
     particles.burst(v.pos.x, v.pos.y + 1.4, v.pos.z, 0xffe27a, 8, 2.5, 0.5, 3);
+    cheerNear(v.pos, 14);
     net?.send({ t: "hk", L: levelIdx });
   }
 
@@ -1365,6 +1488,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   function sendSticker(i: number): void {
     if (!sm.is("playing") || !STICKERS[i]) return;
     bubbles[0]?.show(i);
+    if (i === 0) cheerNear(players[0].pos, 8); // a wave: villagers nearby wave back
     if (STICKERS[i].emoji === "❤️" && pet.active) {
       pet.cheer();
       audio.sfx("pet");
@@ -1653,7 +1777,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   audio.autoStart = true; // the title song starts on the first tap / key press
   hud.showOverlay("title");
   hud.setPlayingUi(false);
-  hud.showContinue(unlockedLevel() > 0, LEVELS[unlockedLevel()].name);
+  hud.showContinue(false, ""); // (Play itself carries on from the last place)
 
   function activeP2(): Player | null {
     return players.length > 1 ? players[1] : null;
@@ -2111,6 +2235,17 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
     updateJobs(dt);
 
+    // the travel gate: walk into it to choose where to go next
+    if (world.stationPos) {
+      const d2 = players[0].riding ? Infinity : players[0].pos.distanceToSquared(world.stationPos);
+      if (d2 > 3.2 * 3.2) stationArmed = true;
+      else if (stationArmed && d2 < 1.4 * 1.4) {
+        stationArmed = false;
+        openTravel();
+        return;
+      }
+    }
+
     // scripture scrolls: walk into one to read its verse
     scrolls.update(dt, elapsed);
     for (const p of players) {
@@ -2199,6 +2334,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
         storage.set(UNLOCKED_KEY, Math.max(unlockedLevel(), to));
         net?.send({ t: "level", i: to });
         loadLevel(to);
+        storage.set("lastPlace", to);
         audio.sfx("win");
         hud.showToast(LEVELS[to].space ? "🌙 Welcome to the Moon! Jump and see how floaty it is!" : "🌍 Back on Adventure Island!");
         return;
@@ -2410,6 +2546,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
     board: boardRows(),
     scrolls: scrolls.items.map((sc) => ({ x: sc.pos.x, y: sc.pos.y, z: sc.pos.z, ref: LIBRARY[sc.verse].ref })),
     scrollsFound: scrollsFound.size,
+    places: [...places],
+    station: world.stationPos ? { x: world.stationPos.x, z: world.stationPos.z } : null,
+    unlockPlaces: () => { for (const l of LEVELS) if (l.station) places.add(l.name); },
     song: audio.playingSong,
     bank,
     owned: [...owned],

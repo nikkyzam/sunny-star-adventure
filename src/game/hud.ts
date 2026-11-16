@@ -7,9 +7,9 @@ export type HudAction =
   | "play" | "play2" | "continue" | "resume" | "retry" | "next" | "title" | "again" | "jump" | "mute"
   | "online" | "host" | "join" | "back" | "reroll" | "easy" | "drive" | "car" | "honk"
   | "dress" | "island" | "city" | "ark" | "jonah" | "david" | "resort" | "talk" | "verse-ready" | "verse-check" | "verse-peek"
-  | "teach" | "gate-ok" | "class-start" | "family" | "own-add" | "book" | "book-close" | "class-link";
+  | "teach" | "gate-ok" | "class-start" | "family" | "own-add" | "book" | "book-close" | "class-link" | "travel-close";
 
-type OverlayName = "title" | "pause" | "gameover" | "clear" | "win" | "online" | "dress" | "verse" | "gate" | "teach" | "book";
+type OverlayName = "title" | "pause" | "gameover" | "clear" | "win" | "online" | "dress" | "verse" | "gate" | "teach" | "book" | "travel";
 
 const OVERLAY_IDS: Record<OverlayName, string> = {
   title: "ov-title",
@@ -23,6 +23,7 @@ const OVERLAY_IDS: Record<OverlayName, string> = {
   gate: "ov-gate",
   teach: "ov-teach",
   book: "ov-book",
+  travel: "ov-travel",
 };
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {

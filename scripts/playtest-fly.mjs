@@ -50,7 +50,7 @@ try {
   await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
   const dbg = () => page.evaluate(() => { const d = window.__gameDebug(); return { ...d, placeCar: undefined, placeHeli: undefined, placeBoat: undefined, warp: undefined, groundAt: undefined }; });
   const level = () => page.evaluate(() => document.getElementById("hud-level")?.textContent ?? "");
-  await page.click("[data-action=island]");
+  await page.evaluate(() => window.__play("island"));
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
 
   // the helicopter is parked at (13, 10)
@@ -104,7 +104,17 @@ try {
   await page.waitForTimeout(500);
   const rl = await page.textContent("#btn-car");
   check("R1 the rocket button appears", rl.includes("🚀"), rl);
+  // the Moon is a place a verse opens: the rocket asks for it first
   await page.keyboard.press("KeyE");
+  await page.waitForTimeout(400);
+  const asked = await page.evaluate(() => getComputedStyle(document.getElementById("ov-verse")).display !== "none");
+  check("R1b the rocket asks for a verse before a new place", asked);
+  if (asked) {
+    const verse = await page.textContent("#verse-text");
+    await page.click("[data-action=verse-ready]");
+    await page.fill("#verse-input", verse.toLowerCase().replace(/[^a-z0-9 ]/g, ""));
+    await page.click("[data-action=verse-check]");
+  }
   await page.waitForTimeout(2500);
   await page.screenshot({ path: join(ROOT, "verification-shots/33-blast-off.png") });
   await page.waitForFunction(() => document.getElementById("hud-level")?.textContent?.includes("Moon"), null, { timeout: 12000 }).catch(() => {});

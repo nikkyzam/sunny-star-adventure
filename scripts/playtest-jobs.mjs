@@ -62,7 +62,7 @@ try {
   };
   const leftCount = (d) => (d.job ? d.job.left.length : 0);
 
-  await page.click("[data-action=island]");
+  await page.evaluate(() => window.__play("island"));
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
   await page.waitForTimeout(500);
 
@@ -191,7 +191,7 @@ try {
   // ── J8 fishing: Fisher Flo at (8, 14.2); the boat is moored at (9.4, 21) ──
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
-  await page.click("[data-action=island]");
+  await page.evaluate(() => window.__play("island"));
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
   await warp(7, 13.2);
   await page.waitForTimeout(300);

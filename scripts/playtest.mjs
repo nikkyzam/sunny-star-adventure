@@ -62,7 +62,7 @@ const probe = (page) => page.evaluate(() => window.__gameProbe());
 
 // ── Scenario A: core loop on level 1 ─────────────────────────────
 {
-  const { page, errors } = await newGamePage("/");
+  const { page, errors } = await newGamePage("/?level=0");
 
   await page.keyboard.press("Space"); // start
   await page.waitForTimeout(400);

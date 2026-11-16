@@ -62,7 +62,7 @@ try {
   };
   const leftCount = (d) => (d.job ? d.job.left.length : 0);
 
-  await page.click("[data-action=ark]");
+  await page.evaluate(() => window.__play("ark"));
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
   await page.waitForTimeout(1200);
   const lvl = await page.evaluate(() => document.getElementById("hud-level")?.textContent ?? "");
@@ -114,7 +114,7 @@ try {
   // F5/F6: Adventure Island's church (12, -37.5; door at z = -34) and Pastor Paul (14.6, -32.4)
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
-  await page.click("[data-action=island]");
+  await page.evaluate(() => window.__play("island"));
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
   await warp(12, -28);
   await page.waitForTimeout(1200);
@@ -145,7 +145,7 @@ try {
   // F7: Sunshine Chapel
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
-  await page.click("[data-action=city]");
+  await page.evaluate(() => window.__play("city"));
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
   await warp(50, 0);
   await page.waitForTimeout(300);
@@ -159,7 +159,7 @@ try {
   const fresh = async (action) => {
     await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
     await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
-    await page.click(`[data-action=${action}]`);
+    await page.evaluate((a) => window.__play(a), action);
     await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
     await page.waitForTimeout(800);
   };

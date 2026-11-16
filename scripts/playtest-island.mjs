@@ -95,7 +95,7 @@ try {
   check("A1 dress-up saves skin, hat and pet", prof.skin === 3 && prof.hat === 3 && prof.pet === 4, JSON.stringify(prof));
   await page.click("#ov-dress [data-action=back]");
 
-  await page.click("[data-action=island]");
+  await page.evaluate(() => window.__play("island"));
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
   const lvl = await page.evaluate(() => document.getElementById("hud-level")?.textContent ?? "");
   const d0 = await dbg();
@@ -165,7 +165,7 @@ try {
   // A10: walk into the pink village house (17, -12; its door faces +z at z = -10)
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 60000 });
-  await page.click("[data-action=island]");
+  await page.evaluate(() => window.__play("island"));
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
   const stars0 = (await dbg()).stars.length;
   await walkTo(9, 6, 1);

@@ -66,7 +66,7 @@ export class Car {
   /** Aircraft: the driver is holding "up" this step (set by boot before update). */
   lift = false;
 
-  constructor(readonly kind: RideKind = "car") {
+  constructor(readonly kind: RideKind = "car", private readonly paintColor = 0xff4757) {
     if (kind === "boat") {
       this.seatZ = 0.1;
       this.seatY = 0.18;
@@ -88,7 +88,7 @@ export class Car {
 
   private buildCar(): void {
     // an open-top car: body, bonnet, boot, doors, windscreen, seats, bumpers, lights, spoked wheels
-    const paint = new THREE.MeshStandardMaterial({ color: 0xff4757, roughness: 0.35, metalness: 0.25 });
+    const paint = new THREE.MeshStandardMaterial({ color: this.paintColor, roughness: 0.35, metalness: 0.25 });
     const trim = new THREE.MeshStandardMaterial({ color: 0xe9edf3, roughness: 0.3, metalness: 0.6 });
     const dark = new THREE.MeshStandardMaterial({ color: 0x26252d, roughness: 0.7 });
     const seat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.9 });
