@@ -13,7 +13,7 @@
 import * as THREE from "three";
 import type { World, Platform } from "./world";
 import { makeHuman, type Human, type Move } from "./humans";
-import { makeAdult, type Adult, type AdultKind } from "./people";
+import { makeAdult, type Adult, type AdultKind, type RobeLook } from "./people";
 
 const SPEED = 7;
 const ACCEL_GROUND = 70;
@@ -153,6 +153,8 @@ export interface KidPalette {
   body?: number;
   /** A grown-up villager's body (people.ts), used once those models are loaded. */
   adult?: AdultKind | null;
+  /** Bible-times clothes for a grown-up villager. */
+  robe?: RobeLook;
 }
 
 export class Player {
@@ -213,7 +215,7 @@ export class Player {
   private wasAirborne = false;
 
   constructor(palette: KidPalette = { jacket: 0xff8c42, cap: 0xff4757, pants: 0x4a69bd }) {
-    const adult = palette.adult ? makeAdult({ kind: palette.adult, skin: palette.skin ?? 0xd9a273, top: palette.jacket, bottom: palette.pants, accent: palette.cap }) : null;
+    const adult = palette.adult ? makeAdult({ kind: palette.adult, skin: palette.skin ?? 0xd9a273, top: palette.jacket, bottom: palette.pants, accent: palette.cap, robe: palette.robe }) : null;
     this.grownUp = adult !== null;
     this.human = adult ?? makeHuman({
       body: palette.body ?? 0, skinColor: palette.skin ?? 0xffd9b3, hair: palette.hairStyle ?? 0, hairColor: palette.hair ?? 0x5a3a22,

@@ -8,7 +8,7 @@ import * as THREE from "three";
 import { Player } from "./player";
 import { lookOf, safeHat, safeLook } from "./profile";
 import { makeTextSprite, disposeSprite } from "./social";
-import { adultKindFor, peopleReady } from "./people";
+import { adultKindFor, peopleReady, robeFor } from "./people";
 import type { NpcDef } from "./world";
 
 const TALK_RADIUS = 2.6;
@@ -29,8 +29,10 @@ function makeVillager(def: NpcDef): { p: Player; tag: THREE.Sprite } {
     body: (def.outfit + def.skin + def.hat) % 2,
     outfit: def.outfit, skin: def.skin, hair: def.outfit + def.hat, hairColor: def.skin * 2 + def.outfit,
     glasses: (def.outfit + def.skin) % 3 === 0 ? 1 : 0, clothes: def.hat + def.skin,
-  })), adult: peopleReady() ? adultKindFor(def.name) : null });
-  p.setHat(safeHat(def.hat));
+  })), adult: peopleReady() ? adultKindFor(def.name) : null, robe: robeFor(def.name) });
+  // in Bible-times clothes: kings and the Wise Men wear crowns, everyone else their head cloth
+  const robe = robeFor(def.name);
+  p.setHat(robe && peopleReady() ? (robe.head === "crown" ? 1 : 0) : safeHat(def.hat));
   p.pos.set(def.x, def.y, def.z);
   p.facing = 0;
   if (def.scale) p.group.scale.setScalar(def.scale);

@@ -73,6 +73,8 @@ export interface AdultLook {
   top: number;
   bottom: number;
   accent: number;
+  /** Bible-times clothes over the outfit (robeFor). */
+  robe?: RobeLook;
 }
 
 const V1 = new THREE.Vector3(), V2 = new THREE.Vector3();
@@ -105,6 +107,7 @@ export class Adult {
     // geometry is shared between villagers: cleanup code must not dispose anything in here
     this.root.userData.shared = true;
 
+    const robe = look.robe;
     const tint = (m: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial => {
       const n = /^(Skin)$/.test(m.name) ? look.skin
         : /^(Shirt|Dress|Jacket)$/.test(m.name) ? look.top
@@ -113,6 +116,9 @@ export class Adult {
         : null;
       const c = m.clone();
       if (n !== null) c.color.setHex(n);
+      if (robe && /^(Shirt|Dress|Jacket|Pants|Shirt2|LightJacket)$/.test(m.name)) c.color.setHex(robe.robe);
+      if (robe && m.name === "Socks") c.color.setHex(0x6b4a2e); // sandal brown
+      if (robe && robe.head !== "crown" && robe.head !== "bare" && m.name === "Hair") c.visible = false; // under the head cloth
       c.roughness = 0.8;
       c.metalness = 0;
       c.opacity = 1;
@@ -148,8 +154,73 @@ export class Adult {
       holder.add(this.headAcc);
     }
 
+    if (robe) this.dress(body, robe, look.kind);
+
     this.mixer = new THREE.AnimationMixer(body);
     this.play("idle");
+  }
+
+  /** Bible-times clothes: a long robe with a sash, a cloak for kings and travellers from afar,
+   *  and a head cloth or veil. Each piece rides on a bone, laid out in the standing pose. */
+  private dress(body: THREE.Object3D, robe: RobeLook, kind: AdultKind): void {
+    this.root.updateMatrixWorld(true);
+    const at = (name: string) => {
+      const b = body.getObjectByName(name);
+      return b ? this.root.worldToLocal(b.getWorldPosition(new THREE.Vector3())) : null;
+    };
+    const anchor = (name: string): THREE.Object3D | null => {
+      const bone = body.getObjectByName(name);
+      if (!bone) return null;
+      const h = new THREE.Group();
+      h.matrixAutoUpdate = false;
+      h.matrix.copy(bone.matrixWorld).invert().multiply(this.root.matrixWorld);
+      bone.add(h);
+      return h;
+    };
+    const hips = at("Hips"), neck = at("Neck"), head = at("Head"), knee = at("LowerLegL"), shL = at("UpperArmL"), shR = at("UpperArmR");
+    if (!hips || !neck || !head || !knee || !shL || !shR) return;
+    const mat = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) => {
+      const m = new THREE.MeshStandardMaterial({ color, roughness: 0.85, flatShading: true, side: THREE.DoubleSide, ...extra });
+      this.owned.push(m);
+      return m;
+    };
+    const add = (parent: THREE.Object3D | null, geo: THREE.BufferGeometry, m: THREE.Material, sz = 1) => {
+      const mesh = new THREE.Mesh(geo, m);
+      mesh.scale.z = sz;
+      mesh.castShadow = true;
+      mesh.frustumCulled = false;
+      mesh.userData.robe = true;
+      parent?.add(mesh);
+      return mesh;
+    };
+    const female = kind.startsWith("female");
+    const k = hips.y / (female ? 0.95 : 1.0); // body size against a typical grown-up
+    const w = Math.abs(shL.x - shR.x) * 0.5;   // half the shoulder width
+    const robeM = mat(robe.robe), trimM = mat(robe.trim, robe.trim === GOLD ? { metalness: 0.5, roughness: 0.4, emissive: 0x3a2a00 } : {});
+    const geo = robeGeos(kind, hips.y, knee.y, w, k);
+
+    // the long skirt of the robe, from the waist to the ankles, with a band at the hem
+    const hipsBone = anchor("Hips");
+    for (const piece of [add(hipsBone, geo.skirt, robeM, 0.78), add(hipsBone, geo.hem, trimM, 0.78), add(hipsBone, geo.sash, trimM, 0.78)]) piece.position.set(hips.x, hips.y, hips.z);
+    // the cloak hangs from the shoulders down the back
+    if (robe.cloak !== undefined) {
+      const torso = anchor("Torso");
+      const cloak = add(torso, geo.cloak, mat(robe.cloak), 0.8);
+      cloak.position.set(hips.x, neck.y - 0.06 * k, neck.z - 0.02 * k);
+      const collar = add(torso, geo.collar, trimM, 0.8);
+      collar.position.set(hips.x, neck.y - 0.05 * k, neck.z - 0.01 * k);
+    }
+    // the head cloth (men) or veil (women), open at the face, fitted to the real head
+    if (robe.head === "cloth" || robe.head === "veil") {
+      const hb = anchor("Head");
+      const fit = headFit(kind, body, this.root, head.y);
+      const c = new THREE.Vector3(fit.x, fit.top - 0.085 * k, fit.z - 0.012 * k);
+      const g2 = headGeos(kind, fit.r, k);
+      const clothM = mat(robe.headColor);
+      add(hb, g2.cap, clothM).position.copy(c);
+      add(hb, robe.head === "veil" ? g2.veil : g2.drape, clothM).position.copy(c);
+      add(hb, g2.band, robe.head === "cloth" ? mat(robe.trim === GOLD ? 0x3a2a1a : robe.trim) : clothM).position.set(c.x, c.y + 0.02 * k, c.z);
+    }
   }
 
   play(move: Move, timeScale = 1): void {
@@ -269,6 +340,140 @@ export function makeAdult(look: AdultLook): Adult | null {
   return kit ? new Adult(kit, look) : null;
 }
 
+// ── Bible-times clothes ────────────────────────────────────────────────────
+
+export interface RobeLook {
+  robe: number;
+  /** Sash and hem (GOLD shines). */
+  trim: number;
+  /** A head cloth, a woman's veil, a crown (the hat), or nothing. */
+  head: "cloth" | "veil" | "crown" | "bare";
+  headColor: number;
+  /** A cloak down the back: kings, the Wise Men, Mary's mantle is her veil. */
+  cloak?: number;
+}
+
+const GOLD = 0xe8b830;
+const LINEN = 0xeee4cc;
+
+/** The people of the Bible worlds. (David is a boy and keeps a kid's model.) */
+const ROBES: Record<string, RobeLook> = {
+  // Noah's Ark
+  "Noah": { robe: 0x8a6a4a, trim: LINEN, head: "cloth", headColor: 0xefe6d2 },
+  "Shem": { robe: 0x5e7fa8, trim: 0xc9a46a, head: "cloth", headColor: 0xe9dfc8 },
+  "Ham": { robe: 0xa8643c, trim: LINEN, head: "cloth", headColor: 0xdcc8a0 },
+  "Japheth": { robe: 0x6f8a4e, trim: 0xd9c08a, head: "cloth", headColor: 0xe9dfc8 },
+  // Jonah
+  "Jonah": { robe: 0x9b7b56, trim: LINEN, head: "cloth", headColor: 0x4f6f8f },
+  "Sailor Sam": { robe: 0x3d5a80, trim: LINEN, head: "cloth", headColor: 0xd94f4f },
+  "King of Nineveh": { robe: 0x7b2d8b, trim: GOLD, head: "crown", headColor: 0, cloak: 0xa8323a },
+  "Nadia of Nineveh": { robe: 0x2f8f8a, trim: 0xf0d080, head: "veil", headColor: 0xf0d080 },
+  // David and Goliath
+  "Goliath": { robe: 0x5a4a32, trim: 0xb08d57, head: "bare", headColor: 0 },
+  "King Saul": { robe: 0x8b2d3a, trim: GOLD, head: "crown", headColor: 0, cloak: 0x4a2d7b },
+  "Eliab": { robe: 0x8a7a5a, trim: 0xb04a3a, head: "cloth", headColor: 0xc94f3a },
+  "Jesse": { robe: 0xc9b896, trim: 0x7a5a3a, head: "cloth", headColor: 0xf0eadc },
+  // Bethlehem
+  "Mary": { robe: 0xf1e7d6, trim: 0x3f6fc4, head: "veil", headColor: 0x3f6fc4 },
+  "Joseph": { robe: 0x8b6a45, trim: LINEN, head: "cloth", headColor: 0xd8c49a },
+  "Wise Man Caspar": { robe: 0x7b3fa0, trim: GOLD, head: "crown", headColor: 0, cloak: 0xd4a017 },
+  "Wise Man Melchior": { robe: 0xd4a017, trim: GOLD, head: "crown", headColor: 0, cloak: 0x8b1e2e },
+  "Wise Man Balthazar": { robe: 0x2f6bb0, trim: GOLD, head: "crown", headColor: 0, cloak: 0x6b2fa0 },
+  "Innkeeper Ezra": { robe: 0xb5835a, trim: LINEN, head: "cloth", headColor: 0xeee5d0 },
+  "Shepherd Eli": { robe: 0x9b8361, trim: 0x5a4632, head: "cloth", headColor: 0xd9cdb0 },
+  "Shepherd Asa": { robe: 0x7d6a4f, trim: LINEN, head: "cloth", headColor: 0x8fa3b8 },
+};
+
+/** Bible-times clothes for this villager, or undefined for everyday clothes. */
+export function robeFor(name: string): RobeLook | undefined {
+  return ROBES[name];
+}
+
+/** Robe shapes are the same for everyone of one body: made once and shared. */
+const robeCache = new Map<string, Record<"skirt" | "hem" | "sash" | "cloak" | "collar", THREE.BufferGeometry>>();
+function robeGeos(kind: AdultKind, hipY: number, kneeY: number, w: number, k: number) {
+  const key = kind;
+  const hit = robeCache.get(key);
+  if (hit) return hit;
+  const female = kind.startsWith("female");
+  const waist = hipY + (female ? 0.12 : 0.2) * k; // up to the shirt's hem, so no trousers show
+  const r0 = w * (female ? 1.0 : 0.95);
+  const lathe = (pts: [number, number][]) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y - hipY)), 18);
+  const hemY = 0.06 * k;
+  const skirt = lathe([
+    [r0 * 1.0, waist], [r0 * 1.1, hipY - 0.02 * k], [r0 * 1.12, (hipY + kneeY) / 2], [r0 * 1.22, kneeY],
+    [r0 * 1.5, hemY + 0.08 * k], [r0 * 1.6, hemY],
+  ]);
+  const hem = new THREE.CylinderGeometry(r0 * 1.61, r0 * 1.63, 0.07 * k, 18, 1, true);
+  hem.translate(0, hemY + 0.035 * k - hipY, 0);
+  const sash = new THREE.TorusGeometry(r0 * 1.04, 0.032 * k, 6, 18);
+  sash.rotateX(Math.PI / 2);
+  sash.translate(0, waist - 0.04 * k - hipY, 0);
+  // the cloak: an open cone round the back, from the shoulders to just above the hem
+  const cloakH = waist + 0.42 * k - 0.16 * k;
+  const cloak = new THREE.CylinderGeometry(w * 0.95, r0 * 1.75, cloakH, 14, 1, true, Math.PI - 1.35, 2.7);
+  cloak.translate(0, -cloakH / 2, 0);
+  const collar = new THREE.TorusGeometry(w * 0.72, 0.035 * k, 6, 16, Math.PI * 1.1);
+  collar.rotateX(Math.PI / 2);
+  collar.rotateY(Math.PI / 2 + Math.PI * 0.45);
+  const out = { skirt, hem, sash, cloak, collar };
+  robeCache.set(key, out);
+  return out;
+}
+
+/** The real head of each body (the skin above the head bone, standing pose): top, middle, half width. */
+const headCache = new Map<string, { top: number; x: number; z: number; r: number }>();
+function headFit(kind: AdultKind, body: THREE.Object3D, root: THREE.Object3D, boneY: number) {
+  const hit = headCache.get(kind);
+  if (hit) return hit;
+  let top = -Infinity, minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  const v = new THREE.Vector3();
+  const toRoot = new THREE.Matrix4();
+  body.traverse((o) => {
+    const m = o as THREE.SkinnedMesh;
+    if (!m.isSkinnedMesh || (m.material as THREE.Material).name !== "Skin") return;
+    toRoot.copy(root.matrixWorld).invert().multiply(m.matrixWorld);
+    const pos = m.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      m.getVertexPosition(i, v).applyMatrix4(toRoot);
+      if (v.y < boneY + 0.02) continue;
+      top = Math.max(top, v.y);
+      minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x);
+      minZ = Math.min(minZ, v.z); maxZ = Math.max(maxZ, v.z);
+    }
+  });
+  const fit = Number.isFinite(top)
+    ? { top, x: (minX + maxX) / 2, z: (minZ + maxZ) / 2, r: (maxX - minX) / 2 }
+    : { top: boneY + 0.18, x: 0, z: 0, r: 0.11 };
+  headCache.set(kind, fit);
+  return fit;
+}
+
+const headGeoCache = new Map<string, Record<"cap" | "drape" | "veil" | "band", THREE.BufferGeometry>>();
+function headGeos(kind: AdultKind, headR: number, k: number) {
+  const hit = headGeoCache.get(kind);
+  if (hit) return hit;
+  const female = kind.startsWith("female");
+  const hr = headR * 1.22 + 0.01 * k;
+  const cap = new THREE.SphereGeometry(hr, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5);
+  cap.scale(1, 0.95, 1.12);
+  const open = 1.9; // the face stays open (radians at the front)
+  const dH = 0.25 * k;
+  const drape = new THREE.CylinderGeometry(hr, hr * 1.45, dH, 16, 1, true, open / 2, Math.PI * 2 - open);
+  drape.scale(1, 1, 1.12);
+  drape.translate(0, -dH / 2, 0);
+  const vH = (female ? 0.62 : 0.5) * k;
+  const veil = new THREE.CylinderGeometry(hr, hr * 2.4, vH, 16, 1, true, open / 2, Math.PI * 2 - open);
+  veil.scale(1, 1, 1.12);
+  veil.translate(0, -vH / 2, 0);
+  const band = new THREE.TorusGeometry(hr * 1.01, 0.016 * k, 5, 18);
+  band.rotateX(Math.PI / 2);
+  band.scale(1, 1, 1.12);
+  const out = { cap, drape, veil, band };
+  headGeoCache.set(kind, out);
+  return out;
+}
+
 // ── who's who ──────────────────────────────────────────────────────────────
 
 /** Villagers who are children (they keep the kid models), and aliens (cartoon, from the Moon). */
@@ -286,6 +491,7 @@ const BEACH = /^(Surfer|Lifeguard|Diver)\b/;
 /** Which grown-up body a villager gets, or null for children. */
 export function adultKindFor(name: string): AdultKind | null {
   if (KIDS.has(name)) return null;
+  if (ROBES[name]) return WOMEN.has(name) ? "female_dress" : "male_longsleeve";
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   if (WOMEN.has(name)) {
