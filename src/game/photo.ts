@@ -19,6 +19,8 @@ const UNLOCK_MS = 10 * 60 * 1000; // after the maths question, saving stays open
 
 /** Short verses that read well under a photo (picked at random for each postcard). */
 const SHORT: Verse[] = LIBRARY.filter((v) => v.text.length <= 110);
+/** In Bethlehem the postcard carries a Christmas verse. */
+const CHRISTMAS: Verse[] = LIBRARY.filter((v) => ["Luke 2:10", "Luke 2:11", "Luke 2:14", "Matthew 2:2", "Matthew 1:21"].includes(v.ref) && v.text.length <= 130);
 
 export interface PhotoHooks {
   /** The postcard was taken; boot pauses the game while the album is open. */
@@ -116,7 +118,8 @@ export class PhotoMode {
     this.flashEl.classList.remove("go");
     void this.flashEl.offsetWidth;
     this.flashEl.classList.add("go");
-    const verse = SHORT[Math.floor(Math.random() * SHORT.length)] ?? LIBRARY[0];
+    const pool = place === "Bethlehem" && CHRISTMAS.length ? CHRISTMAS : SHORT;
+    const verse = pool[Math.floor(Math.random() * pool.length)] ?? LIBRARY[0];
     const url = postcard(frame, place, verse).toDataURL("image/jpeg", 0.9);
     this.album.unshift(url);
     if (this.album.length > ALBUM_MAX) this.album.length = ALBUM_MAX;

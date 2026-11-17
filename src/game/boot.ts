@@ -71,6 +71,8 @@ declare global {
     /** Perf probe — draw calls / triangles of the last rendered frame. */
     __perf?: () => { calls: number; triangles: number };
     __play?: (action: string) => void;
+    /** Filming hook (scripts/film-christmas.mjs): moves the camera for one rendered frame only. */
+    __filmCam?: (camera: THREE.PerspectiveCamera, scene: THREE.Scene, kid: THREE.Vector3) => void;
     /** Test hook — positions/state for the automated playtests. */
     __gameDebug?: () => {
       state: string;
@@ -2766,13 +2768,28 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (net && ++sendTick % (remotes.size > 5 ? NET_SEND_EVERY * 2 : NET_SEND_EVERY) === 0) sendState();
   }
 
+  const filmSave = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), fov: 60 };
   const loop = new GameLoop({
     update: (dt) => {
       step(dt);
       input.clearActions(); // presses not consumed this step must not fire later elsewhere
     },
     render: () => {
+      const film = window.__filmCam;
+      if (film) {
+        filmSave.pos.copy(camera.position);
+        filmSave.q.copy(camera.quaternion);
+        filmSave.fov = camera.fov;
+        film(camera, scene, players[0].pos);
+        camera.updateProjectionMatrix();
+      }
       renderer.render(scene, camera);
+      if (film) {
+        camera.position.copy(filmSave.pos);
+        camera.quaternion.copy(filmSave.q);
+        camera.fov = filmSave.fov;
+        camera.updateProjectionMatrix();
+      }
       if (selfie?.snap && sm.is("playing")) {
         // the frame just drawn (no buttons on it: the HUD is HTML on top of the canvas)
         // draw it once more without the floating name tags and signs (they're sprites)
