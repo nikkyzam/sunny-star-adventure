@@ -356,7 +356,7 @@ export interface RobeLook {
 const GOLD = 0xe8b830;
 const LINEN = 0xeee4cc;
 
-/** The people of the Bible worlds. (David is a boy and keeps a kid's model.) */
+/** The people of the Bible worlds. (David is a boy: his tunic goes on a kid's model, humans.ts.) */
 const ROBES: Record<string, RobeLook> = {
   // Noah's Ark
   "Noah": { robe: 0x8a6a4a, trim: LINEN, head: "cloth", headColor: 0xefe6d2 },
@@ -369,6 +369,7 @@ const ROBES: Record<string, RobeLook> = {
   "King of Nineveh": { robe: 0x7b2d8b, trim: GOLD, head: "crown", headColor: 0, cloak: 0xa8323a },
   "Nadia of Nineveh": { robe: 0x2f8f8a, trim: 0xf0d080, head: "veil", headColor: 0xf0d080 },
   // David and Goliath
+  "David": { robe: 0xe2cfa4, trim: 0xb5452f, head: "bare", headColor: 0 },
   "Goliath": { robe: 0x5a4a32, trim: 0xb08d57, head: "bare", headColor: 0 },
   "King Saul": { robe: 0x8b2d3a, trim: GOLD, head: "crown", headColor: 0, cloak: 0x4a2d7b },
   "Eliab": { robe: 0x8a7a5a, trim: 0xb04a3a, head: "cloth", headColor: 0xc94f3a },

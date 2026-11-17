@@ -23,7 +23,7 @@ const port = server.address().port;
 const SETS = [
   [16, ["Mary", "Joseph", "Wise Man Caspar", "Wise Man Melchior", "Shepherd Eli", "Innkeeper Ezra"]],
   [12, ["Noah", "Shem"]],
-  [14, ["King Saul", "Jesse", "Goliath"]],
+  [14, ["David", "King Saul", "Jesse", "Goliath"]],
   [13, ["Jonah", "Nadia of Nineveh"]],
 ];
 const only = process.argv[2] ? Number(process.argv[2]) : null;

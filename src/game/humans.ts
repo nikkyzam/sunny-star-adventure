@@ -37,6 +37,8 @@ export interface HumanLook {
   bottom: number;
   accent: number;
   style: number;      // 0 jacket & trousers, 1 dress, 2 T-shirt & shorts, 3 dungarees
+  /** Bible times (David): a knee-length shepherd's tunic with a sash, and sandals. */
+  tunic?: { robe: number; trim: number };
 }
 
 /** One clip per state the game asks for (names from the animation library). */
@@ -435,8 +437,10 @@ export class Human {
       this.owned.push(m);
       return m;
     };
-    const colors = { top: look.top, bottom: look.bottom, shoes: look.style === 1 ? look.accent : 0x3a3a44 };
-    for (const piece of outfitFor(bk, look.style)) {
+    const tunic = look.tunic;
+    const colors = tunic ? { top: tunic.robe, bottom: tunic.robe, shoes: 0x6b4a2b }
+      : { top: look.top, bottom: look.bottom, shoes: look.style === 1 ? look.accent : 0x3a3a44 };
+    for (const piece of outfitFor(bk, tunic ? 1 : look.style)) {
       const m = new THREE.SkinnedMesh(piece.geo, cloth(colors[piece.part], piece.part === "shoes" ? 0.5 : 0.85));
       m.castShadow = true;
       m.frustumCulled = false;
@@ -482,6 +486,27 @@ export class Human {
       belt.rotation.x = Math.PI / 2;
       belt.position.y = waistY - 0.02;
       hips.add(belt);
+    }
+
+    // the shepherd's tunic: from the waist to just past the knee, a band at the hem, a sash
+    if (tunic && pelvis) {
+      const hips = anchorAt(pelvis, this.root);
+      const y = (n: string) => { const b = bones.get(n); return b ? new THREE.Vector3().setFromMatrixPosition(b.matrixWorld).y : 0; };
+      const hipY = y("pelvis"), kneeY = y("calf_l") || hipY * 0.55;
+      const waistY = hipY + 0.12, hemY = kneeY - 0.06;
+      const robeM = cloth(tunic.robe), trimM = cloth(tunic.trim);
+      robeM.side = THREE.DoubleSide;
+      robeM.flatShading = true;
+      const pts = [[0.165, waistY], [0.2, hipY], [0.26, (hipY + kneeY) / 2], [0.34, hemY]].map(([r, h]) => new THREE.Vector2(r, h));
+      const add = (m: THREE.Mesh) => { m.castShadow = true; m.frustumCulled = false; m.scale.z = 1.0; hips.add(m); return m; };
+      add(new THREE.Mesh(new THREE.LatheGeometry(pts, 20), robeM));
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.342, 0.346, 0.045, 20, 1, true), trimM)).position.y = hemY + 0.02;
+      const sash = add(new THREE.Mesh(new THREE.TorusGeometry(0.172, 0.022, 6, 20), trimM));
+      sash.rotation.x = Math.PI / 2;
+      sash.position.y = waistY - 0.025;
+      const knot = add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.13, 0.025), trimM));
+      knot.position.set(0.1, waistY - 0.09, 0.168);
+      knot.rotation.z = 0.25;
     }
 
     // accessories: map the old cartoon head's coordinates onto this head

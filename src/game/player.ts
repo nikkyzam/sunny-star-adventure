@@ -190,6 +190,8 @@ export class Player {
   private human: Human | Adult | null = null;
   /** A grown-up (their own hair: no kid's cap). */
   private grownUp = false;
+  /** No kid's cap: grown-ups have their own hair, and David's curls go uncovered. */
+  private noCap = false;
   /** Where hats, glasses and the cap go: the cartoon body, or the human's head. */
   private headParent: THREE.Object3D = this.body;
   /** Far from the camera: animate less often. */
@@ -217,9 +219,11 @@ export class Player {
   constructor(palette: KidPalette = { jacket: 0xff8c42, cap: 0xff4757, pants: 0x4a69bd }) {
     const adult = palette.adult ? makeAdult({ kind: palette.adult, skin: palette.skin ?? 0xd9a273, top: palette.jacket, bottom: palette.pants, accent: palette.cap, robe: palette.robe }) : null;
     this.grownUp = adult !== null;
+    this.noCap = this.grownUp || !!palette.robe;
     this.human = adult ?? makeHuman({
       body: palette.body ?? 0, skinColor: palette.skin ?? 0xffd9b3, hair: palette.hairStyle ?? 0, hairColor: palette.hair ?? 0x5a3a22,
       top: palette.style === 3 ? palette.cap : palette.jacket, bottom: palette.pants, accent: palette.cap, style: palette.style ?? 0,
+      tunic: palette.robe ? { robe: palette.robe.robe, trim: palette.robe.trim } : undefined,
     });
     if (this.human) {
       this.body.add(this.human.root);
@@ -229,7 +233,7 @@ export class Player {
       this.cap.add(makeCap(palette.cap));
       this.cap.position.y = 0.07; // sits higher on the human head, clear of the eyes
       this.headParent.add(this.cap);
-      this.cap.visible = !this.grownUp; // grown-ups have their own hair
+      this.cap.visible = !this.noCap;
     } else {
       this.buildToy(palette);
     }
@@ -448,7 +452,7 @@ export class Player {
     this.hat = makeHat(i);
     if (this.hat) this.headParent.add(this.hat);
     // the cap comes off for a crown, wizard hat or bunny ears; a flower tucks onto it
-    this.cap.visible = !this.grownUp && (i === 0 || i === 4);
+    this.cap.visible = !this.noCap && (i === 0 || i === 4);
   }
 
   /** Grab a balloon: rise gently for a few seconds. */
