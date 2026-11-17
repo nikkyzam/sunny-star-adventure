@@ -29,7 +29,7 @@ try {
   page.on("pageerror", (e) => errors.push(String(e.stack || e)));
   await page.goto(`http://127.0.0.1:${port}/?level=9`, { waitUntil: "load" });
   await page.evaluate(() => localStorage.clear());
-  for (const [level, tag] of [[9, "lambs"], [11, "kittens"], [12, "doves"], [13, "cargo"], [14, "sheep"], [15, "coins"]]) {
+  for (const [level, tag] of [[9, "lambs"], [11, "kittens"], [12, "doves"], [13, "cargo"], [14, "sheep"], [15, "coins"], [16, "gifts"]]) {
     if (only && !only.includes(level)) continue;
     await page.goto(`http://127.0.0.1:${port}/?level=${level}`, { waitUntil: "load" });
     await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 90000 });

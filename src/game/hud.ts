@@ -6,7 +6,7 @@
 export type HudAction =
   | "play" | "play2" | "continue" | "resume" | "retry" | "next" | "title" | "again" | "jump" | "mute"
   | "online" | "host" | "join" | "back" | "reroll" | "easy" | "drive" | "car" | "honk"
-  | "photo" | "dress" | "island" | "city" | "ark" | "jonah" | "david" | "resort" | "talk" | "verse-ready" | "verse-check" | "verse-peek"
+  | "photo" | "christmas" | "dress" | "island" | "city" | "ark" | "jonah" | "david" | "resort" | "talk" | "verse-ready" | "verse-check" | "verse-peek"
   | "teach" | "gate-ok" | "class-start" | "family" | "own-add" | "book" | "book-close" | "class-link" | "travel-close";
 
 type OverlayName = "title" | "pause" | "gameover" | "clear" | "win" | "online" | "dress" | "verse" | "gate" | "teach" | "book" | "travel";

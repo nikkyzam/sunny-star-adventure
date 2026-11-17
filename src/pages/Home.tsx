@@ -80,6 +80,7 @@ export default function Home() {
             </div>
             <div className="btn-col">
               <button className="big-btn primary" data-action="play">▶ Play</button>
+              <button className="big-btn christmas" data-action="christmas">⭐ Christmas in Bethlehem</button>
               <button className="big-btn primary2" data-action="online">🌐 Play with friends</button>
               <button className="big-btn" data-action="play2">👥 2 Players (same keyboard)</button>
               <button id="btn-continue" className="big-btn" data-action="continue" style={{ display: 'none' }}>▶ Continue</button>

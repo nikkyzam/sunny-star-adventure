@@ -641,3 +641,11 @@ body.touch.playing .stick-base { display: flex; }
 .photo-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .photo-btns .big-btn { min-width: 0; flex: 1 1 200px; font-size: 18px; padding: 9px 14px; }
 .photo-btns .big-btn { white-space: nowrap; }
+
+/* the Christmas world: a starry-night button */
+.big-btn.christmas {
+  background: linear-gradient(180deg, #3a4a9a, #1d2656);
+  border-color: #ffe066;
+  color: #fff4b8;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+}

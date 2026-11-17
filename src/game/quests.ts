@@ -17,9 +17,9 @@
 
 import * as THREE from "three";
 
-export type FindModel = "lamb" | "sheep" | "kitten" | "dove" | "crate" | "coin";
-export type SearchLook = "bush" | "crate" | "mound" | "dust" | "tree";
-export type HomeLook = "pen" | "basket" | "dovecote" | "pallet" | "table";
+export type FindModel = "lamb" | "sheep" | "kitten" | "dove" | "crate" | "coin" | "gift";
+export type SearchLook = "bush" | "crate" | "mound" | "dust" | "tree" | "hay";
+export type HomeLook = "pen" | "basket" | "dovecote" | "pallet" | "table" | "rug";
 
 export type Puzzle =
   | { t: "search"; look: SearchLook; spots: [number, number][]; hidden: number; refY?: number }
@@ -99,13 +99,13 @@ export type QuestEvent =
   | { type: "reward"; coins: number; score: number }
   | { type: "complete"; title: string };
 
-const CALL: Record<FindModel, "baa" | "meow" | "coo" | "coin"> = { lamb: "baa", sheep: "baa", kitten: "meow", dove: "coo", crate: "coin", coin: "coin" };
-const HEARD: Record<FindModel, string> = { lamb: "'baa'", sheep: "'baa'", kitten: "'meow'", dove: "'coo'", crate: "glint", coin: "glint" };
+const CALL: Record<FindModel, "baa" | "meow" | "coo" | "coin"> = { lamb: "baa", sheep: "baa", kitten: "meow", dove: "coo", crate: "coin", coin: "coin", gift: "coin" };
+const HEARD: Record<FindModel, string> = { lamb: "'baa'", sheep: "'baa'", kitten: "'meow'", dove: "'coo'", crate: "glint", coin: "glint", gift: "glint" };
 const SEARCH_VERB: Record<SearchLook, [string, string]> = {
   bush: ["Search the bush", "🌿"], crate: ["Look in the crate", "📦"], mound: ["Dig in the sand", "🏖️"],
-  dust: ["Sweep here", "🧹"], tree: ["Look up in the tree", "🌳"],
+  dust: ["Sweep here", "🧹"], tree: ["Look up in the tree", "🌳"], hay: ["Look in the hay", "🌾"],
 };
-const carried = (m: FindModel) => m === "crate" || m === "coin";
+const carried = (m: FindModel) => m === "crate" || m === "coin" || m === "gift";
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export class Quests {
@@ -250,7 +250,7 @@ export class Quests {
     s.searched = true;
     s.shakeT = 0.6;
     const sound = s.look === "mound" || s.look === "dust" ? "dig" : "rustle";
-    const colour = s.look === "mound" ? 0xf2d49b : s.look === "dust" ? 0xd9d2c5 : s.look === "crate" ? 0xc79a5f : 0x5fbf4a;
+    const colour = s.look === "mound" ? 0xf2d49b : s.look === "dust" ? 0xd9d2c5 : s.look === "crate" ? 0xc79a5f : s.look === "hay" ? 0xe2bf5a : 0x5fbf4a;
     const ev: QuestEvent[] = [{ type: "sfx", id: sound }, { type: "burst", x: s.pos.x, y: s.pos.y + (s.look === "tree" ? 2.4 : 0.6), z: s.pos.z, color: colour }];
     if (s.look === "mound" || s.look === "dust") s.mesh && (s.mesh.scale.y = 0.35);
     const f = s.find;
@@ -264,7 +264,7 @@ export class Quests {
     const hid = this.spots.find((o) => o.find === f && o.hidden)!;
     const dist = Math.hypot(hid.pos.x - s.pos.x, hid.pos.z - s.pos.z);
     const heard = HEARD[d.model];
-    const what = s.look === "tree" ? "Just leaves up here" : s.look === "mound" ? "Only sand and a shell 🐚" : s.look === "dust" ? "Just dust" : s.look === "crate" ? "Empty" : "Not in this bush";
+    const what = s.look === "tree" ? "Just leaves up here" : s.look === "mound" ? "Only sand and a shell 🐚" : s.look === "dust" ? "Just dust" : s.look === "crate" ? "Empty" : s.look === "hay" ? "Only hay in here 🌾" : "Not in this bush";
     ev.push({ type: "sfx", id: CALL[d.model] === "coin" ? "ui" : CALL[d.model] }, {
       type: "toast",
       text: dist < 4.5
@@ -471,6 +471,7 @@ export class Quests {
     else if (model === "kitten") buildKitten(g, legs, def.name);
     else if (model === "dove") buildDove(g, wings);
     else if (model === "crate") buildCrate(g);
+    else if (model === "gift") buildGift(g, def.name);
     else buildCoin(g);
     if (model === "sheep") g.scale.setScalar(1.3);
     g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
@@ -502,6 +503,7 @@ export class Quests {
     const x = d.home.x + Math.cos(a) * 1.05, z = d.home.z + Math.sin(a) * 1.05;
     let y = this.ground(x, z, 3);
     if (d.home.look === "table") y += 0.78; // coins on the table top
+    if (d.home.look === "rug") y += 0.04;
     if (d.home.look === "pallet") y += 0.2 + i * 0.0;
     if (d.home.look === "dovecote") y += 1.75;
     if (carried(d.model)) f.mesh.position.set(d.home.x + (i - 1) * 0.42, y, d.home.z);
@@ -570,6 +572,20 @@ export class Quests {
       const net = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.05, 6, 16).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xd8c39a }));
       net.position.set(1.3, 0.05, 0.3);
       g.add(pallet, net);
+    } else if (d.home.look === "rug") {
+      // a royal rug laid out for the gifts, with gold tassels
+      const rug = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.04, 1.3), new THREE.MeshStandardMaterial({ color: 0x8e2c6e, roughness: 1 }));
+      rug.position.y = 0.02;
+      const border = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.045, 1.1), new THREE.MeshStandardMaterial({ color: 0x5b2a86, roughness: 1 }));
+      border.position.y = 0.025;
+      g.add(rug, border);
+      const gold = new THREE.MeshStandardMaterial({ color: 0xffc94a, metalness: 0.6, roughness: 0.35 });
+      for (const sx of [-1, 1]) for (const k of [-0.45, 0, 0.45]) {
+        const tassel = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.14, 6), gold);
+        tassel.rotation.z = sx * Math.PI / 2;
+        tassel.position.set(sx * 1.16, 0.03, k);
+        g.add(tassel);
+      }
     } else {
       const top = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.06, 16), wood);
       top.position.y = 0.75;
@@ -597,8 +613,8 @@ export class Quests {
     const tx = "x" in p ? p.x : p.spots.reduce((a, s) => a + s[0], 0) / p.spots.length;
     const tz = "z" in p ? p.z : p.spots.reduce((a, s) => a + s[1], 0) / p.spots.length;
     const model = this.def!.model;
-    const color = model === "dove" ? 0xffffff : model === "crate" ? 0x7a5a3a : model === "coin" ? 0xffd93d : 0x4a3a2a;
-    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: model === "coin" ? 0.8 : 0.55, depthWrite: false });
+    const color = model === "dove" ? 0xffffff : model === "crate" ? 0x7a5a3a : model === "coin" || model === "gift" ? 0xffd93d : 0x4a3a2a;
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: model === "coin" || model === "gift" ? 0.8 : 0.55, depthWrite: false });
     const geo = model === "dove" ? new THREE.PlaneGeometry(0.09, 0.22).rotateX(-Math.PI / 2) : new THREE.CircleGeometry(model === "crate" ? 0.12 : 0.07, 8).rotateX(-Math.PI / 2);
     const dx = tx - fx, dz = tz - fz, len = Math.hypot(dx, dz);
     const ux = dx / len, uz = dz / len;
@@ -659,7 +675,7 @@ export class Quests {
 // ── little models ─────────────────────────────────────────────────────────────
 
 /** A fluffy cartoon lamb about knee high to a kid: woolly puffs, a dark face and legs. */
-function buildLamb(g: THREE.Group, legs: THREE.Object3D[]): void {
+export function buildLamb(g: THREE.Group, legs: THREE.Object3D[]): void {
   const wool = new THREE.MeshStandardMaterial({ color: 0xfbf8f2, roughness: 1 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x3b3238, roughness: 0.8 });
   const pink = new THREE.MeshStandardMaterial({ color: 0xffb3c6, roughness: 0.8 });
@@ -820,6 +836,40 @@ function buildCoin(g: THREE.Group): void {
   g.add(coin, rim);
 }
 
+/** The Wise Men's gifts (Matthew 2:11): a golden casket, a jar of frankincense, a flask of myrrh. */
+function buildGift(g: THREE.Group, name: string): void {
+  const gold = new THREE.MeshStandardMaterial({ color: 0xffc94a, metalness: 0.8, roughness: 0.25, emissive: 0x6a4a00, emissiveIntensity: 0.6 });
+  const gem = (color: number) => new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.5, roughness: 0.2 });
+  if (/gold/.test(name)) {
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.36), gold);
+    box.position.y = 0.17;
+    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.5, 12, 1, false, 0, Math.PI).rotateZ(Math.PI / 2), gold);
+    lid.position.y = 0.32;
+    const ruby = new THREE.Mesh(new THREE.OctahedronGeometry(0.06), gem(0xff3b5c));
+    ruby.position.set(0, 0.2, 0.19);
+    g.add(box, lid, ruby);
+  } else if (/frankincense/.test(name)) {
+    const jar = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), new THREE.MeshStandardMaterial({ color: 0xf4efe6, roughness: 0.35, metalness: 0.2 }));
+    jar.scale.y = 1.15;
+    jar.position.y = 0.24;
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 0.12, 12), gold);
+    neck.position.y = 0.48;
+    const lid = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.16, 12), gold);
+    lid.position.y = 0.62;
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.025, 6, 20).rotateX(Math.PI / 2), gold);
+    band.position.y = 0.24;
+    g.add(jar, neck, lid, band);
+  } else {
+    const flask = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.17, 0.42, 12), new THREE.MeshStandardMaterial({ color: 0x8a1f3d, roughness: 0.3, metalness: 0.3 }));
+    flask.position.y = 0.21;
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.16, 10), gold);
+    neck.position.y = 0.5;
+    const stopper = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), gem(0x3fd0ff));
+    stopper.position.y = 0.62;
+    g.add(flask, neck, stopper);
+  }
+}
+
 /** The thing a search spot looks like. */
 function buildSpot(look: SearchLook): THREE.Object3D {
   const g = new THREE.Group();
@@ -842,6 +892,21 @@ function buildSpot(look: SearchLook): THREE.Object3D {
     const lid = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.08, 0.94), new THREE.MeshStandardMaterial({ color: 0x7a5530, roughness: 0.9 }));
     lid.position.y = 0.82;
     g.add(box, lid);
+  } else if (look === "hay") {
+    // a round hay bale with a few loose wisps on top
+    const straw = new THREE.MeshStandardMaterial({ color: 0xe2bf5a, roughness: 1, flatShading: true });
+    const bale = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.9, 14).rotateZ(Math.PI / 2), straw);
+    bale.position.y = 0.62;
+    bale.castShadow = true;
+    const band = new THREE.MeshStandardMaterial({ color: 0xa8873a, roughness: 1 });
+    for (const bx of [-0.25, 0.25]) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.63, 0.03, 4, 18).rotateY(Math.PI / 2), band);
+      ring.position.set(bx, 0.62, 0);
+      g.add(ring);
+    }
+    const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.25, 7), straw);
+    tuft.position.y = 1.3;
+    g.add(bale, tuft);
   } else if (look === "mound") {
     const sand = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xe8c98a, roughness: 1 }));
     sand.scale.y = 0.45;

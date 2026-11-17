@@ -140,7 +140,7 @@ const P2_JUMP = "Enter";
 const SONG_FOR: Record<string, SongId> = {
   "Sunny Meadow": "meadow", "Candy Canyon": "candy", "Rainbow Peak": "jungle", "Castle in the Clouds": "meadow",
   "Toy City": "city", "Frosty Mountain": "snow", "Bubbly Beach": "beach", "Jungle Vines": "jungle",
-  "Starlight Peak": "night", "Adventure Island": "island", "Moon Base": "space", "Sunshine City": "city", "Noah's Ark": "meadow", "Jonah and the Big Fish": "beach", "David and Goliath": "meadow", "Paradise Resort": "beach",
+  "Starlight Peak": "night", "Adventure Island": "island", "Moon Base": "space", "Sunshine City": "city", "Noah's Ark": "meadow", "Jonah and the Big Fish": "beach", "David and Goliath": "meadow", "Paradise Resort": "beach", "Bethlehem": "night",
 };
 const NET_SEND_EVERY = 4; // fixed steps between state packets (60 Hz / 4 = 15 Hz)
 const REMOTE_TIMEOUT = 6; // seconds without a packet before a friend's kid is removed
@@ -1120,7 +1120,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   // ── Travel: every place is linked, and a verse opens the way ────────────
   const PLACE_ICON: Record<string, string> = {
     "Adventure Island": "🏝️", "Moon Base": "🌙", "Sunshine City": "🏙️", "Noah's Ark": "🌈",
-    "Jonah and the Big Fish": "🐋", "David and Goliath": "🪨", "Paradise Resort": "🏖️",
+    "Jonah and the Big Fish": "🐋", "David and Goliath": "🪨", "Paradise Resort": "🏖️", "Bethlehem": "⭐",
   };
   /** Where the travel gate can take you: the sky islands (as far as you've got), then every place with a gate. */
   function travelTargets(): { level: number; label: string; open: boolean }[] {
@@ -1128,7 +1128,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     const sky = Math.min(unlockedLevel(), first - 1);
     return [
       { level: sky, label: `⛅ Sky Islands · ${LEVELS[sky].name}`, open: true },
-      ...LEVELS.flatMap((l, i) => (l.station ? [{ level: i, label: `${PLACE_ICON[l.name] ?? "🧭"} ${l.name}`, open: places.has(l.name) }] : [])),
+      ...LEVELS.flatMap((l, i) => (l.station ? [{ level: i, label: `${PLACE_ICON[l.name] ?? "🧭"} ${l.name}`, open: places.has(l.name) || l.bethlehem !== undefined }] : [])),
     ];
   }
 
@@ -1354,6 +1354,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
         if (!sm.is("title")) break;
         startRun(LEVELS.findIndex((l) => l.ark), false);
         hud.showToast("🌈 Find Noah by the ark. The animals need your help!");
+        break;
+      case "christmas":
+        if (!sm.is("title")) break;
+        startRun(LEVELS.findIndex((l) => l.bethlehem), false);
+        hud.showToast("⭐ Follow the star to the stable! The Wise Men need your help");
         break;
       case "resort":
         if (!sm.is("title")) break;
@@ -2773,7 +2778,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
         // draw it once more without the floating name tags and signs (they're sprites)
         selfie = null;
         const tags: THREE.Object3D[] = [];
-        scene.traverse((o) => { if ((o as THREE.Sprite).isSprite && o.visible) tags.push(o); });
+        scene.traverse((o) => { if ((o as THREE.Sprite).isSprite && o.visible && !o.userData.keepInPhoto) tags.push(o); });
         for (const o of tags) o.visible = false;
         renderer.render(scene, camera);
         photo.take(renderer.domElement, world.def.name);

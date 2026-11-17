@@ -277,10 +277,10 @@ const WOMEN = new Set([
   "Captain Coral", "Mayor Maple", "Grandma Gigi", "Farmer Fern", "Surfer Sky", "Camper Cleo", "Artist Ari",
   "Agent Goldie", "Pilot Piper", "Astronaut Ada", "Driver Dee", "Fisher Flo", "Cargo Cass", "Diver Dot",
   "Mayor Marigold", "Agent Aria", "Pastor Grace", "Postie Paz", "Pilot Penny", "Ranger Rosa", "Manager Mia",
-  "Chef Coco", "Pilot Skye", "Nadia of Nineveh", "Granny Whiskers", "Grandma Ruth",
+  "Chef Coco", "Pilot Skye", "Nadia of Nineveh", "Granny Whiskers", "Grandma Ruth", "Mary",
 ]);
 /** Dressed up: suits and dresses. */
-const SMART = /^(Mayor|Pastor|Agent|Manager|King)\b/;
+const SMART = /^(Mayor|Pastor|Agent|Manager|King|Wise)\b/;
 const BEACH = /^(Surfer|Lifeguard|Diver)\b/;
 
 /** Which grown-up body a villager gets, or null for children. */

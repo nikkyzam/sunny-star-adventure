@@ -156,4 +156,29 @@ export const QUESTS: QuestDef[] = [
       },
     ],
   },
+  {
+    // Matthew 2:1–11
+    id: "gifts", level: "Bethlehem", giver: "Wise Man Caspar", title: "The Wise Men's Gifts", emoji: "🎁",
+    model: "gift", noun: "gift",
+    home: { x: -16, z: -21.4, look: "rug", sign: "🎁 Lost gifts? Ask me!" },
+    intro: "We followed the star all the way from the East to find the newborn King! But last night our camels got frightened, and our three gifts for Him were lost. Will you help us find them?",
+    finale: "All three gifts are here, just in time! \"They presented unto him gifts; gold, and frankincense, and myrrh.\" (Matthew 2:11) But the greatest gift of all is Jesus Himself: God's gift to the whole world. Thank you, friend, and merry Christmas!",
+    finds: [
+      {
+        name: "the gold", pronoun: "it", trail: [-15, -18],
+        clue: "The gold was in a little golden box. My camel was munching the hay bales round the stable when it bumped the box off its saddle! Search the hay, and look for a golden glint.",
+        puzzle: { t: "search", look: "hay", spots: [[-9.5, -28], [-8, -31.5], [-22.5, -30.5], [-23, -24.5], [-10.5, -21.5]], hidden: 2 },
+      },
+      {
+        name: "the frankincense", pronoun: "it", trail: [4, -17],
+        clue: "The frankincense smells sweet, like perfume. Last night I took it up to the inn's flat roof to look at the star, and I left it there! Houses in Bethlehem have stairs up the outside. Can you find a way up?",
+        puzzle: { t: "reach", x: 2.5, z: -23.5, refY: 20 },
+      },
+      {
+        name: "the myrrh", pronoun: "it", trail: [3, 6],
+        clue: "The myrrh is in a little red flask. Melchior stopped for a drink at the old well inside the town gate, and… plop! It fell right in. King David once longed for a drink from the well of Bethlehem! Turn the crank to bring the bucket up.",
+        puzzle: { t: "crank", x: 9, z: 6 },
+      },
+    ],
+  },
 ];

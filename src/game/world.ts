@@ -31,6 +31,7 @@ import { envReady, hasModel, brickTexture, Placer } from "./env";
 import type { JobId } from "./jobs";
 import type { TrafficLoop } from "./traffic";
 import type { HerdDef } from "./critters";
+import { buildBethlehem, type BethlehemDef } from "./bethlehem";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 /** Something decorative to draw: by the code-built shapes, or by the models in env.ts once loaded. */
@@ -194,6 +195,8 @@ export interface LevelDef {
   brooks?: RoadDef[];
   /** Noah's ark: x, z of its middle (the hull runs along x; its deck is a platform to walk on). */
   ark?: [number, number];
+  /** Christmas in Bethlehem: the town, the inn, the stable under the star, the shepherds' field. */
+  bethlehem?: BethlehemDef;
 }
 
 export const LEVELS: LevelDef[] = [
@@ -1748,6 +1751,124 @@ const ELAH: LevelDef = {
 LEVELS.push(ELAH);
 LEVELS.push(RESORT);
 
+/** Christmas in Bethlehem (Luke 2, Matthew 2): a starry night, the town, the stable, the shepherds. */
+const BETHLEHEM: LevelDef = {
+  name: "Bethlehem",
+  sky: 0x1d2656, fog: 0x2c3770,
+  grass: 0xbfa772, dirt: 0x8a6d47, foliage: 0x5f8a3a,
+  flowerColors: [0xffffff, 0xffe066, 0xff9ecf],
+  spawn: [0, 0.3, 17],
+  night: true,
+  station: [-7, 17],
+  bethlehem: {
+    stable: [-16, -27],
+    inn: [0, -22, 12, 6, 6.2],
+    houses: [
+      [-11, -2, 6, 5, 4.2, 0xe9d3a8, 1], [-11, -12, 5, 5, 3.8, 0xdcc08e, 0],
+      [11, -2, 6, 5, 4.4, 0xf0dcb4, -1], [11, -12, 5, 6, 5.0, 0xe2c79a, 0],
+      [-20, 2, 5, 5, 3.6, 0xd8bb8a, 0], [20, 2, 5, 5, 4.0, 0xe9d3a8, 0],
+      [14, -28, 6, 5, 4.2, 0xdcc08e, 1],
+    ],
+    stalls: [[-4.5, -6, 0xd94f4f], [4.5, -6, 0x4f7fd9]],
+    gate: [0, 10],
+    flock: [23, 17, 8],
+    fire: [18, 21],
+    angel: [27, 5.5, 27],
+  },
+  herds: [{ kinds: ["cow", "donkey"], x: -16, z: -33, r: 2 }], // the ox and the donkey
+  discs: [
+    { x: 0, z: -4, r: 90, y: 0, color: 0xc4a46a },
+    { x: 0, z: -6, r: 34, y: 0.3, flowers: 6, rocks: 5, trees: 6 },
+    { x: 22, z: 20, r: 12, y: 0.34, flowers: 12, color: 0x7fa35a },              // the shepherds' field
+    { x: 27, z: 27, r: 5, y: 1.0, color: 0x7fa35a },                             // the hill under the angel
+  ],
+  tents: [[-27, 0.3, -13, 0x7b3fa0], [-30, 0.3, -17.5, 0xd4a017], [-25.5, 0.3, -18.5, 0x2f6bb0]], // the Wise Men's camp
+  bridges: [],
+  springs: [],
+  stars: [
+    [0, 1.5, 4], [-6, 1.5, -2], [6, 1.5, -2], [11, 5.9, -2], [0, 7.6, -22], [-16, 5.4, -26],
+    [22, 1.6, 14], [27, 2.3, 27], [-28, 1.5, -8], [28, 1.5, -10], [14, 5.6, -28], [0, 1.5, -30],
+    [-6, 1.5, -14], [8, 1.5, -16],
+  ],
+  coins: [...line(8, 0, 14, 0, -15, 1.2), ...ring(6, 3, 18, 21, 1.4)],
+  chests: [[-24, 0.3, 6], [25, 0.3, -18]],
+  hearts: [[6, 1.5, 8]],
+  magnets: [],
+  buddies: [],
+  slimes: [],
+  checkpoints: [[0, 0.3, 4], [0, 0.3, -16]],
+  portal: [25, 0.3, -27],
+  food: [["apple", -4.5, 1.6, -5.4], ["apple", 4.5, 1.6, -5.4], ["cupcake", 3, 1.3, -17.5]],
+  scrolls: [
+    [-14, 1.4, -18, "Luke 2:11"],          // by the stable
+    [20, 1.4, 16, "Luke 2:14"],            // the shepherds' field
+    [-28, 1.4, -15, "Matthew 2:2"],        // the Wise Men's camp
+    [-11, 5.6, -2, "Isaiah 9:6"],          // up on a roof
+  ],
+  npcs: [
+    {
+      name: "Mary", x: -17.6, y: 0.3, z: -26.4, outfit: 2, hat: 0, skin: 2,
+      lines: [
+        "This is my baby, Jesus. An angel told me He would be the Son of God.",
+        "There was no room for us in the inn, so I laid Him in the manger.",
+        "I keep all these wonderful things in my heart.",
+      ],
+    },
+    {
+      name: "Joseph", x: -14.4, y: 0.3, z: -26.6, outfit: 5, hat: 4, skin: 2,
+      lines: [
+        "We walked all the way from Nazareth to Bethlehem, because the king wanted everyone counted.",
+        "The angel said, call His name JESUS: for He shall save His people from their sins.",
+      ],
+    },
+    {
+      name: "Wise Man Caspar", x: -12.8, y: 0.3, z: -20.6, outfit: 4, hat: 3, skin: 3, quest: "gifts",
+      lines: [
+        "We saw His star in the east, and we have come to worship Him!",
+        "The star went before us, and it stopped right over this place.",
+      ],
+    },
+    {
+      name: "Wise Man Melchior", x: -19.6, y: 0.3, z: -20.8, outfit: 1, hat: 3, skin: 1,
+      lines: [
+        "We travelled for many, many nights, following the star across the desert.",
+        "When we saw the star stop, we were filled with great joy!",
+      ],
+    },
+    {
+      name: "Wise Man Balthazar", x: -22, y: 0.3, z: -16.5, outfit: 3, hat: 3, skin: 2,
+      lines: [
+        "Our camels are resting by the tents. They are tired after such a long journey!",
+        "Jesus is not only King of the Jews. He came for everyone in the whole world.",
+      ],
+    },
+    {
+      name: "Innkeeper Ezra", x: 2.6, y: 0.3, z: -17.6, outfit: 0, hat: 1, skin: 1,
+      lines: [
+        "So many people came to Bethlehem to be counted! Every room in my inn is full.",
+        "I'm sorry I had no room for Mary and Joseph. But they could rest in my stable.",
+        "Climb the stairs up to my roof if you like. You can see the whole town from up there!",
+      ],
+    },
+    {
+      name: "Shepherd Eli", x: 19.6, y: 0.34, z: 22.6, outfit: 3, hat: 4, skin: 2,
+      lines: [
+        "We were watching our flocks by night, and suddenly an angel of the Lord was standing right there!",
+        "The angel said, \"Fear not: for, behold, I bring you good tidings of great joy, which shall be to all people.\"",
+        "Then lots and lots of angels sang, \"Glory to God in the highest, and on earth peace!\"",
+      ],
+    },
+    {
+      name: "Shepherd Asa", x: 16.4, y: 0.34, z: 19.4, outfit: 1, hat: 4, skin: 3,
+      lines: [
+        "The angel said we'd find the baby wrapped in swaddling clothes, lying in a manger. And we did!",
+        "We told everyone we met about Him. Go and see Him in the stable by the inn!",
+      ],
+    },
+  ],
+};
+LEVELS.push(BETHLEHEM);
+
 const RAINBOW_COLORS = [0xff5f6d, 0xffa94d, 0xffe066, 0x7ed957, 0x5cb8ff, 0xb197fc];
 
 interface Solid {
@@ -2245,6 +2366,7 @@ export class World {
     this.ferris = null;
     if (def.ferris) this.buildFerris(...def.ferris);
     if (def.ark) this.buildArk(def.ark[0], def.ark[1]);
+    if (def.bethlehem) buildBethlehem({ group: this.group, platforms: this.platforms, solids: this.solids, anim: this.anim }, def.bethlehem, 0.3);
     if (def.bigFish) this.buildBigFish(def.bigFish[0], def.bigFish[1], def.sea ?? 0);
     for (const [tx, ty, tz, color] of def.tents ?? []) {
       const tent = new THREE.Mesh(new THREE.ConeGeometry(1.6, 2.4, 4).rotateY(Math.PI / 4), new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.9 }));

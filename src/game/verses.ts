@@ -141,6 +141,12 @@ export const LIBRARY: LibraryVerse[] = [
   v(7, "Philippians 4:19", "But my God shall supply all your need according to his riches in glory by Christ Jesus."),
   v(7, "Psalm 46:10", "Be still, and know that I am God: I will be exalted among the heathen, I will be exalted in the earth."),
   v(7, "Numbers 6:24", "The LORD bless thee, and keep thee:"),
+  // ── Christmas (added later: new verses only ever go at the end) ──
+  v(6, "Luke 2:10", "And the angel said unto them, Fear not: for, behold, I bring you good tidings of great joy, which shall be to all people."),
+  v(2, "Luke 2:14", "Glory to God in the highest, and on earth peace, good will toward men."),
+  v(6, "Isaiah 9:6", "For unto us a child is born, unto us a son is given: and the government shall be upon his shoulder: and his name shall be called Wonderful, Counsellor, The mighty God, The everlasting Father, The Prince of Peace."),
+  v(6, "Matthew 2:2", "Where is he that is born King of the Jews? for we have seen his star in the east, and are come to worship him."),
+  v(6, "Matthew 1:21", "And she shall bring forth a son, and thou shalt call his name JESUS: for he shall save his people from their sins."),
 ];
 
 /** The game's own verses: verse i goes with level i (wrapping around). */
