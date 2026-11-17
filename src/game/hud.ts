@@ -191,13 +191,13 @@ export class Hud {
   }
 
   /** Ride buttons: "in" = a kid is next to the car / boat, "out" = riding, null = hidden. */
-  setCarUi(mode: "in" | "out" | null, icon = "🚗"): void {
-    const key = mode ? mode + icon : null;
+  setCarUi(mode: "in" | "out" | null, icon = "🚗", label?: string): void {
+    const key = mode ? mode + icon + (label ?? "") : null;
     if (key === this.carMode) return;
     this.carMode = key;
     this.carBtn.style.display = mode ? "" : "none";
-    this.honkBtn.style.display = mode === "out" ? "" : "none";
-    if (mode) this.carBtn.textContent = mode === "in" ? `${icon} Hop in` : "🚪 Hop out";
+    this.honkBtn.style.display = mode === "out" && !label ? "" : "none";
+    if (mode) this.carBtn.textContent = label ? `${icon} ${label}` : mode === "in" ? `${icon} Hop in` : "🚪 Hop out";
   }
 
   /** Talk button: shown while a villager is within reach. */

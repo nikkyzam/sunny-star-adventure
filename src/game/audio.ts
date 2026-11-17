@@ -12,7 +12,7 @@
 export type SfxId =
   | "jump" | "doublejump" | "land" | "boing" | "stomp" | "star" | "hurt"
   | "portal" | "checkpoint" | "ui" | "win" | "lose" | "unlock" | "fall"
-  | "coin" | "chest" | "buddy" | "powerup" | "honk" | "splash" | "talk" | "pet" | "munch";
+  | "coin" | "chest" | "buddy" | "powerup" | "honk" | "splash" | "talk" | "pet" | "munch" | "baa" | "rustle";
 
 export type TrackId = "meadow" | "island" | "city" | "snow";
 
@@ -417,6 +417,14 @@ export class AudioSystem {
       case "munch":
         for (let i = 0; i < 3; i++) this.blip("square", 190 - i * 20, 120, t + i * 0.09, 0.06, 0.14);
         this.blip("triangle", 520, 880, t + 0.3, 0.12, 0.16);
+        break;
+      case "baa":
+        // a wobbly little lamb's "baa-a-a"
+        for (let i = 0; i < 6; i++) this.blip("sawtooth", i % 2 ? 470 : 520, i % 2 ? 500 : 470, t + i * 0.06, 0.07, i === 0 ? 0.09 : 0.07);
+        this.blip("triangle", 980, 940, t, 0.36, 0.05);
+        break;
+      case "rustle":
+        for (let i = 0; i < 5; i++) this.blip("square", 1800 + Math.random() * 1400, 900, t + i * 0.045, 0.03, 0.05);
         break;
       case "pet":
         this.blip("triangle", 720, 1150, t, 0.09, 0.16);

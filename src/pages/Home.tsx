@@ -90,7 +90,7 @@ export default function Home() {
             <div className="controls-help">
               <span>🕹️ P1: WASD + Space (jump ×2, hold = glide)</span>
               <span>👥 P2: Arrows + Enter</span>
-              <span>🖱️ Drag — camera · E — car / boat (Space hop, H honk) · F — talk</span>
+              <span>🖱️ Drag — camera · E — ride / use things (Space hop, H honk) · F — talk</span>
               <span>T — teleport to friend</span>
               <span>📱 Tablet: left thumb moves, tap JUMP, drag right side to look</span>
               <span>1–6 — stickers · 7 — dance 💃 · Esc — pause · M — mute</span>

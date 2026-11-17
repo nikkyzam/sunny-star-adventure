@@ -38,7 +38,9 @@ import { verseFor, grade, LIBRARY, type Verse } from "./verses";
 import { loadPlan, savePlan, planVerses, safePicks, cleanOwn, loadMemorized, saveMemorized, makeGate, ownHash, encodePlan, planFromLink, MAX_PICKS, MAX_OWN, CLASS_MAX_KIDS, VERSE_PAY } from "./lesson";
 import { showGate, gateAnswer, setGateStatus, drawTeach, ownInput, clearOwnInput, setTeachStatus, setTeachButton, showClassLink, drawBook, drawTravel, type BoardRow } from "./lessonui";
 import { loadHumanKit, gaitInfo, gaitTrace } from "./humans";
-import { Herds, loadCarKit } from "./critters";
+import { Herds, loadCarKit, RIDE_EMOJI } from "./critters";
+import { LostLambs, type LambName, type QuestEvent } from "./lambs";
+import { Spots } from "./interact";
 import { loadPeopleKit } from "./people";
 import { loadEnvKit } from "./env";
 import { Props } from "./props";
@@ -276,7 +278,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const blobGeo = new THREE.CircleGeometry(0.5, 20);
   const blobMat = new THREE.MeshBasicMaterial({ color: 0x1a2a1a, transparent: true, opacity: 0.28, depthWrite: false });
 
-  scene.add(jobs.group, traffic.group, scrolls.group, herds.group);
+  const lambs = new LostLambs((x, z, y) => world.groundAt(x, z, y)?.y ?? 0, (found) => storage.set("lambs", found));
+  const spots = new Spots();
+  scene.add(jobs.group, traffic.group, scrolls.group, herds.group, lambs.group);
   scene.add(...spareCars.map((c) => c.group));
   scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, boat.group, heli.group, jet.group, rocket, rings.group, foods.group, fleet.group, props.group, npcs.group, pet.group, particles.points);
 
@@ -427,6 +431,174 @@ export function startGame(canvas: HTMLCanvasElement): void {
     return best;
   }
 
+  // ── Animal and Ferris-wheel rides ────────────────────────────────────────
+  /** Kids on an animal's back or in a Ferris-wheel gondola (the Car rides keep their own seats). */
+  const mounts = new Map<Player, "animal" | { cab: number; turned: number; down: boolean }>();
+
+  function endMounts(): void {
+    for (const p of mounts.keys()) p.riding = false;
+    mounts.clear();
+    world.ferrisSpin = 1;
+  }
+
+  /** What a walking kid could climb on right now: an animal or the Ferris wheel. */
+  function mountInReach(): { kid: Player; what: "animal" | "ferris"; icon: string } | null {
+    const gate = world.ferrisGate;
+    for (const p of players) {
+      if (p.riding) continue;
+      const kind = herds.count ? herds.mountable(p.pos, 2.3) : null;
+      if (kind) return { kid: p, what: "animal", icon: RIDE_EMOJI[kind] ?? "🐴" };
+      if (gate && Math.hypot(p.pos.x - gate.x, p.pos.z - gate.z) < 3 && Math.abs(p.pos.y - gate.y) < 2) return { kid: p, what: "ferris", icon: "🎡" };
+    }
+    return null;
+  }
+
+  function mountUp(m: { kid: Player; what: "animal" | "ferris" }): void {
+    const p = m.kid;
+    p.invuln = 0;
+    p.group.visible = true;
+    if (m.what === "animal") {
+      const kind = herds.mount(p, 2.3);
+      if (!kind) return;
+      p.riding = true;
+      mounts.set(p, "animal");
+      audio.sfx("powerup");
+      const name = kind === "donkey" ? "donkey" : kind === "alpaca" ? "alpaca" : "horse";
+      hud.showToast(onTouch() ? `${RIDE_EMOJI[kind]} Giddy-up! Stick rides, push far to gallop · JUMP leaps` : `${RIDE_EMOJI[kind]} Giddy-up! Move keys ride the ${name} · Space leaps · E hops off`);
+      return;
+    }
+    // the Ferris wheel: into the gondola nearest the ground (a friend can share it)
+    const shared = [...mounts.values()].find((v) => typeof v === "object");
+    const cab = shared && typeof shared === "object" ? shared.cab : world.ferrisLowest();
+    p.riding = true;
+    mounts.set(p, { cab, turned: 0, down: false });
+    audio.sfx("ui");
+    hud.showToast("🎡 Up you go! One whole turn · E to come down early");
+  }
+
+  /** Off the animal, or ask the Ferris wheel to bring you down. Returns true if this kid was mounted. */
+  function mountOff(p: Player): boolean {
+    const m = mounts.get(p);
+    if (!m) return false;
+    if (m === "animal") {
+      herds.dismount(p);
+      p.riding = false;
+      mounts.delete(p);
+      audio.sfx("ui");
+    } else if (!m.down) {
+      m.down = true;
+      hud.showToast("🎡 Coming down…");
+    }
+    return true;
+  }
+
+  /** Something a walking kid can do right here with E: a quest thing, an animal to pat, a tree, rock or flower. */
+  function useInReach(): { kid: Player; icon: string; label: string; go: () => void } | null {
+    for (const p of players) {
+      if (p.riding) continue;
+      const q = lambs.actionNear(p.pos);
+      if (q) return { kid: p, icon: q.icon, label: q.label, go: () => questEvents(q.act()) };
+    }
+    for (const p of players) {
+      if (p.riding) continue;
+      const kind = herds.count ? herds.nearestKind(p.pos, 1.2) : null;
+      if (kind) {
+        const name = kind.replace("_white", "").replace("shibainu", "puppy").replace("husky", "puppy");
+        return { kid: p, icon: "🤚", label: `Pat the ${name}`, go: () => {
+          herds.pet(p.pos, 1.2);
+          audio.sfx("pet");
+          particles.burst(p.pos.x, p.pos.y + 1.4, p.pos.z, 0xff6b9d, 8, 2, 0.6, 3);
+          hud.showToast(`The ${name} loves that! ❤️`);
+        } };
+      }
+      const s = spots.near(p.pos);
+      if (s) return { kid: p, icon: s.icon, label: s.label, go: () => {
+        const r = s.act();
+        if (s.t === "tree") {
+          audio.sfx("rustle");
+          particles.burst(s.x, s.y + 2.6, s.z, 0x5fbf4a, 16, 3, 1, 4);
+        } else if (s.t === "flower") {
+          audio.sfx("pet");
+          particles.burst(s.x, s.y + 0.6, s.z, 0xff9ecf, 8, 1.5, 0.7, 2);
+        } else audio.sfx("ui");
+        if (r.coins) {
+          earn(r.coins);
+          hud.setCoins(bank);
+          audio.sfx("coin");
+        }
+        hud.showToast(r.text);
+      } };
+    }
+    return null;
+  }
+
+  let questLabel = "";
+
+  /** What the lost-lamb quest wants the game to show and play. */
+  function questEvents(ev: QuestEvent[]): void {
+    for (const e of ev) {
+      if (e.type === "sfx") audio.sfx(e.id);
+      else if (e.type === "toast") hud.showToast(e.text);
+      else if (e.type === "say") hud.showDialog("Shepherd Sam", e.text);
+      else if (e.type === "burst") particles.burst(e.x, e.y, e.z, e.color, 18, 3, 0.8, 4);
+      else if (e.type === "found") {
+        score += 50;
+        hud.setScore(score);
+      } else if (e.type === "home") {
+        earn(10);
+        score += 100;
+        hud.setCoins(bank);
+        hud.setScore(score);
+        audio.sfx("win");
+        cheerNear(players[0].pos, 12);
+        if (e.left > 0) {
+          hud.showDialog("Shepherd Sam", `${e.name} is home safe! Thank you! 🐑 +10 coins. Only ${e.left} more to find. Talk to me for the next clue!`);
+        } else {
+          earn(30);
+          score += 300;
+          hud.setCoins(bank);
+          hud.setScore(score);
+          if (pet.active) pet.cheer();
+          hud.showDialog("Shepherd Sam", "All three lambs are home! \"Rejoice with me; for I have found my sheep which was lost.\" (Luke 15:6) Jesus is like a good shepherd who looks for every lost one. Thank you! 🐑🐑🐑 +40 coins");
+          hud.showToast("🏆 Quest complete: The Lost Lambs!");
+        }
+      }
+    }
+  }
+
+  /** Riders on animals steer; gondola riders go round with the wheel and step off at the bottom. */
+  function updateMounts(dt: number, axes: (i: number) => { wishX: number; wishZ: number }, jumps: boolean[]): void {
+    let hurry = false;
+    for (const [p, m] of [...mounts]) {
+      const i = Math.max(0, players.indexOf(p));
+      if (m === "animal") {
+        if (!herds.ridden(p)) { p.riding = false; mounts.delete(p); continue; }
+        const a = axes(i);
+        const r = herds.steer(p, a.wishX, a.wishZ, jumps[i] ?? false, dt, {
+          collide: (pos, rad) => world.resolveSolids(pos, rad),
+          blocked: (x, z) => world.def.sea !== undefined && (world.groundAt(x, z, 40)?.y ?? -9) < world.def.sea - 0.7,
+        });
+        if (r.leapt) audio.sfx("jump");
+        continue;
+      }
+      m.turned += dt * 0.12 * world.ferrisSpin;
+      const height = world.ferrisSeat(m.cab, p.pos);
+      p.vel.set(0, 0, 0);
+      p.facing = world.ferrisFacing;
+      p.group.rotation.y = p.facing;
+      if (m.down) hurry = true;
+      if ((m.turned > Math.PI * 2 - 0.15 || (m.down && m.turned > 0.4)) && height < 0.25) {
+        const gate = world.ferrisGate!;
+        p.pos.set(gate.x, gate.y + 0.1, gate.z);
+        p.riding = false;
+        mounts.delete(p);
+        audio.sfx("checkpoint");
+        if (!m.down) hud.showToast("🎡 What a view! You can see the whole city from up there!");
+      }
+    }
+    world.ferrisSpin = hurry ? 7 : 1;
+  }
+
   /** Where a pet should stand near (x, z): on the ground, or paddling at the water's surface. */
   function petGroundY(x: number, z: number, kidY: number): number {
     const g = world.groundAt(x, z, kidY + 0.4)?.y ?? kidY;
@@ -562,6 +734,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
     traffic.build(world.def.traffic ?? []);
     herds.build(world.def.herds ?? []);
+    spots.build(world.decorSpots());
+    lambs.build(world.def.name, storage.get<LambName[]>("lambs", []));
+    questLabel = "";
     scrolls.build((world.def.scrolls ?? []).flatMap(([x, y, z, ref]) => {
       const k = LIBRARY.findIndex((v) => v.ref === ref);
       return k >= 0 ? [[x, y, z, k] as [number, number, number, number]] : [];
@@ -600,6 +775,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
     // rides: nobody stays seated across a level load
     for (const v of rides) v.clearRiders();
+    endMounts();
     audio.engineStop();
     car.group.visible = world.def.carSpawn !== undefined;
     car.shoreY = world.def.sea !== undefined ? world.def.sea - 0.3 : null;
@@ -1301,6 +1477,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   function toggleCar(): void {
     if (!sm.is("playing") || launchT >= 0) return;
+    for (const p of players) if (mountOff(p)) return;
     for (const v of rides) {
       const rider = v.group.visible ? players.find((p) => v.has(p)) : undefined;
       if (rider) {
@@ -1312,7 +1489,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
     const near = rideInReach();
     if (!near) {
-      if (nearRocket()) boardRocket();
+      const u = useInReach();
+      const m = mountInReach();
+      if (u && !(m && m.what === "animal")) u.go();
+      else if (m) mountUp(m);
+      else if (nearRocket()) boardRocket();
       return;
     }
     const seat = near.ride.board(near.kid);
@@ -1357,7 +1538,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
     const said = npcs.talk(npc);
     let text = said.text;
     const sells = npc.def.sells;
-    if (npc.def.job) {
+    if (npc.def.quest === "lambs") {
+      text = lambs.shepherd();
+    } else if (npc.def.job) {
       text = workFor(npc);
     } else if (sells && !owned.has(sells.id)) {
       if (bank >= sells.price) {
@@ -1856,7 +2039,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
     if (traffic.cars.length) {
       // city cars wait for kids and rides in front of them
-      const blockers = players.map((p) => (p.riding ? (rideOf(p) ?? car).pos : p.pos));
+      const blockers = players.map((p) => (p.riding ? (rideOf(p)?.pos ?? p.pos) : p.pos));
       for (const v of rides) if (v.group.visible && !v.occupied) blockers.push(v.pos);
       for (const r of remotes.values()) if (r.level === levelIdx) blockers.push(r.p.pos);
       traffic.update(dt, blockers);
@@ -1865,6 +2048,14 @@ export function startGame(canvas: HTMLCanvasElement): void {
       const kids = players.map((p) => p.pos);
       for (const r of remotes.values()) if (r.level === levelIdx) kids.push(r.p.pos);
       herds.update(dt, kids, camera);
+    }
+    if (lambs.isActive) {
+      questEvents(lambs.update(dt, players.map((p) => p.pos)));
+      const ql = jobs.id ? "#job" : lambs.label() ?? ""; // a job's own line wins while it runs
+      if (ql !== questLabel) {
+        questLabel = ql;
+        if (!jobs.id) hud.setJob(ql || null);
+      }
     }
     world.updateCutaway(players.map((p) => p.pos));
     {
@@ -1968,6 +2159,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
       v.update(dt, -lat, fwd >= -0.5 * mag ? mag : fwd, world);
       if (v.kind === "car" && traffic.cars.length && traffic.pushOut(v.pos, 1.1)) v.speed *= 0.6; // bump!
     }
+
+    if (mounts.size) updateMounts(dt, axesOf, [jumpNow, jump2Now]);
 
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
@@ -2084,7 +2277,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     // stars
     for (const p of players) {
       const got = p.riding
-        ? stars.tryCollect((rideOf(p) ?? car).pos)
+        ? stars.tryCollect((rideOf(p)?.pos ?? p.pos))
         : (magnetTimer > 0 ? stars.tryCollectFar(p.pos, 5) : stars.tryCollect(p.pos));
       if (got) {
         score += 100;
@@ -2233,8 +2426,15 @@ export function startGame(canvas: HTMLCanvasElement): void {
     const inRide = rides.find((v) => v.group.visible && v.occupied);
     const byRide = inRide ? undefined : rideInReach()?.ride;
     const ride = inRide ?? byRide;
+    const mounted = mounts.get(players[0]) ?? [...mounts.values()][0];
+    const canMount = !ride && !mounted ? mountInReach() : null;
+    const useNow = !ride && !mounted ? useInReach() : null;
     if (launchT >= 0) hud.setCarUi(null);
     else if (ride) hud.setCarUi(inRide ? "out" : "in", RIDE_ICON[ride.kind]);
+    else if (mounted) hud.setCarUi("out", mounted === "animal" ? "🐴" : "🎡");
+    else if (canMount && canMount.what === "animal") hud.setCarUi("in", canMount.icon);
+    else if (useNow) hud.setCarUi("in", useNow.icon, useNow.label);
+    else if (canMount) hud.setCarUi("in", canMount.icon);
     else hud.setCarUi(nearRocket() ? "in" : null, "🚀");
     {
       const e = engineRide();
@@ -2281,7 +2481,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     // scripture scrolls: walk into one to read its verse
     scrolls.update(dt, elapsed);
     for (const p of players) {
-      const sc = scrolls.readNear(p.riding ? (rideOf(p) ?? car).pos : p.pos);
+      const sc = scrolls.readNear(p.riding ? (rideOf(p)?.pos ?? p.pos) : p.pos);
       if (!sc) continue;
       const verse = LIBRARY[sc.verse];
       const key = `${world.def.name}:${verse.ref}`;
@@ -2592,6 +2792,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
     jobsDone,
     traffic: traffic.cars.map((c) => ({ x: c.group.position.x, z: c.group.position.z, v: c.v })),
     herds: herds.positions(),
+    quest: lambs.label(),
+    use: useInReach()?.label ?? null,
+    lambsHome: lambs.homeCount,
+    mounts: [...mounts.values()].map((m) => (m === "animal" ? "animal" : `ferris ${m.cab} ${m.turned.toFixed(2)}${m.down ? " down" : ""}`)),
+    kid: { x: players[0].pos.x, y: players[0].pos.y, z: players[0].pos.z, riding: players[0].riding },
     gaits: gaitInfo(),
     npcBoxes: () => npcs.items.slice(0, 4).map((n) => {
       const b = new THREE.Box3().setFromObject(n.p.group, true);

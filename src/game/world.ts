@@ -84,6 +84,8 @@ export interface NpcDef {
   scale?: number;
   /** Hands out a job (see jobs.ts). */
   job?: JobId;
+  /** Runs a quest instead of plain lines (see lambs.ts). */
+  quest?: "lambs";
   /** Places their job uses: garden rows, litter, fishing spots, bus stops, drop rings… */
   spots?: [number, number, number][];
 }
@@ -937,6 +939,10 @@ const ADVENTURE_ISLAND: LevelDef = {
       ],
     },
     {
+      name: "Shepherd Sam", x: 4, y: 0.3, z: -9, outfit: 3, hat: 4, skin: 3, quest: "lambs",
+      lines: ["My lambs! Have you seen my little lambs?"],
+    },
+    {
       name: "Farmer Fern", x: -13, y: 0.3, z: -13, outfit: 3, hat: 4, skin: 2, job: "farm",
       spots: [[-8, 0.3, -17.5], [-6, 0.3, -17.5], [-4, 0.3, -17.5], [-8, 0.3, -20.5], [-6, 0.3, -20.5], [-4, 0.3, -20.5]],
       lines: [
@@ -1780,7 +1786,9 @@ export class World {
   private clouds: THREE.Group[] = [];
   private snow: THREE.Points | null = null;
   private ocean: THREE.Mesh | null = null;
-  private ferris: { wheel: THREE.Group; cabins: THREE.Object3D[] } | null = null;
+  private ferris: { wheel: THREE.Group; cabins: THREE.Object3D[]; gate: THREE.Vector3; facing: number } | null = null;
+  /** How fast the Ferris wheel turns (1 = its normal slow turn; boot speeds it up to bring a rider down). */
+  ferrisSpin = 1;
   private oceanY = -7;
   private waveAmp = 0.1;
   private time = 0;
@@ -3123,7 +3131,7 @@ export class World {
       }
     }
     if (this.ferris) {
-      this.ferris.wheel.rotation.z += dt * 0.12;
+      this.ferris.wheel.rotation.z += dt * 0.12 * this.ferrisSpin;
       for (const c of this.ferris.cabins) c.rotation.z = -this.ferris.wheel.rotation.z;
     }
     for (const c of this.clouds) {
@@ -3404,7 +3412,49 @@ export class World {
     }
   }
 
-  /** A Ferris wheel that turns slowly; its cabins hang level. Decorative (walk right through it). */
+  /** Trees, rocks and flowers kids can shake, look under or pick (see interact.ts). */
+  decorSpots(): { t: "tree" | "rock" | "flower"; x: number; y: number; z: number }[] {
+    const out: { t: "tree" | "rock" | "flower"; x: number; y: number; z: number }[] = [];
+    for (const d of this.decor) if (d.t === "tree" || d.t === "rock" || d.t === "flower") out.push({ t: d.t, x: d.x, y: d.y, z: d.z });
+    return out;
+  }
+
+  /** Where kids get on the Ferris wheel (null when this level has none). */
+  get ferrisGate(): THREE.Vector3 | null {
+    return this.ferris?.gate ?? null;
+  }
+
+  get ferrisFacing(): number {
+    return this.ferris?.facing ?? 0;
+  }
+
+  /** The gondola nearest the ground right now. */
+  ferrisLowest(): number {
+    if (!this.ferris) return -1;
+    let best = 0, by = Infinity;
+    const v = new THREE.Vector3();
+    this.ferris.cabins.forEach((c, i) => {
+      c.getWorldPosition(v);
+      if (v.y < by) { by = v.y; best = i; }
+    });
+    return best;
+  }
+
+  /** Where a kid sits in gondola i (their feet), written into out. Returns the gondola's height above its lowest point (0 = at the gate). */
+  ferrisSeat(i: number, out: THREE.Vector3): number {
+    const f = this.ferris!;
+    const c = f.cabins[i];
+    c.updateWorldMatrix(true, false);
+    out.set(0, -1.75, 0).applyMatrix4(c.matrixWorld);
+    // the hub's height minus the radius is the lowest a gondola gets
+    const hub = new THREE.Vector3();
+    f.wheel.getWorldPosition(hub);
+    const pivot = new THREE.Vector3();
+    c.getWorldPosition(pivot);
+    return pivot.y - (hub.y - 9);
+  }
+
+  /** A Ferris wheel that turns slowly; its gondolas hang level. Kids ride it from the gate (boot.ts). */
   private buildFerris(x: number, y: number, z: number, rot: number): void {
     const g = new THREE.Group();
     g.position.set(x, y, z);
@@ -3436,8 +3486,11 @@ export class World {
     wheel.add(hub);
     const spokes = new THREE.InstancedMesh(new THREE.BoxGeometry(0.08, R, 0.08).translate(0, R / 2, 0), steel, 24);
     const cabins: THREE.Object3D[] = [];
-    const cabinGeo = new THREE.BoxGeometry(1.3, 1.1, 1.1).translate(0, -1.0, 0);
-    const roofGeo = new THREE.CylinderGeometry(0.2, 0.8, 0.4, 8).translate(0, -0.25, 0);
+    // open gondolas: a tub you sit in, four poles and a little roof (riders show above the rim)
+    const tubGeo = new THREE.BoxGeometry(1.4, 0.55, 1.2).translate(0, -1.55, 0);
+    const poleGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.2, 5);
+    const roofGeo = new THREE.CylinderGeometry(0.2, 0.9, 0.35, 8).translate(0, -0.2, 0);
+    const hangGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.4, 5).translate(0, -0.05, 0);
     const n = 12;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
@@ -3446,9 +3499,16 @@ export class World {
       }
       const cab = new THREE.Group();
       cab.position.set(Math.sin(a) * R, Math.cos(a) * R, 0);
-      const body = new THREE.Mesh(cabinGeo, new THREE.MeshStandardMaterial({ color: RAINBOW_COLORS[i % RAINBOW_COLORS.length], roughness: 0.6 }));
-      const roof = new THREE.Mesh(roofGeo, steel);
-      cab.add(body, roof);
+      const color = RAINBOW_COLORS[i % RAINBOW_COLORS.length];
+      const body = new THREE.Mesh(tubGeo, new THREE.MeshStandardMaterial({ color, roughness: 0.6 }));
+      body.castShadow = true;
+      const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color, roughness: 0.5 }));
+      cab.add(body, roof, new THREE.Mesh(hangGeo, steel));
+      for (const [px, pz] of [[-0.62, -0.52], [0.62, -0.52], [-0.62, 0.52], [0.62, 0.52]]) {
+        const pole = new THREE.Mesh(poleGeo, steel);
+        pole.position.set(px, -0.85, pz);
+        cab.add(pole);
+      }
       wheel.add(cab);
       cabins.push(cab);
     }
@@ -3456,10 +3516,14 @@ export class World {
     wheel.add(spokes);
     g.add(wheel);
     this.group.add(g);
-    this.ferris = { wheel, cabins };
-    this.solids.push({ minX: x - 1.2, maxX: x + 1.2, minZ: z - 1.2, maxZ: z + 1.2, topY: 1 }); // the ticket booth at its foot
+    // the boarding gate: in front of the wheel, beside the ticket booth
+    const gate = new THREE.Vector3(x - Math.sin(rot) * 2.2, y, z - Math.cos(rot) * 2.2);
+    this.ferris = { wheel, cabins, gate, facing: rot + Math.PI };
+    // the ticket booth, on the sea side so the gondolas pass by it
+    const bx = x + Math.sin(rot) * 3.4, bz = z + Math.cos(rot) * 3.4;
+    this.solids.push({ minX: bx - 1.2, maxX: bx + 1.2, minZ: bz - 1.2, maxZ: bz + 1.2, topY: y + 2 });
     const booth = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2, 2.2), new THREE.MeshStandardMaterial({ color: 0xffd93d, roughness: 0.7 }));
-    booth.position.set(x, y + 1, z);
+    booth.position.set(bx, y + 1, bz);
     booth.castShadow = true;
     this.group.add(booth);
   }
