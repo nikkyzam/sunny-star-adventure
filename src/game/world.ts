@@ -85,7 +85,7 @@ export interface NpcDef {
   /** Hands out a job (see jobs.ts). */
   job?: JobId;
   /** Runs a quest instead of plain lines (see lambs.ts). */
-  quest?: "lambs";
+  quest?: string;
   /** Places their job uses: garden rows, litter, fishing spots, bus stops, drop rings… */
   spots?: [number, number, number][];
 }
@@ -1293,6 +1293,10 @@ const SUNSHINE_CITY: LevelDef = {
   },
   npcs: [
     {
+      name: "Granny Whiskers", x: -5, y: 0, z: 42, outfit: 2, hat: 4, skin: 1, quest: "kittens",
+      lines: ["Have you seen my kittens?"],
+    },
+    {
       name: "Mayor Marigold", x: 3, y: 0, z: 43.5, outfit: 4, hat: 3, skin: 2,
       lines: [
         "Welcome to Sunshine City! Find every star to open the portal by the harbor.",
@@ -1435,7 +1439,7 @@ const ARK_ISLAND: LevelDef = {
       lines: ["God told me to build this ark. He always keeps his promises!"],
     },
     {
-      name: "Shem", x: -4, y: 0.3, z: -14.5, outfit: 1, hat: 0, skin: 2,
+      name: "Shem", x: -4, y: 0.3, z: -14.5, outfit: 1, hat: 0, skin: 2, quest: "doves",
       lines: [
         "We built the ark out of gopher wood, just as God said. It took a very long time!",
         "Walk up the ramp to the deck. You can see the whole island from up there.",
@@ -1554,6 +1558,10 @@ const RESORT: LevelDef = {
       lines: ["My helicopter is up on the hotel roof. The big trampoline will take you up!"],
     },
     {
+      name: "Grandma Ruth", x: 6.5, y: 0, z: 13, outfit: 2, hat: 4, skin: 3, quest: "coins",
+      lines: ["I've lost some of my silver coins!"],
+    },
+    {
       name: "Guest Gus", x: 3.2, y: 0, z: 20.4, outfit: 2, hat: 4, skin: 2,
       lines: [
         "Ahh, what a holiday! Have you tried the water slide yet?",
@@ -1625,7 +1633,7 @@ const JONAH_SEA: LevelDef = {
       lines: ["God gave me a message for Nineveh. I ran away once. Never again!"],
     },
     {
-      name: "Sailor Sam", x: -2.4, y: 0, z: 14.5, outfit: 1, hat: 4, skin: 4,
+      name: "Sailor Sam", x: -2.4, y: 0, z: 14.5, outfit: 1, hat: 4, skin: 4, quest: "cargo",
       lines: [
         "Jonah tried to sail away from God, and a mighty storm came up. But you can't hide from God!",
         "A great fish swallowed Jonah. He was inside it three days and three nights, and he prayed.",
@@ -1729,7 +1737,7 @@ const ELAH: LevelDef = {
       ],
     },
     {
-      name: "Jesse", x: -11, y: 0.34, z: 9, outfit: 5, hat: 4, skin: 2,
+      name: "Jesse", x: -11, y: 0.34, z: 9, outfit: 5, hat: 4, skin: 2, quest: "sheep",
       lines: [
         "David is my youngest son. He plays the harp and sings songs to God.",
         "People look at the outside. The LORD looks at the heart.",

@@ -277,7 +277,7 @@ const WOMEN = new Set([
   "Captain Coral", "Mayor Maple", "Grandma Gigi", "Farmer Fern", "Surfer Sky", "Camper Cleo", "Artist Ari",
   "Agent Goldie", "Pilot Piper", "Astronaut Ada", "Driver Dee", "Fisher Flo", "Cargo Cass", "Diver Dot",
   "Mayor Marigold", "Agent Aria", "Pastor Grace", "Postie Paz", "Pilot Penny", "Ranger Rosa", "Manager Mia",
-  "Chef Coco", "Pilot Skye", "Nadia of Nineveh",
+  "Chef Coco", "Pilot Skye", "Nadia of Nineveh", "Granny Whiskers", "Grandma Ruth",
 ]);
 /** Dressed up: suits and dresses. */
 const SMART = /^(Mayor|Pastor|Agent|Manager|King)\b/;

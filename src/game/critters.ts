@@ -129,7 +129,7 @@ export function makeAnimal(kit: AnimalKit, scaleBy = 1): AnimalModel {
       if (speed < 0.05) { this.play("Idle", fade); return; }
       const fast = speed > (walk + gallop) / 2;
       this.play(fast ? "Gallop" : "Walk", fade);
-      if (cur) cur.timeScale = THREE.MathUtils.clamp(speed / (fast ? gallop : walk), 0.4, 2);
+      if (cur) cur.timeScale = THREE.MathUtils.clamp(speed / (fast ? gallop : walk), 0.4, 3);
     },
     play(name, fade = 0.35) {
       if (name === curName) return;
@@ -187,6 +187,8 @@ export interface Rider {
 
 /** Animals a kid can climb onto, and how high their back is (a share of their height). */
 const BACK: Partial<Record<AnimalKind, number>> = { horse: 0.6, horse_white: 0.6, donkey: 0.56, alpaca: 0.5 };
+/** Top riding speed (m/s). A running kid does about 5. */
+const RIDE_TOP: Partial<Record<AnimalKind, number>> = { horse: 12, horse_white: 12, donkey: 8.5, alpaca: 8 };
 export const RIDE_EMOJI: Partial<Record<AnimalKind, string>> = { horse: "🐴", horse_white: "🐴", donkey: "🫏", alpaca: "🦙" };
 
 /** Callbacks a ridden animal uses to stay out of walls and deep water. */
@@ -384,9 +386,10 @@ export class Herds {
       while (dh < -Math.PI) dh += Math.PI * 2;
       b.heading += THREE.MathUtils.clamp(dh, -dt * 3.2, dt * 3.2);
     }
-    const top = Math.min(b.m.gallop, b.m.walk * 6, 8);
+    // a real gallop: horses are the fastest way across an island (faster than a running kid)
+    const top = RIDE_TOP[b.kind] ?? 8;
     const wantV = mag * top * (Math.abs(dh) > 2 ? 0.3 : 1);
-    b.v += THREE.MathUtils.clamp(wantV - b.v, -6 * dt, 4 * dt);
+    b.v += THREE.MathUtils.clamp(wantV - b.v, -9 * dt, 7 * dt);
     const ox = p.x, oz = p.z;
     p.x += Math.sin(b.heading) * b.v * dt;
     p.z += Math.cos(b.heading) * b.v * dt;

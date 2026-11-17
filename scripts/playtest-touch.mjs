@@ -138,15 +138,19 @@ try {
   await tap(9, "[data-action=play]");
   await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 20000 });
   // spawn (0, 18) → car at about (3, 14): steer in short pushes until the button shows
-  for (let i = 0; i < 40 && !(await shown("#btn-car")); i++) {
+  // the same button also offers to smell flowers or shake trees on the way: wait for "Hop in"
+  // (and still there once the kid has stopped sliding: right at the edge of reach it can blink off)
+  const hopInNow = async () => (await shown("#btn-car")) && (await page.locator("#btn-car").textContent()).includes("Hop in");
+  const hopIn = async () => (await hopInNow()) && (await page.waitForTimeout(400), await hopInNow());
+  for (let i = 0; i < 40 && !((await hopIn()) && Math.hypot((await dbg()).px - (await dbg()).car.x, (await dbg()).pz - (await dbg()).car.z) < 1.9); i++) {
     const d = await dbg();
-    const dx = 2 - d.px, dz = 14.6 - d.pz;
+    const dx = d.car.x + 1.3 - d.px, dz = d.car.z - d.pz; // the car's side, well inside reach
     const len = Math.hypot(dx, dz) || 1;
     await drag(1, 150, 600, 150 + (dx / len) * 50, 600 + (dz / len) * 50);
     await page.waitForTimeout(120);
     await touch("touchEnd", 1);
   }
-  check("T7a Hop in button appears", await shown("#btn-car"));
+  check("T7a Hop in button appears", await hopIn());
   await drag(1, 150, 600, 150, 601); // a thumb resting on the stick
   await tap(2, "#btn-car");
   await page.waitForTimeout(300);

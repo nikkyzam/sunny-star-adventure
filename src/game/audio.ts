@@ -12,7 +12,7 @@
 export type SfxId =
   | "jump" | "doublejump" | "land" | "boing" | "stomp" | "star" | "hurt"
   | "portal" | "checkpoint" | "ui" | "win" | "lose" | "unlock" | "fall"
-  | "coin" | "chest" | "buddy" | "powerup" | "honk" | "splash" | "talk" | "pet" | "munch" | "baa" | "rustle";
+  | "coin" | "chest" | "buddy" | "powerup" | "honk" | "splash" | "talk" | "pet" | "munch" | "baa" | "rustle" | "meow" | "coo" | "dig";
 
 export type TrackId = "meadow" | "island" | "city" | "snow";
 
@@ -422,6 +422,18 @@ export class AudioSystem {
         // a wobbly little lamb's "baa-a-a"
         for (let i = 0; i < 6; i++) this.blip("sawtooth", i % 2 ? 470 : 520, i % 2 ? 500 : 470, t + i * 0.06, 0.07, i === 0 ? 0.09 : 0.07);
         this.blip("triangle", 980, 940, t, 0.36, 0.05);
+        break;
+      case "meow":
+        // a little rising-then-falling "mew"
+        this.blip("triangle", 700, 1100, t, 0.12, 0.12);
+        this.blip("triangle", 1100, 650, t + 0.12, 0.2, 0.1);
+        break;
+      case "coo":
+        this.blip("sine", 420, 380, t, 0.18, 0.14);
+        this.blip("sine", 380, 340, t + 0.22, 0.28, 0.12);
+        break;
+      case "dig":
+        for (let i = 0; i < 3; i++) this.blip("square", 260 - i * 30, 110, t + i * 0.1, 0.06, 0.08);
         break;
       case "rustle":
         for (let i = 0; i < 5; i++) this.blip("square", 1800 + Math.random() * 1400, 900, t + i * 0.045, 0.03, 0.05);

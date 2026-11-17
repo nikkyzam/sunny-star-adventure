@@ -39,7 +39,8 @@ import { loadPlan, savePlan, planVerses, safePicks, cleanOwn, loadMemorized, sav
 import { showGate, gateAnswer, setGateStatus, drawTeach, ownInput, clearOwnInput, setTeachStatus, setTeachButton, showClassLink, drawBook, drawTravel, type BoardRow } from "./lessonui";
 import { loadHumanKit, gaitInfo, gaitTrace } from "./humans";
 import { Herds, loadCarKit, RIDE_EMOJI } from "./critters";
-import { LostLambs, type LambName, type QuestEvent } from "./lambs";
+import { Quests, type QuestEvent } from "./quests";
+import { QUESTS } from "./questdata";
 import { Spots } from "./interact";
 import { loadPeopleKit } from "./people";
 import { loadEnvKit } from "./env";
@@ -278,9 +279,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const blobGeo = new THREE.CircleGeometry(0.5, 20);
   const blobMat = new THREE.MeshBasicMaterial({ color: 0x1a2a1a, transparent: true, opacity: 0.28, depthWrite: false });
 
-  const lambs = new LostLambs((x, z, y) => world.groundAt(x, z, y)?.y ?? 0, (found) => storage.set("lambs", found));
+  const quests = new Quests(
+    (x, z, y) => world.groundAt(x, z, y)?.y ?? 0,
+    (id) => storage.get<string[]>(`quest.${id}`, id === "lambs" ? storage.get<string[]>("lambs", []) : []),
+    (id, home) => storage.set(`quest.${id}`, home),
+  );
   const spots = new Spots();
-  scene.add(jobs.group, traffic.group, scrolls.group, herds.group, lambs.group);
+  scene.add(jobs.group, traffic.group, scrolls.group, herds.group, quests.group);
   scene.add(...spareCars.map((c) => c.group));
   scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, boat.group, heli.group, jet.group, rocket, rings.group, foods.group, fleet.group, props.group, npcs.group, pet.group, particles.points);
 
@@ -496,7 +501,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   function useInReach(): { kid: Player; icon: string; label: string; go: () => void } | null {
     for (const p of players) {
       if (p.riding) continue;
-      const q = lambs.actionNear(p.pos);
+      const q = quests.actionNear(p.pos);
       if (q) return { kid: p, icon: q.icon, label: q.label, go: () => questEvents(q.act()) };
     }
     for (const p of players) {
@@ -534,34 +539,22 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   let questLabel = "";
 
-  /** What the lost-lamb quest wants the game to show and play. */
+  /** What a quest wants the game to show and play. */
   function questEvents(ev: QuestEvent[]): void {
     for (const e of ev) {
       if (e.type === "sfx") audio.sfx(e.id);
       else if (e.type === "toast") hud.showToast(e.text);
-      else if (e.type === "say") hud.showDialog("Shepherd Sam", e.text);
+      else if (e.type === "say") hud.showDialog(e.who, e.text);
       else if (e.type === "burst") particles.burst(e.x, e.y, e.z, e.color, 18, 3, 0.8, 4);
-      else if (e.type === "found") {
-        score += 50;
-        hud.setScore(score);
-      } else if (e.type === "home") {
-        earn(10);
-        score += 100;
+      else if (e.type === "reward") {
+        if (e.coins) earn(e.coins);
+        score += e.score;
         hud.setCoins(bank);
         hud.setScore(score);
-        audio.sfx("win");
-        cheerNear(players[0].pos, 12);
-        if (e.left > 0) {
-          hud.showDialog("Shepherd Sam", `${e.name} is home safe! Thank you! 🐑 +10 coins. Only ${e.left} more to find. Talk to me for the next clue!`);
-        } else {
-          earn(30);
-          score += 300;
-          hud.setCoins(bank);
-          hud.setScore(score);
-          if (pet.active) pet.cheer();
-          hud.showDialog("Shepherd Sam", "All three lambs are home! \"Rejoice with me; for I have found my sheep which was lost.\" (Luke 15:6) Jesus is like a good shepherd who looks for every lost one. Thank you! 🐑🐑🐑 +40 coins");
-          hud.showToast("🏆 Quest complete: The Lost Lambs!");
-        }
+        if (e.coins) cheerNear(players[0].pos, 12);
+      } else if (e.type === "complete") {
+        if (pet.active) pet.cheer();
+        hud.showToast(`🏆 Quest complete: ${e.title}!`);
       }
     }
   }
@@ -735,7 +728,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     traffic.build(world.def.traffic ?? []);
     herds.build(world.def.herds ?? []);
     spots.build(world.decorSpots());
-    lambs.build(world.def.name, storage.get<LambName[]>("lambs", []));
+    quests.build(QUESTS, world.def.name, world.decorSpots().filter((d) => d.t === "tree"));
     questLabel = "";
     scrolls.build((world.def.scrolls ?? []).flatMap(([x, y, z, ref]) => {
       const k = LIBRARY.findIndex((v) => v.ref === ref);
@@ -1538,8 +1531,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
     const said = npcs.talk(npc);
     let text = said.text;
     const sells = npc.def.sells;
-    if (npc.def.quest === "lambs") {
-      text = lambs.shepherd();
+    const questLine = npc.def.quest && npc.def.name === quests.giver ? quests.talk() : null;
+    if (questLine) {
+      text = questLine;
     } else if (npc.def.job) {
       text = workFor(npc);
     } else if (sells && !owned.has(sells.id)) {
@@ -2049,9 +2043,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
       for (const r of remotes.values()) if (r.level === levelIdx) kids.push(r.p.pos);
       herds.update(dt, kids, camera);
     }
-    if (lambs.isActive) {
-      questEvents(lambs.update(dt, players.map((p) => p.pos)));
-      const ql = jobs.id ? "#job" : lambs.label() ?? ""; // a job's own line wins while it runs
+    if (quests.isActive) {
+      questEvents(quests.update(dt, players.map((p) => p.pos)));
+      const ql = jobs.id ? "#job" : quests.label() ?? ""; // a job's own line wins while it runs
       if (ql !== questLabel) {
         questLabel = ql;
         if (!jobs.id) hud.setJob(ql || null);
@@ -2792,9 +2786,12 @@ export function startGame(canvas: HTMLCanvasElement): void {
     jobsDone,
     traffic: traffic.cars.map((c) => ({ x: c.group.position.x, z: c.group.position.z, v: c.v })),
     herds: herds.positions(),
-    quest: lambs.label(),
+    quest: quests.label(),
     use: useInReach()?.label ?? null,
-    lambsHome: lambs.homeCount,
+    questHome: quests.homeCount,
+    questTargets: () => quests.debugTargets(),
+    questHomeSpot: quests.homeSpot,
+    questGiver: quests.giver,
     mounts: [...mounts.values()].map((m) => (m === "animal" ? "animal" : `ferris ${m.cab} ${m.turned.toFixed(2)}${m.down ? " down" : ""}`)),
     kid: { x: players[0].pos.x, y: players[0].pos.y, z: players[0].pos.z, riding: players[0].riding },
     gaits: gaitInfo(),
@@ -2820,6 +2817,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       return { name: n.def.name, min: b.min.toArray().map((v) => +v.toFixed(2)), max: b.max.toArray().map((v) => +v.toFixed(2)), meshes, skinned };
     }),
     gaitTrace,
+    levelDef: (i: number) => LEVELS[i],
     heads: () => [...players.map((p) => ['kid', p.debugHeadYaw()] as const), ...npcs.items.map((n) => [n.def.name, n.p.debugHeadYaw()] as const)],
     move: players[0].debugMove(),
     feet: players[0].debugFeet(),
