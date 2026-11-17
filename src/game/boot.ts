@@ -39,6 +39,7 @@ import { loadPlan, savePlan, planVerses, safePicks, cleanOwn, loadMemorized, sav
 import { showGate, gateAnswer, setGateStatus, drawTeach, ownInput, clearOwnInput, setTeachStatus, setTeachButton, showClassLink, drawBook, drawTravel, type BoardRow } from "./lessonui";
 import { loadHumanKit, gaitInfo, gaitTrace } from "./humans";
 import { Herds, loadCarKit, RIDE_EMOJI } from "./critters";
+import { PhotoMode } from "./photo";
 import { Quests, type QuestEvent } from "./quests";
 import { QUESTS } from "./questdata";
 import { Spots } from "./interact";
@@ -271,6 +272,20 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const jobs = new Jobs(particles);
   const hud = new Hud();
   const audio = new AudioSystem();
+  // photo mode: 📸 swings the camera round to face the kid, counts down, then frames a postcard
+  const photo = new PhotoMode({
+    opened: () => {
+      if (!sm.is("playing")) return;
+      sm.transition("paused");
+      ads.gameplayStop();
+      hud.setPlayingUi(false);
+    },
+    closed: () => resumePlay(),
+    sfx: (id) => audio.sfx(id),
+  });
+  /** A selfie in progress: seconds since 📸 was pressed; `snap` = grab the next rendered frame. */
+  let selfie: { t: number; snap: boolean } | null = null;
+  const SELFIE_BEAT = 0.6; // seconds per countdown number
   const input = new Input(canvas);
   const sm = new GameStateMachine();
 
@@ -709,6 +724,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   function loadLevel(i: number): void {
     levelIdx = i;
+    selfie = null;
+    photo.reset();
     world.owned = owned;
     world.buildLevel(i, scene);
     // each world's light: a sunset city glows warm
@@ -1357,6 +1374,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
         break;
       case "car": toggleCar(); break;
       case "honk": honk(); break;
+      case "photo": startSelfie(); break;
       case "again": playAgain(); break;
       case "next": nextLevel(); break;
       case "retry": retryLevel(); break;
@@ -1406,7 +1424,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     } else if (sm.is("playing")) {
       pendingJump = true;
     } else if (sm.is("paused")) {
-      if (!bookOpen && !travelOpen) resumePlay(); // (the verse book and travel gate close with their own buttons)
+      if (!bookOpen && !travelOpen && !photo.open) resumePlay(); // (the verse book and travel gate close with their own buttons)
     } else if (sm.is("gameover")) {
       retryLevel();
     } else if (sm.is("levelclear")) {
@@ -1417,6 +1435,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   function togglePause(): void {
+    if (photo.open) { photo.close(); return; }
     if (sm.is("playing")) {
       sm.transition("paused");
       ads.gameplayStop();
@@ -1661,6 +1680,45 @@ export function startGame(canvas: HTMLCanvasElement): void {
         hud.showToast(`Hop in the ${RIDE_ICON[e.ride]} for this job!`);
       }
     }
+  }
+
+  // ── Photo mode ───────────────────────────────────────────────────────────
+  function startSelfie(): void {
+    if (!sm.is("playing") || selfie || photo.open) return;
+    selfie = { t: 0, snap: false };
+    const kid = players[0];
+    if (!kid.riding) kid.dance();
+    pet.cheer();
+    cheerNear(kid.pos, 8); // villagers nearby wave for the photo
+    audio.sfx("ui");
+    photo.count("3");
+  }
+
+  /** Count down; on "📸" the next rendered frame becomes the photo (see the render callback). */
+  function updateSelfie(dt: number): void {
+    if (!selfie || selfie.snap) return;
+    const before = Math.floor(selfie.t / SELFIE_BEAT);
+    selfie.t += dt;
+    const beat = Math.floor(selfie.t / SELFIE_BEAT);
+    if (beat === before) return;
+    if (beat < 3) {
+      photo.count(String(3 - beat));
+      audio.sfx("ui");
+    } else {
+      photo.count("📸");
+      selfie.snap = true;
+    }
+  }
+
+  /** The selfie camera: in front of the kid, a little to one side, looking back at them. */
+  function selfieCamera(): void {
+    const kid = players[0];
+    const ride = rideOf(kid);
+    const d = ride ? (ride.flies ? 9 : 6) : kid.riding ? 4.6 : 2.9; // (riding a horse: rideOf is null)
+    const a = kid.facing + 0.4;
+    camTarget.set(kid.pos.x, kid.pos.y + (ride ? 1.2 : 0.85), kid.pos.z);
+    camDesired.set(camTarget.x + Math.sin(a) * d, camTarget.y + 0.25 + d * 0.1, camTarget.z + Math.cos(a) * d);
+    if (!world.isInside(kid.pos)) world.clipCamera(camTarget, camDesired);
   }
 
   // ── Stickers & dancing ───────────────────────────────────────────────────
@@ -1998,6 +2056,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (input.consumeAction("KeyE")) toggleCar();
     if (input.consumeAction("KeyH")) honk();
     if (input.consumeAction("KeyF")) talk();
+    if (input.consumeAction("KeyC")) startSelfie();
 
     if (sm.is("paused")) {
       // a kid reading the verse book (or paused) stays in the room: friends see them standing still
@@ -2680,6 +2739,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
     );
     // never let a building get between the camera and the kid (inside a house, the walls are cut away instead)
     if (!world.isInside(players[0].pos)) world.clipCamera(camTarget, camDesired);
+    if (selfie) {
+      updateSelfie(dt);
+      if (selfie) selfieCamera();
+    }
     camera.position.lerp(camDesired, Math.min(1, dt * 9));
     if (shake > 0) {
       shake = Math.max(0, shake - dt * 1.8);
@@ -2705,6 +2768,17 @@ export function startGame(canvas: HTMLCanvasElement): void {
     },
     render: () => {
       renderer.render(scene, camera);
+      if (selfie?.snap && sm.is("playing")) {
+        // the frame just drawn (no buttons on it: the HUD is HTML on top of the canvas)
+        // draw it once more without the floating name tags and signs (they're sprites)
+        selfie = null;
+        const tags: THREE.Object3D[] = [];
+        scene.traverse((o) => { if ((o as THREE.Sprite).isSprite && o.visible) tags.push(o); });
+        for (const o of tags) o.visible = false;
+        renderer.render(scene, camera);
+        photo.take(renderer.domElement, world.def.name);
+        for (const o of tags) o.visible = true;
+      }
       // first rendered frame with the models in = the page is playable
       if (modelsSettled && !window.__GAME_READY__) {
         window.__GAME_READY__ = true;

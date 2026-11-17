@@ -6,7 +6,7 @@
 export type HudAction =
   | "play" | "play2" | "continue" | "resume" | "retry" | "next" | "title" | "again" | "jump" | "mute"
   | "online" | "host" | "join" | "back" | "reroll" | "easy" | "drive" | "car" | "honk"
-  | "dress" | "island" | "city" | "ark" | "jonah" | "david" | "resort" | "talk" | "verse-ready" | "verse-check" | "verse-peek"
+  | "photo" | "dress" | "island" | "city" | "ark" | "jonah" | "david" | "resort" | "talk" | "verse-ready" | "verse-check" | "verse-peek"
   | "teach" | "gate-ok" | "class-start" | "family" | "own-add" | "book" | "book-close" | "class-link" | "travel-close";
 
 type OverlayName = "title" | "pause" | "gameover" | "clear" | "win" | "online" | "dress" | "verse" | "gate" | "teach" | "book" | "travel";
@@ -58,6 +58,7 @@ export class Hud {
   private room = el("hud-room");
   private carBtn = el("btn-car");
   private honkBtn = el("btn-honk");
+  private photoBtn = el("btn-photo");
   private carMode: string | null = null;
   private talkBtn = el("btn-talk");
   private bookBtn = el("btn-book");
@@ -96,6 +97,7 @@ export class Hud {
     };
     press(this.carBtn, "car");
     press(this.honkBtn, "honk");
+    press(this.photoBtn, "photo");
     press(this.talkBtn, "talk");
     press(this.bookBtn, "book");
     // jump: press to jump, keep holding to glide
@@ -179,6 +181,7 @@ export class Hud {
   setPlayingUi(playing: boolean): void {
     this.topbar.style.display = playing ? "" : "none";
     this.jumpBtn.style.display = playing ? "" : "none";
+    this.photoBtn.style.display = playing ? "" : "none";
     document.body.classList.toggle("playing", playing);
     if (!playing) this.jumpHeld = false;
     this.stickerBar.style.display = playing ? "" : "none";

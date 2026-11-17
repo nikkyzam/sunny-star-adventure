@@ -42,6 +42,8 @@ export default function Home() {
         </div>
 
         <button id="btn-mute" className="round-btn" aria-label="Mute">🔊</button>
+        {/* photo mode: a selfie postcard (saving it is behind the grown-up question) */}
+        <button id="btn-photo" className="round-btn photo-btn" aria-label="Take a photo" style={{ display: 'none' }}>📸</button>
         {/* touch thumb-stick: drawn where the left thumb lands (src/game/input.ts moves it) */}
         <div id="stick-base" className="stick-base"><div id="stick-knob" className="stick-knob" /></div>
         <button id="btn-jump" className="jump-btn" aria-label="Jump">⬆ JUMP</button>
@@ -90,7 +92,7 @@ export default function Home() {
             <div className="controls-help">
               <span>🕹️ P1: WASD + Space (jump ×2, hold = glide)</span>
               <span>👥 P2: Arrows + Enter</span>
-              <span>🖱️ Drag — camera · E — ride / use things (Space hop, H honk) · F — talk</span>
+              <span>🖱️ Drag — camera · E — ride / use things (Space hop, H honk) · F — talk · C — photo</span>
               <span>T — teleport to friend</span>
               <span>📱 Tablet: left thumb moves, tap JUMP, drag right side to look</span>
               <span>1–6 — stickers · 7 — dance 💃 · Esc — pause · M — mute</span>
