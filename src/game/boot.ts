@@ -118,6 +118,7 @@ declare global {
       remotes: number;
       props: { cones: number; boxes: number };
       carSpeed: number;
+      carVy: number;
       /** Test hooks: move the helicopter / the kid. */
       placeHeli: (x: number, y: number, z: number, heading: number) => void;
       /** Onto the highest ground at (x, z), or the floor just below y when given (inside a house). */
@@ -2842,6 +2843,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     inside: world.isInside(players[0].pos),
     pet: pet.active ? { x: pet.group.position.x, y: pet.group.position.y, z: pet.group.position.z } : null,
     carSpeed: car.speed,
+    carVy: (car as unknown as { vy: number }).vy,
     placeHeli: (x: number, y: number, z: number, heading: number) => {
       heli.pos.set(x, y, z);
       heli.heading = heading;

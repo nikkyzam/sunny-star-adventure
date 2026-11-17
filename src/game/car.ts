@@ -14,6 +14,16 @@
 import * as THREE from "three";
 import type { World } from "./world";
 import type { Player } from "./player";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+
+/** Real models (CC0 from poly.pizza): Quaternius' Sail Boat and kazuma's Helicopter. Loaded once. */
+const vehicleFiles: Partial<Record<RideKind, Promise<THREE.Object3D | null>>> = {};
+function vehicleModel(kind: "boat" | "heli"): Promise<THREE.Object3D | null> {
+  return (vehicleFiles[kind] ??= new GLTFLoader()
+    .loadAsync(`${import.meta.env.BASE_URL}models/vehicles/${kind}.glb`)
+    .then((g) => g.scene as THREE.Object3D)
+    .catch(() => null));
+}
 
 const ACCEL = 16;
 const MAX_SPEED = 13;
@@ -71,10 +81,12 @@ export class Car {
       this.seatZ = 0.1;
       this.seatY = 0.18;
       this.buildBoat();
+      this.useModel("boat");
     } else if (kind === "heli") {
       this.seatZ = 0.35;
       this.seatY = 0.5;
       this.buildHeli();
+      this.useModel("heli");
     } else if (kind === "jet") {
       this.seatZ = 0.5;
       this.seatY = 0.55;
@@ -145,6 +157,66 @@ export class Car {
       this.wheels.push(w);
     }
   }
+
+  /** Swap the drawn-in-code ride for the real model once it has loaded (the drawn one stays if it can't). */
+  private useModel(kind: "boat" | "heli"): void {
+    void vehicleModel(kind).then((src) => {
+      if (!src) return;
+      const model = src.clone(true);
+      const box = new THREE.Box3();
+      const fit = new THREE.Group();
+      fit.add(model);
+      // per-ride fit: scale, then sit the hull/skids at the right height with the middle on the origin
+      const scale = kind === "boat" ? 4.4 : 1.7;
+      fit.scale.setScalar(scale);
+      fit.updateMatrixWorld(true);
+      box.setFromObject(fit);
+      const mid = box.getCenter(new THREE.Vector3());
+      // the helicopter slides back so both seats sit under the cockpit glass, not inside the cabin walls
+      fit.position.set(-mid.x, (kind === "boat" ? -0.3 : 0) - box.min.y, -mid.z - (kind === "heli" ? 2.8 : 0));
+      let rotor: THREE.Mesh | null = null;
+      model.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.castShadow = true;
+        const mat = (m.material as THREE.MeshStandardMaterial).clone();
+        m.material = mat;
+        mat.roughness = 0.6;
+        if (kind === "heli") {
+          if (mat.name === "Material.002") rotor = m;                  // the blades
+          if (mat.name === "Material.004") {                           // the windows: glass, so you can see the kid
+            mat.color.set(0xbfefff);
+            mat.transparent = true;
+            mat.opacity = 0.45;
+            m.castShadow = false;
+          }
+          if (mat.name === "Material.001") mat.color.set(0xffb21e);    // a bright yellow rescue helicopter
+          if (mat.name === "Material.003") mat.color.set(0xff4757);
+        }
+        if (kind === "boat" && mat.name === "Sail") mat.color.set(0xfff6e5);
+      });
+      if (rotor) {
+        // re-centre the blades on their hub so they spin in place
+        const r = rotor as THREE.Mesh;
+        r.geometry = r.geometry.clone();
+        r.geometry.computeBoundingBox();
+        const c = r.geometry.boundingBox!.getCenter(new THREE.Vector3());
+        r.geometry.translate(-c.x, -c.y, 0);
+        const hub = new THREE.Group();
+        hub.position.set(c.x, c.y, 0);
+        r.parent!.add(hub);
+        r.position.set(0, 0, 0);
+        hub.add(r);
+        this.modelRotor = hub;
+      }
+      for (const child of [...this.group.children]) this.group.remove(child);
+      this.group.add(fit);
+      this.rotors = [];
+    });
+  }
+
+  /** The real helicopter's blades (spin about their local Z, which is "up" inside the model). */
+  private modelRotor: THREE.Object3D | null = null;
 
   private buildBoat(): void {
     const wood = new THREE.MeshStandardMaterial({ color: 0xc98a5b, flatShading: true, roughness: 0.85 });
@@ -506,6 +578,7 @@ export class Car {
     const spin = this.driver ? (this.flying || this.lift ? 28 : 12) : 0;
     if (this.rotors[0]) this.rotors[0].rotation.y += spin * dt;
     if (this.rotors[1]) this.rotors[1].rotation.x += spin * dt;
+    if (this.modelRotor) this.modelRotor.rotation.z += spin * dt;
     const roll = this.flying ? -axX * f.bank : 0;
     const pitch = this.flying ? (this.kind === "heli" ? this.speed * 0.02 : -this.vy * 0.04) : 0;
     this.group.rotation.set(pitch, this.heading, roll, "YXZ");

@@ -100,8 +100,15 @@ try {
   check("D3b honk button shows while driving", await visible("#btn-honk"));
   await page.keyboard.press("KeyH");
 
+  // watch the peak inside the page: on a slow test machine each round trip can outlast the hop
+  await page.evaluate(() => {
+    window.__peak = 0;
+    const tick = () => { window.__peak = Math.max(window.__peak, window.__gameDebug().car?.y ?? 0); if (window.__peak < 5) window.__peakRaf = requestAnimationFrame(tick); };
+    tick();
+  });
   await page.keyboard.press("Space");
-  const hop = await hold(null, () => false, 700);
+  await page.waitForTimeout(900);
+  const hop = { maxY: await page.evaluate(() => { cancelAnimationFrame(window.__peakRaf); return window.__peak; }) };
   check("D4 Space hops the car", hop.maxY > 0.4, `peak ${hop.maxY.toFixed(2)}`);
 
   // forward (-z) from (4, 14): the cone at (3, 5.2) is in the way

@@ -1,0 +1,4 @@
+Vehicle models, both released into the public domain (CC0 1.0):
+  boat.glb  "Sail Boat" by Quaternius  https://poly.pizza/m/BgSZXwmm7k
+  heli.glb  "Helicopter" by kazuma     https://poly.pizza/m/EQJ2MECUbx
+The game recolours the helicopter (yellow body, glass windows) and lightens the sail.
