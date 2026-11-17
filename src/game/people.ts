@@ -14,7 +14,7 @@ import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
-import type { Move } from "./humans";
+import { BoneGuard, type Move } from "./humans";
 
 export const ADULT_FILES = [
   "male_casual", "male_longsleeve", "male_shirt", "male_suit",
@@ -93,6 +93,7 @@ export class Adult {
   private neck: THREE.Object3D | null;
   private head: THREE.Object3D | null;
   private lookYaw = 0;
+  private readonly guard = new BoneGuard();
   private lookPitch = 0;
 
   constructor(private readonly kit: PersonKit, look: AdultLook) {
@@ -190,11 +191,23 @@ export class Adult {
     const roll = o.grounded ? THREE.MathUtils.clamp(-o.turnRate * 0.05, -0.15, 0.15) : 0;
     this.root.rotation.z += (roll - this.root.rotation.z) * k;
     this.root.updateMatrixWorld(true);
+    this.guard.restore();
     this.turnHead(dt, o.look ?? null);
+    this.guard.commit();
   }
 
   debugFeet(_ground?: unknown): number[] {
     return [];
+  }
+
+  /** How far the head is turned from the body (radians, for tests). */
+  headYaw(): number {
+    const h = this.head;
+    if (!h) return 0;
+    const hq = h.getWorldQuaternion(new THREE.Quaternion());
+    const rq = this.root.getWorldQuaternion(new THREE.Quaternion());
+    const rel = rq.invert().multiply(hq);
+    return new THREE.Euler().setFromQuaternion(rel, "YXZ").y;
   }
 
   dispose(): void {
@@ -241,6 +254,7 @@ export class Adult {
     for (const [bone, share] of [[this.neck, 0.4], [this.head, 0.6]] as const) {
       Q2.setFromEuler(E1.set(this.lookPitch * share, this.lookYaw * share, 0, "YXZ"));
       Q3.copy(rootQ).multiply(Q2).multiply(Q4.copy(rootQ).invert());
+      this.guard.mark(bone);
       const world = bone.getWorldQuaternion(Q5).premultiply(Q3);
       const parent = bone.parent!.getWorldQuaternion(Q2);
       bone.quaternion.copy(parent.invert().multiply(world));

@@ -2820,6 +2820,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       return { name: n.def.name, min: b.min.toArray().map((v) => +v.toFixed(2)), max: b.max.toArray().map((v) => +v.toFixed(2)), meshes, skinned };
     }),
     gaitTrace,
+    heads: () => [...players.map((p) => ['kid', p.debugHeadYaw()] as const), ...npcs.items.map((n) => [n.def.name, n.p.debugHeadYaw()] as const)],
     move: players[0].debugMove(),
     feet: players[0].debugFeet(),
     setBank: (n: number) => {

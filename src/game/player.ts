@@ -632,6 +632,11 @@ export class Player {
     this.animate(dt);
   }
 
+  /** How far the head is turned from the body (for tests). */
+  debugHeadYaw(): number {
+    return this.human?.headYaw() ?? 0;
+  }
+
   /** What the human model shows right now (for tests). */
   debugMove(): string {
     return this.human?.move ?? "";

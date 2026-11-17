@@ -323,6 +323,36 @@ const Q1 = new THREE.Quaternion(), Q2 = new THREE.Quaternion(), Q3 = new THREE.Q
 const Q5 = new THREE.Quaternion(), Q6 = new THREE.Quaternion();
 const E1 = new THREE.Euler();
 
+/**
+ * Bones we turn by hand (head look, foot IK) are only safe to turn again once the animation has
+ * set them afresh. Some clips leave a bone alone; then last frame's turn would still be there and
+ * the next turn would add on top, frame after frame: a head that slowly spins round. So before
+ * turning, put back what the bone was if the animation didn't touch it since our last turn.
+ */
+export class BoneGuard {
+  private saved = new Map<THREE.Object3D, { before: THREE.Quaternion; after: THREE.Quaternion }>();
+
+  /** Call before turning any bones this frame. */
+  restore(): void {
+    for (const [bone, s] of this.saved) {
+      if (Math.abs(bone.quaternion.dot(s.after)) > 0.999999) bone.quaternion.copy(s.before);
+      bone.updateMatrixWorld(true);
+    }
+  }
+
+  /** Call just before turning a bone. */
+  mark(bone: THREE.Object3D): void {
+    let s = this.saved.get(bone);
+    if (!s) this.saved.set(bone, (s = { before: new THREE.Quaternion(), after: new THREE.Quaternion() }));
+    s.before.copy(bone.quaternion);
+  }
+
+  /** Call after all turning is done this frame. */
+  commit(): void {
+    for (const [bone, s] of this.saved) s.after.copy(bone.quaternion);
+  }
+}
+
 /** Rotate a bone by `q` in world space (keeps its children attached). */
 function turnBoneWorld(bone: THREE.Object3D, q: THREE.Quaternion): void {
   const world = bone.getWorldQuaternion(Q5);
@@ -541,6 +571,7 @@ export class Human {
     look?: THREE.Vector3 | null;
   }): void {
     if (!this.fresh) return;
+    this.guard.restore();
     const speed = this.shownSpeed;
     // lean: into the turn (more when fast), forward when speeding up, back when stopping
     const roll = o.grounded ? THREE.MathUtils.clamp(-o.turnRate * speed * 0.035, -0.2, 0.2) : 0;
@@ -552,6 +583,7 @@ export class Human {
 
     if (o.ground) this.plantFeet(dt, o.ground, o.baseY, o.grounded);
     this.turnHead(dt, o.look ?? null);
+    this.guard.commit();
   }
 
   /** Each ankle's height above the ground under it (for tests). */
@@ -580,6 +612,7 @@ export class Human {
   private footOff = [0, 0];
   private drop = 0;
   private lookYaw = 0;
+  private readonly guard = new BoneGuard();
   private lookPitch = 0;
 
   private action(move: Move): THREE.AnimationAction | null {
@@ -692,6 +725,8 @@ export class Human {
       const thigh = this.bone[th], calf = this.bone[ca], foot = this.bone[fo];
       if (!thigh || !calf || !foot) continue;
       const target = foot.getWorldPosition(V3).add(V4.set(0, this.footOff[i] + drop, 0));
+      this.guard.mark(thigh);
+      this.guard.mark(calf);
       solveLeg(thigh, calf, foot, target);
     }
   }
@@ -720,9 +755,20 @@ export class Human {
       // the turn, in the character's own frame, carried into world space
       Q2.setFromEuler(E1.set(this.lookPitch * share, this.lookYaw * share, 0, "YXZ"));
       Q3.copy(rootQ).multiply(Q2).multiply(Q4.copy(rootQ).invert());
+      this.guard.mark(bone);
       turnBoneWorld(bone, Q3);
       bone.updateWorldMatrix(false, true);
     }
+  }
+
+  /** How far the head is turned from the body (radians, for tests). */
+  headYaw(): number {
+    const h = this.bone.Head;
+    if (!h) return 0;
+    const hq = h.getWorldQuaternion(new THREE.Quaternion());
+    const rq = this.root.getWorldQuaternion(new THREE.Quaternion());
+    const rel = rq.invert().multiply(hq);
+    return new THREE.Euler().setFromQuaternion(rel, "YXZ").y;
   }
 
   dispose(): void {
