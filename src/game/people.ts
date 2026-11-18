@@ -211,7 +211,7 @@ export class Adult {
     if (sk && legs.legL instanceof THREE.Bone && legs.legR instanceof THREE.Bone && legs.hips instanceof THREE.Bone) {
       const bones = { hips: legs.hips, legL: legs.legL, legR: legs.legR };
       const sg = skinnedRobe(kind, geo, hips, (g) => skinSkirt(g, this.root, sk, bones, geo.waist, geo.hemY));
-      for (const [g, m] of [[sg.skirt, robeM], [sg.hem, trimM]] as const) skirtMesh(g, m, sk, bones).userData.robe = true;
+      for (const [g, m] of [[sg.skirt, robeM], [sg.hem, trimM]] as const) skirtMesh(g, m, sk, bones, true).userData.robe = true;
     } else {
       for (const piece of [add(hipsBone, geo.skirt, robeM, 0.78), add(hipsBone, geo.hem, trimM, 0.78)]) piece.position.set(hips.x, hips.y, hips.z);
     }

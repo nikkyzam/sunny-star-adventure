@@ -27,6 +27,7 @@ const FOLLOW = 16;      // how quickly the cloth catches up with the legs (per s
 const DRAG = 0.035;     // trailing back, radians per metre per second of speed
 const DRAG_MAX = 0.32;
 const SPREAD = 0.3;     // legs apart (astride a saddle): the cloth still hangs down at the sides
+const HEEL_ROOM = 0.22; // long robes: how far (radians) a heel may kick back before the cloth is lifted with it
 const SPRING = 80, DAMP = 9; // a soft spring: settles with a small bounce
 
 /** A cloth bone: sits at the top of a thigh, under the hips, and is moved by its rig each frame. */
@@ -51,6 +52,11 @@ class ClothRig {
   private readonly sideAxis = new THREE.Vector3();
   private last = -1;
   private stamp = -1;
+  /** Ankle-length clothes: the back lifts with a heel kicking up behind, so the leg stays inside. */
+  long = false;
+  private readonly calf: [THREE.Bone | null, THREE.Bone | null];
+  private readonly calfRest: [THREE.Quaternion, THREE.Quaternion];
+  private readonly heel = [0, 0];
 
   constructor(private readonly bones: SkirtBones, skel: THREE.Skeleton) {
     const hi = skel.bones.indexOf(bones.hips);
@@ -69,6 +75,16 @@ class ClothRig {
     const l = make(bones.legL), r = make(bones.legR);
     this.cloth = [l.b, r.b];
     this.rest = [l.rest, r.rest];
+    // the shin: the first bone under each thigh, and how it sat in the modelled pose
+    const shin = (leg: THREE.Bone): [THREE.Bone | null, THREE.Quaternion] => {
+      const c = leg.children.find((o): o is THREE.Bone => (o as THREE.Bone).isBone && skel.bones.includes(o as THREE.Bone)) ?? null;
+      const q = new THREE.Quaternion();
+      if (c) new THREE.Matrix4().multiplyMatrices(skel.boneInverses[skel.bones.indexOf(leg)], M.copy(skel.boneInverses[skel.bones.indexOf(c)]).invert()).decompose(V, q, S);
+      return [c, q];
+    };
+    const cl = shin(bones.legL), cr = shin(bones.legR);
+    this.calf = [cl[0], cr[0]];
+    this.calfRest = [cl[1], cr[1]];
     hipsInv.decompose(V, Q, S);
     this.sideAxis.set(1, 0, 0).applyQuaternion(Q).normalize();
     this.skeleton = new THREE.Skeleton([bones.hips, l.b, r.b], [hipsInv.clone(), l.inv, r.inv]);
@@ -91,7 +107,36 @@ class ClothRig {
     this.bones.hips.matrixWorld.decompose(V, HQ, S);
     const tl = this.tilt.length();
     Q.setFromAxisAngle(tl > 1e-5 ? L.copy(this.tilt).divideScalar(tl) : UP, tl);
-    b.quaternion.copy(HQ).invert().multiply(Q).multiply(HQ).multiply(this.cur[side]);
+    b.quaternion.copy(HQ).invert().multiply(Q).multiply(HQ);
+    if (this.heel[side] > 0) b.quaternion.multiply(Q.setFromAxisAngle(this.sideAxis, this.heel[side]));
+    b.quaternion.multiply(this.cur[side]);
+  }
+
+  /** How far round the side axis (backward is positive) a turn in the hips' space goes. */
+  private pitch(q: THREE.Quaternion): number {
+    const ax = this.sideAxis, dp = q.x * ax.x + q.y * ax.y + q.z * ax.z;
+    return 2 * Math.atan2(q.w < 0 ? -dp : dp, Math.abs(q.w));
+  }
+
+  /**
+   * Where each heel is: with the thigh back and the knee bent (running), the foot swings up behind,
+   * further back than the thigh alone shows (by about half the knee's bend). If it would go past the
+   * back of the cloth, lift the cloth with it — at once, the way a heel catches a hem.
+   */
+  private heels(legs: THREE.Quaternion[], dt: number) {
+    for (let i = 0; i < 2; i++) {
+      const c = this.calf[i];
+      let want = 0;
+      if (c) {
+        Q.copy(c.quaternion).multiply(Q2.copy(this.calfRest[i]).invert());
+        const bend = 2 * Math.acos(Math.min(1, Math.abs(Q.w)));
+        const foot = this.pitch(legs[i]) + bend * 0.5;
+        want = Math.max(0, foot - HEEL_ROOM - this.pitch(this.cur[i]));
+      }
+      // up fast with the kick, down a little slower as the cloth falls back
+      const rate = want > this.heel[i] ? 30 : 9;
+      this.heel[i] += (want - this.heel[i]) * (1 - Math.exp(-rate * dt));
+    }
   }
 
   /** Once a frame: follow the legs (a moment late) and swing with the body's movement. */
@@ -126,6 +171,7 @@ class ClothRig {
       return;
     }
     const k = 1 - Math.exp(-FOLLOW * dt);
+    if (this.long) this.heels([dl, dr], dt);
     this.cur[0].slerp(this.target[0], k);
     this.cur[1].slerp(this.target[1], k);
     // the wind of moving: tip the hem back, against the way the body goes
@@ -203,11 +249,12 @@ export function skinSkirt(geo: THREE.BufferGeometry, root: THREE.Object3D, mesh:
 }
 
 /** A skinned skirt piece, hanging on `mesh`'s cloth bones. */
-export function skirtMesh(geo: THREE.BufferGeometry, mat: THREE.Material, mesh: THREE.SkinnedMesh, bones: SkirtBones): THREE.SkinnedMesh {
+export function skirtMesh(geo: THREE.BufferGeometry, mat: THREE.Material, mesh: THREE.SkinnedMesh, bones: SkirtBones, long = false): THREE.SkinnedMesh {
   const m = new THREE.SkinnedMesh(geo, mat);
   m.castShadow = true;
   m.frustumCulled = false;
   const rig = rigFor(mesh, bones);
+  if (rig && long) rig.long = true;
   m.bind(rig ? rig.skeleton : mesh.skeleton, mesh.bindMatrix);
   mesh.parent!.add(m);
   return m;
