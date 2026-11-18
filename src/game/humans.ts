@@ -402,6 +402,13 @@ function solveLeg(thigh: THREE.Bone, calf: THREE.Bone, foot: THREE.Bone, target:
   foot.updateWorldMatrix(false, true);
 }
 
+const BONES = ["thigh_l", "calf_l", "foot_l", "thigh_r", "calf_r", "foot_r", "neck_01", "Head", "pelvis", "spine_01",
+  "upperarm_l", "lowerarm_l", "hand_l", "upperarm_r", "lowerarm_r", "hand_r"] as const;
+type BoneName = (typeof BONES)[number];
+
+/** On an animal's back: how fast it goes and where in its stride it is (0–1), for the rider's hands. */
+export interface Saddle { speed: number; phase: number }
+
 export class Human {
   readonly root: THREE.Group;
   /** Accessories built for the old cartoon head (center (0, 1.5, 0), radius 0.26) go in here. */
@@ -495,7 +502,7 @@ export class Human {
       sg.translate(0, waistY - 0.24, 0);
       const skirtM = cloth(look.top);
       skirtM.side = THREE.DoubleSide;
-      if (legs) skirtMesh(cachedSkirt(`${look.body % k.bodies.length}:dress`, () => skinSkirt(sg, this.root, body, legs, waistY, waistY - 0.48)), skirtM, body);
+      if (legs) skirtMesh(cachedSkirt(`${look.body % k.bodies.length}:dress`, () => skinSkirt(sg, this.root, body, legs, waistY, waistY - 0.48)), skirtM, body, legs);
       else { const skirt = new THREE.Mesh(sg, skirtM); skirt.castShadow = true; hips.add(skirt); }
       const belt = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.025, 8, 24), cloth(look.accent));
       belt.rotation.x = Math.PI / 2;
@@ -520,8 +527,8 @@ export class Human {
       hem.translate(0, hemY + 0.02, 0);
       const legs = skirtBones(bones);
       if (legs) {
-        skirtMesh(cachedSkirt(`${look.body % k.bodies.length}:tunic`, () => skinSkirt(lathe, this.root, body, legs, waistY, hemY)), robeM, body);
-        skirtMesh(cachedSkirt(`${look.body % k.bodies.length}:tunic-hem`, () => skinSkirt(hem, this.root, body, legs, waistY, hemY)), trimM, body);
+        skirtMesh(cachedSkirt(`${look.body % k.bodies.length}:tunic`, () => skinSkirt(lathe, this.root, body, legs, waistY, hemY)), robeM, body, legs);
+        skirtMesh(cachedSkirt(`${look.body % k.bodies.length}:tunic-hem`, () => skinSkirt(hem, this.root, body, legs, waistY, hemY)), trimM, body, legs);
       } else {
         add(new THREE.Mesh(lathe, robeM));
         add(new THREE.Mesh(hem, trimM));
@@ -553,7 +560,7 @@ export class Human {
       anchorAt(head, this.root).add(this.headAcc);
     }
 
-    for (const n of ["thigh_l", "calf_l", "foot_l", "thigh_r", "calf_r", "foot_r", "neck_01", "Head"] as const) {
+    for (const n of BONES) {
       this.bone[n] = bones.get(n);
     }
     this.mixer = new THREE.AnimationMixer(this.root);
@@ -619,6 +626,7 @@ export class Human {
     turnRate: number; accel: number; grounded: boolean;
     ground?: ((x: number, z: number) => number | null) | null; baseY: number;
     look?: THREE.Vector3 | null;
+    saddle?: Saddle | null;
   }): void {
     if (!this.fresh) return;
     this.guard.restore();
@@ -632,6 +640,7 @@ export class Human {
     this.root.updateMatrixWorld(true);
 
     if (o.ground) this.plantFeet(dt, o.ground, o.baseY, o.grounded);
+    if (o.saddle) this.holdReins(dt, o.saddle);
     this.turnHead(dt, o.look ?? null);
     this.guard.commit();
   }
@@ -658,7 +667,10 @@ export class Human {
   private weight = new Map<Move, number>();
   /** update() moved the bones this frame, so pose() may adjust them. */
   private fresh = false;
-  private bone: Partial<Record<"thigh_l" | "calf_l" | "foot_l" | "thigh_r" | "calf_r" | "foot_r" | "neck_01" | "Head", THREE.Bone>> = {};
+  private bone: Partial<Record<BoneName, THREE.Bone>> = {};
+  /** How much the rider is moving with the animal (eases in and out). */
+  private rideSway = 0;
+  private rideT = 0;
   private footOff = [0, 0];
   private drop = 0;
   private lookYaw = 0;
@@ -778,6 +790,44 @@ export class Human {
       this.guard.mark(thigh);
       this.guard.mark(calf);
       solveLeg(thigh, calf, foot, target);
+    }
+  }
+
+  /**
+   * Riding: both hands hold the reins in front of the tummy and go with the animal's stride (forward
+   * and down on each beat, a little loose), and the body leans in and rocks when it goes fast.
+   */
+  private holdReins(dt: number, s: Saddle): void {
+    const b = this.bone;
+    if (!b.pelvis || !b.thigh_l || !b.calf_l) return;
+    this.rideT += dt;
+    const go = THREE.MathUtils.clamp(s.speed / 7, 0, 1);
+    this.rideSway += (go - this.rideSway) * Math.min(1, dt * 4);
+    const a = this.rideSway, ph = s.phase * Math.PI * 2;
+    // the body: lean forward when going fast, rock with each stride
+    if (b.spine_01) {
+      this.guard.mark(b.spine_01);
+      const axis = V1.set(1, 0, 0).transformDirection(this.root.matrixWorld);
+      turnBoneWorld(b.spine_01, Q4.setFromAxisAngle(axis, 0.04 + a * 0.2 + Math.sin(ph) * (0.03 + a * 0.06)));
+      b.spine_01.updateWorldMatrix(false, true);
+    }
+    // the hands, in the body's space: low in front of the tummy, a fist's width apart
+    const toRoot = new THREE.Matrix4().copy(this.root.matrixWorld).invert();
+    const hip = b.pelvis.getWorldPosition(V2).applyMatrix4(toRoot);
+    const u = b.thigh_l.getWorldPosition(V3).distanceTo(b.calf_l.getWorldPosition(V4)) / this.root.getWorldScale(V4).y;
+    const breathe = Math.sin(this.rideT * 1.7) * 0.015;
+    for (const [side, up, low, hand] of [[1, b.upperarm_l, b.lowerarm_l, b.hand_l], [-1, b.upperarm_r, b.lowerarm_r, b.hand_r]] as const) {
+      if (!up || !low || !hand) continue;
+      const lag = side > 0 ? 0 : 0.35; // the hands don't move quite together
+      const t = V5.set(
+        hip.x + side * 0.2 * u,
+        hip.y + (0.4 + breathe + Math.cos(ph - lag) * 0.06 * a) * u,
+        hip.z + (0.4 + a * 0.06 + Math.sin(ph - lag) * 0.07 * a) * u,
+      ).applyMatrix4(this.root.matrixWorld);
+      this.guard.mark(up);
+      this.guard.mark(low);
+      this.guard.mark(hand);
+      solveLeg(up, low, hand, t.clone());
     }
   }
 

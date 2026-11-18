@@ -183,6 +183,8 @@ export interface Rider {
   vel: THREE.Vector3;
   facing: number;
   group: THREE.Object3D;
+  /** Set while on an animal: its speed and where it is in its stride, for the rider's hands. */
+  saddle?: { speed: number; phase: number } | null;
 }
 
 /** Animals a kid can climb onto, and how high their back is (a share of their height). */
@@ -356,6 +358,7 @@ export class Herds {
   dismount(rider: Rider): boolean {
     const b = this.beasts.find((x) => x.rider === rider);
     if (!b) return false;
+    rider.saddle = null;
     b.rider = null;
     b.v = 0;
     b.hop = 0;
@@ -425,7 +428,10 @@ export class Herds {
     const p = b.m.root.position, h = HEIGHT[b.kind];
     const back = h * (BACK[b.kind] ?? 0.6) - 0.45; // the kid's seated hips sit ~0.45 above their feet
     // a little bob in time with the stride
-    const bob = b.v > 0.3 ? Math.abs(Math.sin(performance.now() / (b.v > b.m.walk * 2 ? 110 : 200))) * 0.06 : 0;
+    const beat = performance.now() / (b.v > b.m.walk * 2 ? 110 : 200);
+    const bob = b.v > 0.3 ? Math.abs(Math.sin(beat)) * 0.06 : 0;
+    // one bob is half a sine: the stride phase goes round once per bob
+    r.saddle = { speed: b.v, phase: (beat / Math.PI) % 1 };
     r.pos.set(p.x - Math.sin(b.heading) * h * 0.06, p.y + back + bob, p.z - Math.cos(b.heading) * h * 0.06);
     r.vel.set(0, 0, 0);
     r.facing = b.heading;

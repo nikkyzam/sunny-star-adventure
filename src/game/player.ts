@@ -169,6 +169,8 @@ export class Player {
   glideActive = false;
   /** Set by the car: while riding, the controller physics is skipped and boot places the kid. */
   riding = false;
+  /** On an animal's back (set by the herd): its speed and stride, so the hands hold the reins. */
+  saddle: { speed: number; phase: number } | null = null;
   /** Seconds of balloon float left (0 = not floating). */
   floatT = 0;
   /** Seconds of dance left. */
@@ -687,6 +689,7 @@ export class Player {
       h.pose(dt, {
         turnRate: grounded ? this.turnRate : 0, accel: grounded ? this.accelRate : 0, grounded,
         ground: this.groundFn, baseY: this.pos.y, look: this.riding ? null : this.lookTarget,
+        saddle: this.riding ? this.saddle : null,
       });
     }
 
