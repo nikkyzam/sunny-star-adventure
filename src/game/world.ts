@@ -32,6 +32,7 @@ import type { JobId } from "./jobs";
 import type { TrafficLoop } from "./traffic";
 import type { HerdDef } from "./critters";
 import { buildBethlehem, type BethlehemDef } from "./bethlehem";
+import { buildCastle, type CastleDef } from "./castle";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 /** Something decorative to draw: by the code-built shapes, or by the models in env.ts once loaded. */
@@ -197,6 +198,8 @@ export interface LevelDef {
   ark?: [number, number];
   /** Christmas in Bethlehem: the town, the inn, the stable under the star, the shepherds' field. */
   bethlehem?: BethlehemDef;
+  /** Castles to explore: walls to walk along, towers, a keep to climb (castle.ts). */
+  castles?: CastleDef[];
 }
 
 export const LEVELS: LevelDef[] = [
@@ -756,7 +759,9 @@ const ADVENTURE_ISLAND: LevelDef = {
     ["cupcake", -3, 1.0, 6], ["apple", -14, 1.3, -6], ["apple", 6, 1.3, -38], ["icecream", 28, 1.0, -22],
     ["apple", -78, 1.3, -57], ["icecream", -70, 1.3, -67], ["pizza", 60, 1.3, 20], ["cupcake", 30, 31, 3],
   ],
-  pirates: [[0, 50, 10, 0.22], [-48, 12, 8, -0.26], [46, -6, 6, 0.3]],
+  pirates: [[0, 50, 10, 0.22], [-64, 20, 8, -0.26], [46, -6, 6, 0.3]],
+  // Castle Isle, joined to the beach: the gate faces the dock
+  castles: [{ x: -27, z: 22, turn: 1, name: "Sunny Castle", stone: 0xe0d8c8, roof: 0x4d7fd6, flag: 0xff6b9d }],
   playground: [8, -1],
   station: [-2.8, 16.4],
   extraCars: [[38, 0, -62, 0]],
@@ -772,6 +777,7 @@ const ADVENTURE_ISLAND: LevelDef = {
     { kinds: ["donkey", "alpaca", "alpaca"], x: -3, z: -17, r: 4.5 },          // by Farmer Fern's field
     { kinds: ["cow", "cow", "bull", "horse_white", "horse"], x: 61, z: 25, r: 7 }, // the farm on East Isle
     { kinds: ["deer", "stag", "deer", "fox"], x: -73, z: -66, r: 8 },           // the woods on West Isle
+    { kinds: ["horse_white", "horse"], x: -11.5, z: 28, r: 3 },                // ready to ride, by the castle gate
   ],
   discs: [
     { x: 0, z: -20, r: 36, y: 0, color: SAND },                      // the beach
@@ -796,6 +802,11 @@ const ADVENTURE_ISLAND: LevelDef = {
     { x: 30, z: 15, r: 3, y: 0.1, color: SAND },                         // the sandbar
     { x: 30, z: 0, r: 7, y: 30, trees: 1, flowers: 5, color: 0xffffff }, // Cloud Island, high in the sky: fly there!
     { x: -38, z: 36, r: 5.5, y: 0.2, trees: 2, rocks: 1, color: SAND },  // Shell Islet
+    // Castle Isle (the castle needs a clear meadow, so no trees or rocks in the middle)
+    { x: -27, z: 22, r: 21, y: 0, color: SAND },
+    { x: -27, z: 22, r: 17, y: 0.3 },
+    { x: -40, z: 34, r: 3.5, y: 0.34, trees: 3, flowers: 3 },
+    { x: -13.5, z: 31, r: 3, y: 0.34, flowers: 4 },
     // the causeway: overlapping sand discs, wide enough for the car
     { x: 26.5, z: -46.5, r: 3.5, y: 0, color: SAND },
     { x: 30, z: -50, r: 3.5, y: 0, color: SAND },
@@ -852,6 +863,7 @@ const ADVENTURE_ISLAND: LevelDef = {
     [-56, 1.3, -12.5, "Matthew 6:33"],      // Treasure Rock
     [30, 31.2, 3, "Psalm 19:1"],            // Cloud Island
     [-70, 1.4, -68, "Psalm 24:1"],          // Pine Island
+    [-30.5, 9.9, 22, "Psalm 46:1"],         // the lookout on top of the castle keep
   ],
   springs: [
     { x: 20, z: -18, y: 0.3, power: 18 },   // → the blue house roof
@@ -877,6 +889,7 @@ const ADVENTURE_ISLAND: LevelDef = {
     [30, 31.2, -1], [33.5, 31.2, 3],                                              // Cloud Island (fly there)
   ],
   coins: [
+    [-33, 5.8, 30], [-30, 5.8, 30], [-27, 5.8, 30], [-24, 5.8, 30], [-21, 5.8, 30], // along the castle wall walk
     ...ring(16, 32, 0, -20, 1.0, 0.2),
     [0, 1.3, 4], [0, 1.3, 0], [0, 1.3, -4], [0, 1.3, -8],
     [10, 1.3, -18], [19, 1.3, -22], [20, 1.3, -14],
@@ -939,6 +952,15 @@ const ADVENTURE_ISLAND: LevelDef = {
         "Oh, a visitor! Come in, come in. Make yourself at home, dear.",
         "The pink house has a star inside. So does the tall purple one!",
         "Mind your head when you jump indoors!",
+      ],
+    },
+    {
+      name: "Guard Gus", x: -14.5, y: 0.3, z: 18.2, outfit: 0, hat: 0, skin: 1,
+      lines: [
+        "Welcome to Sunny Castle! The gate is open. Come on in!",
+        "Climb the stairs inside the walls and walk all the way round the top.",
+        "The tall tower is the keep. There's a scroll waiting at the very top!",
+        "A castle keeps everyone safe inside. The Bible says God is our refuge and strength, like a mighty castle!",
       ],
     },
     {
@@ -2367,6 +2389,7 @@ export class World {
     if (def.ferris) this.buildFerris(...def.ferris);
     if (def.ark) this.buildArk(def.ark[0], def.ark[1]);
     if (def.bethlehem) buildBethlehem({ group: this.group, platforms: this.platforms, solids: this.solids, anim: this.anim }, def.bethlehem, 0.3);
+    for (const c of def.castles ?? []) buildCastle({ group: this.group, platforms: this.platforms, solids: this.solids, anim: this.anim }, c, c.y ?? 0.3);
     if (def.bigFish) this.buildBigFish(def.bigFish[0], def.bigFish[1], def.sea ?? 0);
     for (const [tx, ty, tz, color] of def.tents ?? []) {
       const tent = new THREE.Mesh(new THREE.ConeGeometry(1.6, 2.4, 4).rotateY(Math.PI / 4), new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.9 }));

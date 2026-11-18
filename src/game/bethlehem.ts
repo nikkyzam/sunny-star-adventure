@@ -360,7 +360,7 @@ function glowTexture(): THREE.CanvasTexture {
   return glowTex;
 }
 
-function textTexture(text: string, bg: string, fg: string): THREE.CanvasTexture {
+export function textTexture(text: string, bg: string, fg: string): THREE.CanvasTexture {
   const c = document.createElement("canvas");
   c.width = 512;
   c.height = 96;
