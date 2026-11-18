@@ -13,6 +13,7 @@
  */
 
 import * as THREE from "three";
+import { skinSkirt, skirtMesh, type SkirtBones } from "./skirt";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -306,6 +307,18 @@ function outfitFor(bk: BodyKit, style: number) {
   return o;
 }
 
+/** Skinned skirts are the same for every character of one body: made once and shared. */
+const skirtCache = new Map<string, THREE.BufferGeometry>();
+function cachedSkirt(key: string, make: () => THREE.BufferGeometry): THREE.BufferGeometry {
+  return skirtCache.get(key) ?? skirtCache.set(key, make()).get(key)!;
+}
+
+/** The kid skeleton's hips and thighs, for skirts that swing with the legs. */
+function skirtBones(bones: Map<string, THREE.Bone>): SkirtBones | null {
+  const hips = bones.get("pelvis"), legL = bones.get("thigh_l"), legR = bones.get("thigh_r");
+  return hips && legL && legR ? { hips, legL, legR } : null;
+}
+
 /** An Object3D under `bone` whose children can be placed in the character's model space. */
 function anchorAt(bone: THREE.Object3D, root: THREE.Object3D): THREE.Group {
   root.updateMatrixWorld(true);
@@ -477,11 +490,13 @@ export class Human {
       const hips = anchorAt(pelvis, this.root);
       this.root.updateMatrixWorld(true);
       const waistY = new THREE.Vector3().setFromMatrixPosition(pelvis.matrixWorld).y + 0.12;
-      const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.33, 0.48, 20, 1, true), cloth(look.top));
-      (skirt.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
-      skirt.position.y = waistY - 0.24;
-      skirt.castShadow = true;
-      hips.add(skirt);
+      const legs = skirtBones(bones);
+      const sg = new THREE.CylinderGeometry(0.17, 0.33, 0.48, 20, 6, true);
+      sg.translate(0, waistY - 0.24, 0);
+      const skirtM = cloth(look.top);
+      skirtM.side = THREE.DoubleSide;
+      if (legs) skirtMesh(cachedSkirt(`${look.body % k.bodies.length}:dress`, () => skinSkirt(sg, this.root, body, legs, waistY, waistY - 0.48)), skirtM, body);
+      else { const skirt = new THREE.Mesh(sg, skirtM); skirt.castShadow = true; hips.add(skirt); }
       const belt = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.025, 8, 24), cloth(look.accent));
       belt.rotation.x = Math.PI / 2;
       belt.position.y = waistY - 0.02;
@@ -497,10 +512,20 @@ export class Human {
       const robeM = cloth(tunic.robe), trimM = cloth(tunic.trim);
       robeM.side = THREE.DoubleSide;
       robeM.flatShading = true;
-      const pts = [[0.165, waistY], [0.2, hipY], [0.26, (hipY + kneeY) / 2], [0.34, hemY]].map(([r, h]) => new THREE.Vector2(r, h));
-      const add = (m: THREE.Mesh) => { m.castShadow = true; m.frustumCulled = false; m.scale.z = 1.0; hips.add(m); return m; };
-      add(new THREE.Mesh(new THREE.LatheGeometry(pts, 20), robeM));
-      add(new THREE.Mesh(new THREE.CylinderGeometry(0.342, 0.346, 0.045, 20, 1, true), trimM)).position.y = hemY + 0.02;
+      const pts = [[0.165, waistY], [0.18, (waistY + hipY) / 2], [0.2, hipY], [0.23, hipY - (hipY - kneeY) * 0.33], [0.26, (hipY + kneeY) / 2], [0.3, hipY - (hipY - kneeY) * 0.8], [0.34, hemY]].map(([r, h]) => new THREE.Vector2(r, h));
+      const add = (m: THREE.Mesh) => { m.castShadow = true; m.frustumCulled = false; hips.add(m); return m; };
+      // the skirt and its hem band swing with the legs (skirt.ts), the sash stays on the hips
+      const lathe = new THREE.LatheGeometry(pts, 20);
+      const hem = new THREE.CylinderGeometry(0.342, 0.346, 0.045, 20, 1, true);
+      hem.translate(0, hemY + 0.02, 0);
+      const legs = skirtBones(bones);
+      if (legs) {
+        skirtMesh(cachedSkirt(`${look.body % k.bodies.length}:tunic`, () => skinSkirt(lathe, this.root, body, legs, waistY, hemY)), robeM, body);
+        skirtMesh(cachedSkirt(`${look.body % k.bodies.length}:tunic-hem`, () => skinSkirt(hem, this.root, body, legs, waistY, hemY)), trimM, body);
+      } else {
+        add(new THREE.Mesh(lathe, robeM));
+        add(new THREE.Mesh(hem, trimM));
+      }
       const sash = add(new THREE.Mesh(new THREE.TorusGeometry(0.172, 0.022, 6, 20), trimM));
       sash.rotation.x = Math.PI / 2;
       sash.position.y = waistY - 0.025;

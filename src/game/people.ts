@@ -11,6 +11,7 @@
  */
 
 import * as THREE from "three";
+import { skinSkirt, skirtMesh } from "./skirt";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -201,7 +202,19 @@ export class Adult {
 
     // the long skirt of the robe, from the waist to the ankles, with a band at the hem
     const hipsBone = anchor("Hips");
-    for (const piece of [add(hipsBone, geo.skirt, robeM, 0.78), add(hipsBone, geo.hem, trimM, 0.78), add(hipsBone, geo.sash, trimM, 0.78)]) piece.position.set(hips.x, hips.y, hips.z);
+    add(hipsBone, geo.sash, trimM, 0.78).position.set(hips.x, hips.y, hips.z);
+    // the skirt and hem swing with the legs (skirt.ts); without the bones, a stiff skirt on the hips
+    const legs = { hips: body.getObjectByName("Hips"), legL: body.getObjectByName("UpperLegL"), legR: body.getObjectByName("UpperLegR") };
+    let skin: THREE.SkinnedMesh | null = null;
+    body.traverse((o) => { if (!skin && (o as THREE.SkinnedMesh).isSkinnedMesh && (o as THREE.SkinnedMesh).skeleton.bones.includes(legs.hips as THREE.Bone)) skin = o as THREE.SkinnedMesh; });
+    const sk = skin as THREE.SkinnedMesh | null;
+    if (sk && legs.legL instanceof THREE.Bone && legs.legR instanceof THREE.Bone && legs.hips instanceof THREE.Bone) {
+      const bones = { hips: legs.hips, legL: legs.legL, legR: legs.legR };
+      const sg = skinnedRobe(kind, geo, hips, (g) => skinSkirt(g, this.root, sk, bones, geo.waist, geo.hemY));
+      for (const [g, m] of [[sg.skirt, robeM], [sg.hem, trimM]] as const) skirtMesh(g, m, sk).userData.robe = true;
+    } else {
+      for (const piece of [add(hipsBone, geo.skirt, robeM, 0.78), add(hipsBone, geo.hem, trimM, 0.78)]) piece.position.set(hips.x, hips.y, hips.z);
+    }
     // the cloak hangs from the shoulders down the back
     if (robe.cloak !== undefined) {
       const torso = anchor("Torso");
@@ -391,8 +404,9 @@ export function robeFor(name: string): RobeLook | undefined {
 }
 
 /** Robe shapes are the same for everyone of one body: made once and shared. */
-const robeCache = new Map<string, Record<"skirt" | "hem" | "sash" | "cloak" | "collar", THREE.BufferGeometry>>();
-function robeGeos(kind: AdultKind, hipY: number, kneeY: number, w: number, k: number) {
+type RobeGeos = Record<"skirt" | "hem" | "sash" | "cloak" | "collar", THREE.BufferGeometry> & { waist: number; hemY: number };
+const robeCache = new Map<string, RobeGeos>();
+function robeGeos(kind: AdultKind, hipY: number, kneeY: number, w: number, k: number): RobeGeos {
   const key = kind;
   const hit = robeCache.get(key);
   if (hit) return hit;
@@ -402,8 +416,9 @@ function robeGeos(kind: AdultKind, hipY: number, kneeY: number, w: number, k: nu
   const lathe = (pts: [number, number][]) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y - hipY)), 18);
   const hemY = 0.06 * k;
   const skirt = lathe([
-    [r0 * 1.0, waist], [r0 * 1.1, hipY - 0.02 * k], [r0 * 1.12, (hipY + kneeY) / 2], [r0 * 1.22, kneeY],
-    [r0 * 1.5, hemY + 0.08 * k], [r0 * 1.6, hemY],
+    [r0 * 1.0, waist], [r0 * 1.06, (waist + hipY) / 2], [r0 * 1.1, hipY - 0.02 * k], [r0 * 1.11, hipY - (hipY - kneeY) * 0.3],
+    [r0 * 1.12, (hipY + kneeY) / 2], [r0 * 1.17, hipY - (hipY - kneeY) * 0.75], [r0 * 1.22, kneeY],
+    [r0 * 1.36, (kneeY + hemY) / 2], [r0 * 1.5, hemY + 0.08 * k], [r0 * 1.6, hemY],
   ]);
   const hem = new THREE.CylinderGeometry(r0 * 1.61, r0 * 1.63, 0.07 * k, 18, 1, true);
   hem.translate(0, hemY + 0.035 * k - hipY, 0);
@@ -417,8 +432,20 @@ function robeGeos(kind: AdultKind, hipY: number, kneeY: number, w: number, k: nu
   const collar = new THREE.TorusGeometry(w * 0.72, 0.035 * k, 6, 16, Math.PI * 1.1);
   collar.rotateX(Math.PI / 2);
   collar.rotateY(Math.PI / 2 + Math.PI * 0.45);
-  const out = { skirt, hem, sash, cloak, collar };
+  const out = { skirt, hem, sash, cloak, collar, waist, hemY };
   robeCache.set(key, out);
+  return out;
+}
+
+/** The skirt and hem laid out in the body's space and skinned to its legs: once per body. */
+const skinnedCache = new Map<string, { skirt: THREE.BufferGeometry; hem: THREE.BufferGeometry }>();
+function skinnedRobe(kind: AdultKind, geo: RobeGeos, hips: THREE.Vector3, skin: (g: THREE.BufferGeometry) => THREE.BufferGeometry) {
+  const hit = skinnedCache.get(kind);
+  if (hit) return hit;
+  // as the stiff pieces were placed: centred on the hips, a little flatter front to back
+  const place = (g: THREE.BufferGeometry) => skin(g.clone().scale(1, 1, 0.78).translate(hips.x, hips.y, hips.z));
+  const out = { skirt: place(geo.skirt), hem: place(geo.hem) };
+  skinnedCache.set(kind, out);
   return out;
 }
 
@@ -464,7 +491,9 @@ function headGeos(kind: AdultKind, headR: number, k: number) {
   drape.scale(1, 1, 1.12);
   drape.translate(0, -dH / 2, 0);
   const vH = (female ? 0.62 : 0.5) * k;
-  const veil = new THREE.CylinderGeometry(hr, hr * 2.4, vH, 16, 1, true, open / 2, Math.PI * 2 - open);
+  // the veil frames the face (open wider than the head cloth, so her face shows from the side too)
+  const vOpen = 2.7;
+  const veil = new THREE.CylinderGeometry(hr, hr * 1.9, vH, 16, 1, true, vOpen / 2, Math.PI * 2 - vOpen);
   veil.scale(1, 1, 1.12);
   veil.translate(0, -vH / 2, 0);
   const band = new THREE.TorusGeometry(hr * 1.01, 0.016 * k, 5, 18);

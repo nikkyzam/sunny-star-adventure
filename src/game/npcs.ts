@@ -46,6 +46,8 @@ function makeVillager(def: NpcDef): { p: Player; tag: THREE.Sprite } {
 export class Npcs {
   readonly group = new THREE.Group();
   items: Npc[] = [];
+  /** Test hook (robe checks): villagers made to walk or run on the spot, or ride (an animal seats them). */
+  readonly posed = new Map<string, { speed: number; ride: boolean }>();
 
   build(defs: NpcDef[]): void {
     this.clear();
@@ -143,7 +145,10 @@ export class Npcs {
       // look the kid in the face when they come close
       if (d2 < 36 && !n.fallen) n.p.lookTarget = (n.p.lookTarget ?? new THREE.Vector3()).set(look.x, look.y + 1.35, look.z);
       else n.p.lookTarget = null;
-      n.p.applyRemote(dt, n.def.x, n.def.y, n.def.z, 0, 0, 0, true, false, false, n.p.facing, false);
+      const posed = this.posed.get(n.def.name);
+      if (posed?.ride) { n.p.riding = true; n.p.rideTick(dt); continue; }
+      const v = posed?.speed ?? 0;
+      n.p.applyRemote(dt, n.def.x, n.def.y, n.def.z, 0, 0, v, true, false, false, n.p.facing, false);
       if (n.def.scale) n.p.group.scale.setScalar(n.def.scale); // (the kid model resets its own size each frame)
       const lean = n.fallen ? -Math.PI / 2 : 0;
       n.p.group.rotation.x += (lean - n.p.group.rotation.x) * Math.min(1, dt * 4);

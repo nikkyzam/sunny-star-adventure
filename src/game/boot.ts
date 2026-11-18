@@ -124,6 +124,8 @@ declare global {
       carVy: number;
       /** Test hooks: move the helicopter / the kid. */
       placeHeli: (x: number, y: number, z: number, heading: number) => void;
+      /** Test hook: a villager walks or runs on the spot (speed m/s), or rides the nearest animal. */
+      npcPose: (name: string, speed: number, ride?: boolean) => { x: number; y: number; z: number } | null;
       /** Onto the highest ground at (x, z), or the floor just below y when given (inside a house). */
       warp: (x: number, z: number, y?: number) => void;
       /** Test hook: park the car somewhere else. */
@@ -2950,6 +2952,18 @@ export function startGame(canvas: HTMLCanvasElement): void {
       const y = world.groundAt(x, z, near ?? 50)?.y ?? 0;
       players[0].respawn(x, y, z);
       players[0].invuln = 0;
+    },
+    npcPose: (name: string, speed: number, ride = false) => {
+      const n = npcs.items.find((i) => i.def.name === name);
+      if (!n) return null;
+      if (ride) {
+        const h = herds.positions().filter((a) => /horse|donkey|alpaca/.test(a.kind)).reduce<{ x: number; z: number } | null>((best, a) =>
+          !best || Math.hypot(a.x - n.p.pos.x, a.z - n.p.pos.z) < Math.hypot(best.x - n.p.pos.x, best.z - n.p.pos.z) ? a : best, null);
+        if (h) n.p.pos.set(h.x, n.p.pos.y, h.z);
+        if (!herds.mount(n.p, 3)) return null;
+      }
+      npcs.posed.set(name, { speed, ride });
+      return { x: n.p.pos.x, y: n.p.pos.y, z: n.p.pos.z };
     },
     placeCar: (x: number, z: number, heading: number) => {
       car.pos.set(x, world.groundAt(x, z, 50)?.y ?? 0, z);
