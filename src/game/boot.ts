@@ -126,6 +126,8 @@ declare global {
       placeHeli: (x: number, y: number, z: number, heading: number) => void;
       /** Test hook: a villager walks or runs on the spot (speed m/s), or rides the nearest animal. */
       npcPose: (name: string, speed: number, ride?: boolean) => { x: number; y: number; z: number } | null;
+      /** Filming: how far a camera at `from` can see toward `to` before scenery is in the way (Infinity if clear). */
+      viewClear: (from: number[], to: number[]) => number;
       /** Onto the highest ground at (x, z), or the floor just below y when given (inside a house). */
       warp: (x: number, z: number, y?: number) => void;
       /** Test hook: park the car somewhere else. */
@@ -2952,6 +2954,17 @@ export function startGame(canvas: HTMLCanvasElement): void {
       const y = world.groundAt(x, z, near ?? 50)?.y ?? 0;
       players[0].respawn(x, y, z);
       players[0].invuln = 0;
+    },
+    viewClear: (from: number[], to: number[]) => {
+      const a = new THREE.Vector3().fromArray(from), b = new THREE.Vector3().fromArray(to);
+      const dir = b.clone().sub(a);
+      const far = dir.length();
+      const ray = new THREE.Raycaster(a, dir.normalize(), 0, far);
+      // scenery only: people and animals (skinned), sprites and hidden things don't count
+      const meshes: THREE.Object3D[] = [];
+      scene.traverseVisible((o) => { if ((o as THREE.Mesh).isMesh && !(o as THREE.SkinnedMesh).isSkinnedMesh) meshes.push(o); });
+      const hit = ray.intersectObjects(meshes, false)[0];
+      return hit ? hit.distance : Infinity;
     },
     npcPose: (name: string, speed: number, ride = false) => {
       const n = npcs.items.find((i) => i.def.name === name);

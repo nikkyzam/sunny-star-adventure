@@ -33,15 +33,28 @@ const shot = (name, what) => join(ROOT, `verification-shots/97-move-${name.repla
 try {
   const page = await browser.newPage({ viewport: { width: 480, height: 600 } });
   page.on("pageerror", (e) => errors.push(String(e.stack || e)));
-  const cam = (x, y, z, s, side) => page.evaluate(([x, y, z, s, side]) => {
-    window.__filmCam = (cam, scene) => {
-      scene.traverse((o) => { if (o.isSprite) o.visible = false; });
-      if (side) cam.position.set(x + 3.6 * s, y + 1.1 * s, z + 0.3 * s);
-      else cam.position.set(x + 1.0 * s, y + 1.2 * s, z + 3.6 * s);
-      cam.lookAt(x, y + 0.85 * s, z);
-      cam.fov = 40;
-    };
-  }, [x, y, z, s, side]);
+  // the camera goes round the person until nothing (a wall, a house) is between it and them
+  const cam = async (x, y, z, s, side) => {
+    const base = side ? [3.6, 0.3] : [1.0, 3.6];
+    const eye = y + 0.85 * s;
+    let best = null;
+    for (const turn of [0, Math.PI, 0.5, -0.5, 1, -1, 1.6, -1.6, 2.3, -2.3]) {
+      const c = Math.cos(turn), sn = Math.sin(turn);
+      const dx = (base[0] * c + base[1] * sn) * s, dz = (-base[0] * sn + base[1] * c) * s;
+      const from = [x + dx, y + 1.1 * s, z + dz];
+      const room = await page.evaluate(([f, t]) => window.__gameDebug().viewClear(f, t), [from, [x, eye, z]]);
+      if (room === null || room > Math.hypot(dx, dz) * 0.97) { best = from; break; }
+    }
+    best ??= [x + base[0] * s, y + 1.1 * s, z + base[1] * s];
+    await page.evaluate(([[cx, cy, cz], x, eye, z]) => {
+      window.__filmCam = (cam, scene) => {
+        scene.traverse((o) => { if (o.isSprite) o.visible = false; });
+        cam.position.set(cx, cy, cz);
+        cam.lookAt(x, eye, z);
+        cam.fov = 40;
+      };
+    }, [best, x, eye, z]);
+  };
   for (const [level, people] of SETS) {
     if (only !== null && only !== level) continue;
     for (const [name, ride] of people) {
