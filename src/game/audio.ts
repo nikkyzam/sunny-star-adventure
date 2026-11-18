@@ -12,7 +12,7 @@
 export type SfxId =
   | "jump" | "doublejump" | "land" | "boing" | "stomp" | "star" | "hurt"
   | "portal" | "checkpoint" | "ui" | "win" | "lose" | "unlock" | "fall"
-  | "coin" | "chest" | "buddy" | "powerup" | "honk" | "splash" | "talk" | "pet" | "munch" | "baa" | "rustle" | "meow" | "coo" | "dig";
+  | "coin" | "chest" | "buddy" | "powerup" | "honk" | "splash" | "talk" | "pet" | "munch" | "baa" | "rustle" | "meow" | "coo" | "dig" | "bell" | "roar";
 
 export type TrackId = "meadow" | "island" | "city" | "snow";
 
@@ -427,6 +427,21 @@ export class AudioSystem {
         // a little rising-then-falling "mew"
         this.blip("triangle", 700, 1100, t, 0.12, 0.12);
         this.blip("triangle", 1100, 650, t + 0.12, 0.2, 0.1);
+        break;
+      case "bell":
+        // a deep church bell: a strike with ringing overtones, twice
+        for (const k of [0, 0.9]) {
+          this.blip("sine", 392, 390, t + k, 2.2, 0.22);
+          this.blip("sine", 784, 780, t + k, 1.4, 0.1);
+          this.blip("sine", 1176, 1170, t + k, 0.9, 0.06);
+          this.blip("triangle", 470, 468, t + k, 1.6, 0.06);
+        }
+        break;
+      case "roar":
+        // a happy little dragon "rawr!" and a whoosh of wings
+        this.blip("sawtooth", 260, 420, t, 0.12, 0.12);
+        this.blip("sawtooth", 420, 200, t + 0.12, 0.3, 0.12);
+        this.blip("triangle", 140, 60, t + 0.35, 0.4, 0.18);
         break;
       case "coo":
         this.blip("sine", 420, 380, t, 0.18, 0.14);

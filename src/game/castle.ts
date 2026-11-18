@@ -28,6 +28,18 @@ export interface CastleDef {
   name?: string;
   /** Ground height it stands on (default 0.3, a meadow). */
   y?: number;
+  /** A friendly dragon lives on the keep and flies kids round this route (world points). */
+  dragon?: [number, number, number][];
+}
+
+/** What a built castle offers the rest of the game. */
+export interface CastleInfo {
+  /** The middle of the keep's roof, and the way the gate faces. */
+  perch: THREE.Vector3;
+  facing: number;
+  centre: THREE.Vector3;
+  /** The bell in the courtyard: where it hangs, and ringing it (swings, doves fly up). */
+  bell: { pos: THREE.Vector3; ring: () => void };
 }
 
 interface Solid { minX: number; maxX: number; minZ: number; maxZ: number; topY: number }
@@ -95,7 +107,7 @@ function stoneTower(r: number, h: number): THREE.CylinderGeometry {
   return g;
 }
 
-export function buildCastle(w: CastleWorld, c: CastleDef, base: number): void {
+export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleInfo {
   const S = c.size ?? 8;          // half the courtyard
   const H = 4.5;                  // wall height (the walkway on top)
   const T = 1.4;                  // wall thickness
@@ -359,6 +371,101 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): void {
   g.add(yard);
 
   mergeByMaterial(g);
+
+  // ── a bell on a wooden frame by the gate path: ring it and doves fly up from the towers ──
+  const bellAt = { x: -3.6, z: 4.2 };
+  const swing = new THREE.Group();
+  {
+    const { x, z } = bellAt;
+    const frame = std(0x6b4423, 0.9);
+    for (const sx of [-1, 1]) mesh(new THREE.BoxGeometry(0.18, 2.6, 0.18), frame, x + sx * 0.75, 1.3, z);
+    mesh(new THREE.BoxGeometry(1.8, 0.2, 0.26), frame, x, 2.65, z);
+    mesh(new THREE.ConeGeometry(1.2, 0.5, 4).rotateY(Math.PI / 4), roofM, x, 3.0, z).scale.z = 0.4;
+    mesh(new THREE.BoxGeometry(1.0, 0.12, 0.6), stone, x, 0.06, z);
+    swing.position.set(x, 2.55, z);
+    g.add(swing);
+    const bronze = std(0xd9a441, 0.35, { metalness: 0.7, emissive: 0x2a1a00 });
+    const pts = [[0.05, 0], [0.18, -0.05], [0.24, -0.25], [0.3, -0.5], [0.42, -0.7], [0.44, -0.76], [0, -0.76]].map(([r, y]) => new THREE.Vector2(r, y));
+    const bell = new THREE.Mesh(new THREE.LatheGeometry(pts, 16), bronze);
+    bell.castShadow = true;
+    swing.add(bell);
+    const clapper = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), iron);
+    clapper.position.y = -0.7;
+    swing.add(clapper);
+    // a rope to pull
+    const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.3, 5), std(0xd8c39a));
+    rope.position.set(0.25, -1.3, 0);
+    swing.add(rope);
+    solid(x, z, 0.85, 0.15, 2.7);
+  }
+  let swingT = 99;
+  w.anim.push((_t, dt) => {
+    swingT += dt;
+    swing.rotation.z = Math.sin(swingT * 7) * 0.55 * Math.exp(-swingT * 0.9);
+  });
+
+  // doves: white birds that burst from the tower tops and the keep, circle up and fly away
+  const doveBody = new THREE.SphereGeometry(0.13, 8, 6).scale(0.8, 0.75, 1.5);
+  const doveWing = new THREE.PlaneGeometry(0.34, 0.16).translate(0.17, 0, 0).rotateX(-Math.PI / 2);
+  const doveM = std(0xffffff, 0.6, { side: THREE.DoubleSide, emissive: 0x777777 });
+  const beakM = std(0xffa53a);
+  const doves: { o: THREE.Group; wl: THREE.Object3D; wr: THREE.Object3D; v: THREE.Vector3; turn: number; age: number }[] = [];
+  const roofs: [number, number, number][] = [];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) roofs.push([sx * (S + 1.6), H + 3.2 + 1.2, sz * (S + 1.6)]);
+  roofs.push([0, 9.3, -S + T / 2 + 2.2 + 1.6]);
+  w.anim.push((_t, dt) => {
+    for (let i = doves.length - 1; i >= 0; i--) {
+      const d = doves[i];
+      d.age += dt;
+      d.v.applyAxisAngle(THREE.Object3D.DEFAULT_UP, d.turn * dt);
+      d.v.y = Math.max(0.6, d.v.y - dt * 0.5);
+      d.o.position.addScaledVector(d.v, dt);
+      d.o.rotation.y = Math.atan2(d.v.x, d.v.z);
+      const flap = Math.sin(d.age * 22 + i) * 0.9;
+      d.wl.rotation.z = flap;
+      d.wr.rotation.z = -flap;
+      if (d.age > 9) {
+        w.group.remove(d.o);
+        doves.splice(i, 1);
+      }
+    }
+  });
+  const release = () => {
+    if (doves.length > 30) return;
+    for (const [lx, ly, lz] of roofs) for (let k = 0; k < 3; k++) {
+      const o = new THREE.Group();
+      o.scale.setScalar(1.5);
+      o.add(new THREE.Mesh(doveBody, doveM));
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5), doveM);
+      head.position.set(0, 0.07, 0.2);
+      o.add(head);
+      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.07, 4).rotateX(Math.PI / 2), beakM);
+      beak.position.set(0, 0.06, 0.3);
+      o.add(beak);
+      const wl = new THREE.Group(), wr = new THREE.Group();
+      wl.add(new THREE.Mesh(doveWing, doveM));
+      const m2 = new THREE.Mesh(doveWing, doveM);
+      m2.scale.x = -1;
+      wr.add(m2);
+      o.add(wl, wr);
+      o.position.set(wx(lx, lz) + (Math.random() - 0.5), base + ly + Math.random() * 0.5, wz(lx, lz) + (Math.random() - 0.5));
+      const a = Math.random() * Math.PI * 2;
+      const sp = 3 + Math.random() * 2;
+      w.group.add(o);
+      doves.push({ o, wl, wr, v: new THREE.Vector3(Math.sin(a) * sp, 2 + Math.random() * 1.5, Math.cos(a) * sp), turn: (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random() * 0.6), age: 0 });
+    }
+  };
+
+  const kz = -S + T / 2 + 2.2 + 1.6;
+  return {
+    perch: new THREE.Vector3(wx(0, kz), base + 8.5, wz(0, kz)),
+    facing: th,
+    centre: new THREE.Vector3(c.x, base, c.z),
+    bell: {
+      pos: new THREE.Vector3(wx(bellAt.x, bellAt.z), base, wz(bellAt.x, bellAt.z)),
+      ring: () => { swingT = 0; release(); },
+    },
+  };
 
   function torch(x: number, y: number, z: number): void {
     mesh(new THREE.CylinderGeometry(0.06, 0.04, 0.5, 6), wood, x, y, z);

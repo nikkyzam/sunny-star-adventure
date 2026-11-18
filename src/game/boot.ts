@@ -128,6 +128,8 @@ declare global {
       npcPose: (name: string, speed: number, ride?: boolean) => { x: number; y: number; z: number } | null;
       /** Filming: how far a camera at `from` can see toward `to` before scenery is in the way (Infinity if clear). */
       viewClear: (from: number[], to: number[]) => number;
+      /** Sparky: where he is and what he's doing (null if this level has no dragon). */
+      dragon: () => { state: string; x: number; y: number; z: number; perch: number[]; bells: number[][] } | null;
       /** Onto the highest ground at (x, z), or the floor just below y when given (inside a house). */
       warp: (x: number, z: number, y?: number) => void;
       /** Test hook: park the car somewhere else. */
@@ -460,30 +462,41 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   // ── Animal and Ferris-wheel rides ────────────────────────────────────────
   /** Kids on an animal's back or in a Ferris-wheel gondola (the Car rides keep their own seats). */
-  const mounts = new Map<Player, "animal" | { cab: number; turned: number; down: boolean }>();
+  const mounts = new Map<Player, "animal" | "dragon" | { cab: number; turned: number; down: boolean }>();
 
   function endMounts(): void {
-    for (const p of mounts.keys()) p.riding = false;
+    for (const p of mounts.keys()) { p.riding = false; p.saddle = null; }
     mounts.clear();
     world.ferrisSpin = 1;
   }
 
   /** What a walking kid could climb on right now: an animal or the Ferris wheel. */
-  function mountInReach(): { kid: Player; what: "animal" | "ferris"; icon: string } | null {
+  function mountInReach(): { kid: Player; what: "animal" | "ferris" | "dragon"; icon: string } | null {
     const gate = world.ferrisGate;
     for (const p of players) {
       if (p.riding) continue;
       const kind = herds.count ? herds.mountable(p.pos, 2.3) : null;
       if (kind) return { kid: p, what: "animal", icon: RIDE_EMOJI[kind] ?? "🐴" };
+      if (world.dragon?.canBoard(p.pos) && ![...mounts.values()].includes("dragon")) return { kid: p, what: "dragon", icon: "🐉" };
       if (gate && Math.hypot(p.pos.x - gate.x, p.pos.z - gate.z) < 3 && Math.abs(p.pos.y - gate.y) < 2) return { kid: p, what: "ferris", icon: "🎡" };
     }
     return null;
   }
 
-  function mountUp(m: { kid: Player; what: "animal" | "ferris" }): void {
+  function mountUp(m: { kid: Player; what: "animal" | "ferris" | "dragon" }): void {
     const p = m.kid;
     p.invuln = 0;
     p.group.visible = true;
+    if (m.what === "dragon") {
+      const d = world.dragon;
+      if (!d) return;
+      d.startTour();
+      p.riding = true;
+      mounts.set(p, "dragon");
+      audio.sfx("roar");
+      hud.showToast(onTouch() ? "🐉 Hold on tight! Sparky is flying you round the island · tap 🐉 to head home" : "🐉 Hold on tight! Sparky is flying you round the island · E to head home");
+      return;
+    }
     if (m.what === "animal") {
       const kind = herds.mount(p, 2.3);
       if (!kind) return;
@@ -507,6 +520,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
   function mountOff(p: Player): boolean {
     const m = mounts.get(p);
     if (!m) return false;
+    if (m === "dragon") {
+      world.dragon?.hurry();
+      hud.showToast("🐉 Sparky heads for home…");
+      return true;
+    }
     if (m === "animal") {
       herds.dismount(p);
       p.riding = false;
@@ -528,6 +546,12 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
     for (const p of players) {
       if (p.riding) continue;
+      const bell = world.bells.find((b) => Math.hypot(p.pos.x - b.pos.x, p.pos.z - b.pos.z) < 1.9 && Math.abs(p.pos.y - b.pos.y) < 1.5);
+      if (bell) return { kid: p, icon: "🔔", label: "Ring the bell", go: () => {
+        bell.ring();
+        audio.sfx("bell");
+        hud.showToast("🔔 Ding-dong! Up fly the doves! \"Make a joyful noise to the Lord!\" (Psalm 100:1)");
+      } };
       const kind = herds.count ? herds.nearestKind(p.pos, 1.2) : null;
       if (kind) {
         const name = kind.replace("_white", "").replace("shibainu", "puppy").replace("husky", "puppy");
@@ -594,6 +618,27 @@ export function startGame(canvas: HTMLCanvasElement): void {
           blocked: (x, z) => world.def.sea !== undefined && (world.groundAt(x, z, 40)?.y ?? -9) < world.def.sea - 0.7,
         });
         if (r.leapt) audio.sfx("jump");
+        continue;
+      }
+      if (m === "dragon") {
+        const d = world.dragon;
+        if (!d || d.state !== "tour") {
+          // landed back on the keep: hop off beside him
+          if (d) d.dropOff(p.pos);
+          p.vel.set(0, 0, 0);
+          p.riding = false;
+          p.saddle = null;
+          mounts.delete(p);
+          audio.sfx("checkpoint");
+          hud.showToast("🐉 What a flight! Sparky waves his tail goodbye.");
+          continue;
+        }
+        d.seat(p.pos);
+        p.pos.y -= 0.45; // the kid's seated hips sit ~0.45 above their feet
+        p.vel.set(0, 0, 0);
+        p.facing = d.yaw;
+        p.group.rotation.y = d.yaw;
+        p.saddle = { speed: Math.min(d.speed, 7), phase: (d.flap / (Math.PI * 2)) % 1 };
         continue;
       }
       m.turned += dt * 0.12 * world.ferrisSpin;
@@ -1515,7 +1560,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (!near) {
       const u = useInReach();
       const m = mountInReach();
-      if (u && !(m && m.what === "animal")) u.go();
+      if (u && !(m && m.what !== "ferris")) u.go();
       else if (m) mountUp(m);
       else if (nearRocket()) boardRocket();
       return;
@@ -2496,8 +2541,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
     const useNow = !ride && !mounted ? useInReach() : null;
     if (launchT >= 0) hud.setCarUi(null);
     else if (ride) hud.setCarUi(inRide ? "out" : "in", RIDE_ICON[ride.kind]);
-    else if (mounted) hud.setCarUi("out", mounted === "animal" ? "🐴" : "🎡");
-    else if (canMount && canMount.what === "animal") hud.setCarUi("in", canMount.icon);
+    else if (mounted) hud.setCarUi("out", mounted === "animal" ? "🐴" : mounted === "dragon" ? "🐉" : "🎡");
+    else if (canMount && canMount.what !== "ferris") hud.setCarUi("in", canMount.icon);
     else if (useNow) hud.setCarUi("in", useNow.icon, useNow.label);
     else if (canMount) hud.setCarUi("in", canMount.icon);
     else hud.setCarUi(nearRocket() ? "in" : null, "🚀");
@@ -2893,7 +2938,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     questTargets: () => quests.debugTargets(),
     questHomeSpot: quests.homeSpot,
     questGiver: quests.giver,
-    mounts: [...mounts.values()].map((m) => (m === "animal" ? "animal" : `ferris ${m.cab} ${m.turned.toFixed(2)}${m.down ? " down" : ""}`)),
+    mounts: [...mounts.values()].map((m) => (typeof m === "string" ? m : `ferris ${m.cab} ${m.turned.toFixed(2)}${m.down ? " down" : ""}`)),
     kid: { x: players[0].pos.x, y: players[0].pos.y, z: players[0].pos.z, riding: players[0].riding },
     gaits: gaitInfo(),
     npcBoxes: () => npcs.items.slice(0, 4).map((n) => {
@@ -2954,6 +2999,12 @@ export function startGame(canvas: HTMLCanvasElement): void {
       const y = world.groundAt(x, z, near ?? 50)?.y ?? 0;
       players[0].respawn(x, y, z);
       players[0].invuln = 0;
+    },
+    dragon: () => {
+      const d = world.dragon;
+      if (!d) return null;
+      const p = d.group.position;
+      return { state: d.state, x: p.x, y: p.y, z: p.z, perch: d.perch.toArray(), bells: world.bells.map((b) => b.pos.toArray()) };
     },
     viewClear: (from: number[], to: number[]) => {
       const a = new THREE.Vector3().fromArray(from), b = new THREE.Vector3().fromArray(to);

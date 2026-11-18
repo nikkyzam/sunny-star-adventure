@@ -231,7 +231,7 @@ try {
   await walkTo(-4.3, 11.5, 0.8); // the car is parked at (-6, 11)
   await page.keyboard.press("KeyE");
   await page.waitForTimeout(300);
-  check("A9a E boards the car on the beach", (await dbg()).car.occupied === true);
+  { const d = await dbg(); check("A9a E boards the car on the beach", d.car.occupied === true, JSON.stringify({ px: d.px, pz: d.pz, car: d.car, mounts: d.mounts, riding: d.kid.riding })); }
   // park at the start of the causeway, pointing along it (toward Pine Island)
   await page.evaluate(() => window.__gameDebug().placeCar(-29, -37.4, Math.atan2(-0.858, -0.515)));
   await page.waitForTimeout(400);

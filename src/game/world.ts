@@ -33,6 +33,7 @@ import type { TrafficLoop } from "./traffic";
 import type { HerdDef } from "./critters";
 import { buildBethlehem, type BethlehemDef } from "./bethlehem";
 import { buildCastle, type CastleDef } from "./castle";
+import { Dragon } from "./dragon";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 /** Something decorative to draw: by the code-built shapes, or by the models in env.ts once loaded. */
@@ -761,7 +762,11 @@ const ADVENTURE_ISLAND: LevelDef = {
   ],
   pirates: [[0, 50, 10, 0.22], [-64, 20, 8, -0.26], [46, -6, 6, 0.3]],
   // Castle Isle, joined to the beach: the gate faces the dock
-  castles: [{ x: -27, z: 22, turn: 1, name: "Sunny Castle", stone: 0xe0d8c8, roof: 0x4d7fd6, flag: 0xff6b9d }],
+  castles: [{
+    x: -27, z: 22, turn: 1, name: "Sunny Castle", stone: 0xe0d8c8, roof: 0x4d7fd6, flag: 0xff6b9d,
+    // Sparky's tour: out over the dock, the Ferris wheel, the pizza beach, the lighthouse, the camp, and home
+    dragon: [[-6, 20, 42], [34, 26, 36], [70, 30, 4], [55, 32, -44], [12, 34, -86], [-38, 34, -76], [-80, 30, -38], [-66, 26, 8], [-46, 18, 34]],
+  }],
   playground: [8, -1],
   station: [-2.8, 16.4],
   extraCars: [[38, 0, -62, 0]],
@@ -961,6 +966,8 @@ const ADVENTURE_ISLAND: LevelDef = {
         "Climb the stairs inside the walls and walk all the way round the top.",
         "The tall tower is the keep. There's a scroll waiting at the very top!",
         "A castle keeps everyone safe inside. The Bible says God is our refuge and strength, like a mighty castle!",
+        "Sparky the dragon lives on top of the keep. He's very friendly! Climb up and he'll fly you round the island.",
+        "Ring the bell in the courtyard and watch the doves fly up!",
       ],
     },
     {
@@ -1938,6 +1945,10 @@ export class World {
   private snow: THREE.Points | null = null;
   private ocean: THREE.Mesh | null = null;
   private ferris: { wheel: THREE.Group; cabins: THREE.Object3D[]; gate: THREE.Vector3; facing: number } | null = null;
+  /** Sparky, if this level's castle has a dragon. */
+  dragon: Dragon | null = null;
+  /** Castle bells a kid can ring. */
+  bells: { pos: THREE.Vector3; ring: () => void }[] = [];
   /** How fast the Ferris wheel turns (1 = its normal slow turn; boot speeds it up to bring a rider down). */
   ferrisSpin = 1;
   private oceanY = -7;
@@ -2255,6 +2266,8 @@ export class World {
     this.houseWalls = [];
     this.anim = [];
     this.decor = [];
+    this.dragon = null;
+    this.bells = [];
     for (const l of this.locks.values()) disposeSprite(l.sign);
     this.locks.clear();
     this.starSpots = def.stars.map((s) => [...s] as [number, number, number]);
@@ -2389,7 +2402,16 @@ export class World {
     if (def.ferris) this.buildFerris(...def.ferris);
     if (def.ark) this.buildArk(def.ark[0], def.ark[1]);
     if (def.bethlehem) buildBethlehem({ group: this.group, platforms: this.platforms, solids: this.solids, anim: this.anim }, def.bethlehem, 0.3);
-    for (const c of def.castles ?? []) buildCastle({ group: this.group, platforms: this.platforms, solids: this.solids, anim: this.anim }, c, c.y ?? 0.3);
+    for (const c of def.castles ?? []) {
+      const info = buildCastle({ group: this.group, platforms: this.platforms, solids: this.solids, anim: this.anim }, c, c.y ?? 0.3);
+      this.bells.push(info.bell);
+      if (c.dragon && !this.dragon) {
+        const d = new Dragon(info.perch, info.facing, info.centre, c.dragon.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
+        this.group.add(d.group);
+        this.anim.push((t, dt) => d.update(t, dt));
+        this.dragon = d;
+      }
+    }
     if (def.bigFish) this.buildBigFish(def.bigFish[0], def.bigFish[1], def.sea ?? 0);
     for (const [tx, ty, tz, color] of def.tents ?? []) {
       const tent = new THREE.Mesh(new THREE.ConeGeometry(1.6, 2.4, 4).rotateY(Math.PI / 4), new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.9 }));
