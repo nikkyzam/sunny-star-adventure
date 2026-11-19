@@ -210,6 +210,8 @@ export class Player {
   private lids: THREE.Mesh[] = [];
   private blinkT = 1 + Math.random() * 3;
   private hatIndex = 0;
+  /** Sitting down (on a throne): the riding flag keeps physics off, this picks the sitting pose. */
+  seated = false;
   private groundPlat: Platform | null = null;
   private coyote = 0;
   private jumpBuffer = 0;
@@ -438,6 +440,11 @@ export class Player {
     this.body.add(this.cap);
   }
 
+  /** The hat being worn (0 = cap only). */
+  get hat_(): number {
+    return this.hatIndex;
+  }
+
   /** Swap the hat (0 = cap only). */
   setHat(i: number): void {
     if (i === this.hatIndex) return;
@@ -664,7 +671,7 @@ export class Player {
       this.danceT = Math.max(0, this.danceT - dt);
       move = "dance";
     } else if (this.riding) {
-      move = "drive";
+      move = this.seated ? "sit" : "drive";
     } else if (!this.onGround) {
       move = this.glideActive || this.floatT > 0 ? "float" : this.vel.y > 2 && h.move !== "fall" ? "jump" : "fall";
     } else {

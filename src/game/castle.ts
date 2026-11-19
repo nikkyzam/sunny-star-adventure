@@ -40,6 +40,8 @@ export interface CastleInfo {
   centre: THREE.Vector3;
   /** The bell in the courtyard: where it hangs, and ringing it (swings, doves fly up). */
   bell: { pos: THREE.Vector3; ring: () => void };
+  /** The throne: the top of its cushion, and the way someone sitting on it faces. */
+  throne: { seat: THREE.Vector3; facing: number };
 }
 
 interface Solid { minX: number; maxX: number; minZ: number; maxZ: number; topY: number }
@@ -349,6 +351,42 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     solid(tx, tz, 0.6, 0.5, 0.3);
   }
 
+  // ── a royal banquet table between the keep stairs and the wall, with a bench, plates and candles ──
+  {
+    const x = S - T / 2 - 1.9, z0 = -3.6, z1 = 0.6, zc = (z0 + z1) / 2, len = z1 - z0;
+    const cloth = std(0xfdf6e3, 0.9), runner = std(c.flag ?? 0xb0303a, 0.8);
+    mesh(new THREE.BoxGeometry(1.1, 0.08, len), wood, x, 0.78, zc);
+    mesh(new THREE.BoxGeometry(1.16, 0.02, len + 0.06), cloth, x, 0.83, zc);
+    mesh(new THREE.BoxGeometry(0.36, 0.022, len + 0.1), runner, x, 0.845, zc);
+    for (const dz of [-1, 1]) for (const dx of [-1, 1]) mesh(new THREE.BoxGeometry(0.1, 0.78, 0.1), wood, x + dx * 0.45, 0.39, zc + dz * (len / 2 - 0.2));
+    // a bench along the wall side
+    mesh(new THREE.BoxGeometry(0.4, 0.07, len), wood, x + 0.95, 0.46, zc);
+    for (const dz of [-1, 1]) mesh(new THREE.BoxGeometry(0.34, 0.46, 0.08), wood, x + 0.95, 0.23, zc + dz * (len / 2 - 0.25));
+    const plate = std(0xf2f2f2, 0.4), goblet = gold;
+    for (let i = 0; i < 4; i++) {
+      const pz = z0 + 0.5 + i * ((len - 1) / 3);
+      mesh(new THREE.CylinderGeometry(0.17, 0.14, 0.03, 14), plate, x + 0.3, 0.86, pz);
+      mesh(new THREE.CylinderGeometry(0.05, 0.03, 0.18, 8), goblet, x + 0.3, 0.95, pz + 0.27);
+    }
+    // candles (their flames flicker) and a big roast-free fruit bowl
+    for (const pz of [z0 + 0.35, z1 - 0.35]) {
+      mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.05, 10), gold, x, 0.87, pz);
+      mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.26, 8), std(0xfff3d6, 0.7), x, 1.0, pz);
+      const f = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.1, 6), flame);
+      f.userData.keep = true;
+      f.position.set(x, 1.18, pz);
+      g.add(f);
+      w.anim.push((t) => { f.scale.set(1, 0.8 + Math.sin(t * 11 + pz) * 0.2, 1); });
+    }
+    const bowl = mesh(new THREE.SphereGeometry(0.22, 12, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), gold, x - 0.05, 1.07, zc);
+    bowl.scale.y = 0.6;
+    for (const [dx, dz, col] of [[0, 0, 0xe63946], [0.09, 0.08, 0x8bc34a], [-0.08, 0.06, 0xffb703], [0.03, -0.1, 0x7b2cbf], [-0.06, -0.07, 0xe63946]] as const) {
+      mesh(new THREE.SphereGeometry(0.07, 8, 6), std(col, 0.5), x - 0.05 + dx, 0.98 + 0.08, zc + dz);
+    }
+    solid(x, zc, 0.58, len / 2, 0.85);
+    solid(x + 0.95, zc, 0.2, len / 2, 0.5);
+  }
+
   // ── the well in the courtyard ──
   {
     const x = S - T / 2 - 2.2, z = 4.6;
@@ -457,7 +495,9 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
   };
 
   const kz = -S + T / 2 + 2.2 + 1.6;
+  const thx = -2.5 - 1.6, thz = kz + 2.2 + 1.2;
   return {
+    throne: { seat: new THREE.Vector3(wx(thx, thz + 0.02), base + 0.92, wz(thx, thz + 0.02)), facing: th },
     perch: new THREE.Vector3(wx(0, kz), base + 8.5, wz(0, kz)),
     facing: th,
     centre: new THREE.Vector3(c.x, base, c.z),

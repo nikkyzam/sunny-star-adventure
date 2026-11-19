@@ -130,6 +130,8 @@ declare global {
       viewClear: (from: number[], to: number[]) => number;
       /** Sparky: where he is and what he's doing (null if this level has no dragon). */
       dragon: () => { state: string; x: number; y: number; z: number; perch: number[]; bells: number[][] } | null;
+      /** The castle's fun: thrones, the ring course, and what the kid wears and does. */
+      castleFun: () => { thrones: { seat: number[]; facing: number }[]; rings: number[][]; passed: number; hat: number; seated: boolean; big: number; facing: number; horse: number[] | null };
       /** Onto the highest ground at (x, z), or the floor just below y when given (inside a house). */
       warp: (x: number, z: number, y?: number) => void;
       /** Test hook: park the car somewhere else. */
@@ -462,31 +464,59 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   // ── Animal and Ferris-wheel rides ────────────────────────────────────────
   /** Kids on an animal's back or in a Ferris-wheel gondola (the Car rides keep their own seats). */
-  const mounts = new Map<Player, "animal" | "dragon" | { cab: number; turned: number; down: boolean }>();
+  const mounts = new Map<Player, "animal" | "dragon" | "throne" | { cab: number; turned: number; down: boolean }>();
+  /** Kids wearing the throne's crown: the hat they had before (it comes back when they leave the castle). */
+  const crowned = new Map<Player, { hat: number; x: number; z: number }>();
 
   function endMounts(): void {
-    for (const p of mounts.keys()) { p.riding = false; p.saddle = null; }
+    for (const p of mounts.keys()) { p.riding = false; p.saddle = null; p.seated = false; }
+    for (const [p, c] of crowned) p.setHat(c.hat);
+    crowned.clear();
     mounts.clear();
     world.ferrisSpin = 1;
   }
 
   /** What a walking kid could climb on right now: an animal or the Ferris wheel. */
-  function mountInReach(): { kid: Player; what: "animal" | "ferris" | "dragon"; icon: string } | null {
+  function mountInReach(): { kid: Player; what: "animal" | "ferris" | "dragon" | "throne"; icon: string } | null {
     const gate = world.ferrisGate;
     for (const p of players) {
       if (p.riding) continue;
       const kind = herds.count ? herds.mountable(p.pos, 2.3) : null;
       if (kind) return { kid: p, what: "animal", icon: RIDE_EMOJI[kind] ?? "🐴" };
       if (world.dragon?.canBoard(p.pos) && ![...mounts.values()].includes("dragon")) return { kid: p, what: "dragon", icon: "🐉" };
+      if (throneNear(p) && ![...mounts.values()].includes("throne")) return { kid: p, what: "throne", icon: "👑" };
       if (gate && Math.hypot(p.pos.x - gate.x, p.pos.z - gate.z) < 3 && Math.abs(p.pos.y - gate.y) < 2) return { kid: p, what: "ferris", icon: "🎡" };
     }
     return null;
   }
 
-  function mountUp(m: { kid: Player; what: "animal" | "ferris" | "dragon" }): void {
+  function throneNear(p: Player) {
+    return world.thrones.find((t) => Math.hypot(p.pos.x - t.seat.x, p.pos.z - t.seat.z) < 1.7 && Math.abs(p.pos.y - (t.seat.y - 0.6)) < 1) ?? null;
+  }
+
+  function mountUp(m: { kid: Player; what: "animal" | "ferris" | "dragon" | "throne" }): void {
     const p = m.kid;
     p.invuln = 0;
     p.group.visible = true;
+    if (m.what === "throne") {
+      const t = throneNear(p);
+      if (!t) return;
+      p.riding = true;
+      p.seated = true;
+      p.vel.set(0, 0, 0);
+      p.pos.set(t.seat.x, t.seat.y - 0.45, t.seat.z);
+      p.facing = t.facing;
+      p.group.rotation.y = t.facing;
+      mounts.set(p, "throne");
+      if (!crowned.has(p)) crowned.set(p, { hat: p.hat_, x: t.seat.x, z: t.seat.z });
+      p.setHat(1);
+      audio.sfx("win");
+      particles.burst(t.seat.x, t.seat.y + 1.6, t.seat.z, 0xffd93d, 26, 3.5, 1.1, 4);
+      particles.burst(t.seat.x, t.seat.y + 1.6, t.seat.z, 0xff6b9d, 18, 3, 1.1, 4);
+      cheerNear(p.pos, 14);
+      hud.showToast("👑 Hooray for the king or queen of Sunny Castle! Jesus is the King of kings! (Revelation 19:16)");
+      return;
+    }
     if (m.what === "dragon") {
       const d = world.dragon;
       if (!d) return;
@@ -520,6 +550,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
   function mountOff(p: Player): boolean {
     const m = mounts.get(p);
     if (!m) return false;
+    if (m === "throne") {
+      standUp(p);
+      return true;
+    }
     if (m === "dragon") {
       world.dragon?.hurry();
       hud.showToast("🐉 Sparky heads for home…");
@@ -606,6 +640,42 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   /** Riders on animals steer; gondola riders go round with the wheel and step off at the bottom. */
+  /** Off the throne: a step forward, the crown stays on. */
+  function standUp(p: Player): void {
+    p.riding = false;
+    p.seated = false;
+    mounts.delete(p);
+    p.pos.x += Math.sin(p.facing) * 0.9;
+    p.pos.z += Math.cos(p.facing) * 0.9;
+    p.pos.y += 0.3;
+    audio.sfx("ui");
+  }
+
+  /** The crown goes back when its wearer wanders far from the castle. Knights' rings count for riders. */
+  function updateCastle(): void {
+    for (const [p, c] of crowned) {
+      if (mounts.get(p) === "throne" || Math.hypot(p.pos.x - c.x, p.pos.z - c.z) < 26) continue;
+      p.setHat(c.hat);
+      crowned.delete(p);
+    }
+    const tilt = world.tilt;
+    if (!tilt) return;
+    for (const p of players) {
+      const n = tilt.pass(p, CHEST.set(p.pos.x, p.pos.y + 1.0, p.pos.z), mounts.get(p) === "animal");
+      if (n === -2) hud.showToast("🏇 Knights go through the rings on a horse. There are horses by the gate!");
+      if (n <= 0) continue;
+      audio.sfx(n === tilt.total ? "win" : "coin");
+      earn(n === tilt.total ? 30 : 5);
+      hud.setCoins(bank);
+      particles.burst(p.pos.x, p.pos.y + 2, p.pos.z, 0xffd93d, 14, 3, 0.8, 4);
+      hud.showToast(n === tilt.total
+        ? "🏆 All the rings! You're a brave knight of Sunny Castle! \"Be strong and courageous!\" (Joshua 1:9)"
+        : `🏇 Ring ${n} of ${tilt.total}! Ride on, brave knight!`);
+      if (n === tilt.total) cheerNear(p.pos, 20);
+    }
+  }
+  const CHEST = new THREE.Vector3();
+
   function updateMounts(dt: number, axes: (i: number) => { wishX: number; wishZ: number }, jumps: boolean[]): void {
     let hurry = false;
     for (const [p, m] of [...mounts]) {
@@ -618,6 +688,12 @@ export function startGame(canvas: HTMLCanvasElement): void {
           blocked: (x, z) => world.def.sea !== undefined && (world.groundAt(x, z, 40)?.y ?? -9) < world.def.sea - 0.7,
         });
         if (r.leapt) audio.sfx("jump");
+        continue;
+      }
+      if (m === "throne") {
+        // any push of the stick or move keys: stand up
+        const a = axes(i);
+        if (Math.hypot(a.wishX, a.wishZ) > 0.3) standUp(p);
         continue;
       }
       if (m === "dragon") {
@@ -2271,6 +2347,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
 
     if (mounts.size) updateMounts(dt, axesOf, [jumpNow, jump2Now]);
+    updateCastle();
 
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
@@ -2541,7 +2618,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     const useNow = !ride && !mounted ? useInReach() : null;
     if (launchT >= 0) hud.setCarUi(null);
     else if (ride) hud.setCarUi(inRide ? "out" : "in", RIDE_ICON[ride.kind]);
-    else if (mounted) hud.setCarUi("out", mounted === "animal" ? "🐴" : mounted === "dragon" ? "🐉" : "🎡");
+    else if (mounted) hud.setCarUi("out", mounted === "animal" ? "🐴" : mounted === "dragon" ? "🐉" : mounted === "throne" ? "👑" : "🎡");
     else if (canMount && canMount.what !== "ferris") hud.setCarUi("in", canMount.icon);
     else if (useNow) hud.setCarUi("in", useNow.icon, useNow.label);
     else if (canMount) hud.setCarUi("in", canMount.icon);
@@ -3000,6 +3077,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
       players[0].respawn(x, y, z);
       players[0].invuln = 0;
     },
+    castleFun: () => ({
+      thrones: world.thrones.map((t) => ({ seat: t.seat.toArray(), facing: t.facing })),
+      rings: world.tilt?.centres ?? [], passed: world.tilt?.passed ?? 0,
+      hat: players[0].hat_, seated: players[0].seated, big: players[0].group.scale.x, facing: players[0].facing, horse: herds.nearestRide(players[0].pos)?.toArray() ?? null,
+    }),
     dragon: () => {
       const d = world.dragon;
       if (!d) return null;

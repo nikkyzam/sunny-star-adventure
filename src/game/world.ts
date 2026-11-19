@@ -34,6 +34,7 @@ import type { HerdDef } from "./critters";
 import { buildBethlehem, type BethlehemDef } from "./bethlehem";
 import { buildCastle, type CastleDef } from "./castle";
 import { Dragon } from "./dragon";
+import { KnightRings } from "./tilt";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 /** Something decorative to draw: by the code-built shapes, or by the models in env.ts once loaded. */
@@ -151,6 +152,8 @@ export interface LevelDef {
   rocket?: [number, number, number];
   /** Golden hoops in the sky: x, y, z, heading. */
   rings?: [number, number, number, number][];
+  /** A knight's ring course for riders: x, z, heading (y comes from the ground). */
+  knightRings?: [number, number, number][];
   /** Toy pirate ships to sink with the sailboat's cannon: circle center x, z, radius, speed. */
   pirates?: ShipDef[];
   /** Snacks to eat (food.ts). */
@@ -759,6 +762,8 @@ const ADVENTURE_ISLAND: LevelDef = {
     ["pizza", 40.5, 1.3, -58.2], ["icecream", 43.5, 1.3, -58.2], ["cupcake", 47, 1.3, -59],   // the snack hut
     ["cupcake", -3, 1.0, 6], ["apple", -14, 1.3, -6], ["apple", 6, 1.3, -38], ["icecream", 28, 1.0, -22],
     ["apple", -78, 1.3, -57], ["icecream", -70, 1.3, -67], ["pizza", 60, 1.3, 20], ["cupcake", 30, 31, 3],
+    // the royal banquet in Sunny Castle's courtyard
+    ["apple", -30.2, 1.45, 16.95], ["cupcake", -29, 1.45, 16.95], ["icecream", -27.8, 1.45, 16.95], ["pizza", -26.6, 1.45, 16.95],
   ],
   pirates: [[0, 50, 10, 0.22], [-64, 20, 8, -0.26], [46, -6, 6, 0.3]],
   // Castle Isle, joined to the beach: the gate faces the dock
@@ -767,6 +772,8 @@ const ADVENTURE_ISLAND: LevelDef = {
     // Sparky's tour: out over the dock, the Ferris wheel, the pizza beach, the lighthouse, the camp, and home
     dragon: [[-6, 20, 42], [34, 26, 36], [70, 30, 4], [55, 32, -44], [12, 34, -86], [-38, 34, -76], [-80, 30, -38], [-66, 26, 8], [-46, 18, 34]],
   }],
+  // the knight's ring course on Castle Isle, in front of the castle's south side
+  knightRings: [[-35, 36, Math.PI / 2], [-31, 36, Math.PI / 2], [-27, 36, Math.PI / 2], [-23, 36, Math.PI / 2], [-19, 36, Math.PI / 2]],
   playground: [8, -1],
   station: [-2.8, 16.4],
   extraCars: [[38, 0, -62, 0]],
@@ -968,6 +975,8 @@ const ADVENTURE_ISLAND: LevelDef = {
         "A castle keeps everyone safe inside. The Bible says God is our refuge and strength, like a mighty castle!",
         "Sparky the dragon lives on top of the keep. He's very friendly! Climb up and he'll fly you round the island.",
         "Ring the bell in the courtyard and watch the doves fly up!",
+        "Try sitting on the throne! And there's a feast on the banquet table.",
+        "Brave knights ride a horse through the five rings outside. Can you get them all?",
       ],
     },
     {
@@ -1949,6 +1958,10 @@ export class World {
   dragon: Dragon | null = null;
   /** Castle bells a kid can ring. */
   bells: { pos: THREE.Vector3; ring: () => void }[] = [];
+  /** Castle thrones a kid can sit on. */
+  thrones: { seat: THREE.Vector3; facing: number }[] = [];
+  /** The knight's ring course, if this level has one. */
+  tilt: KnightRings | null = null;
   /** How fast the Ferris wheel turns (1 = its normal slow turn; boot speeds it up to bring a rider down). */
   ferrisSpin = 1;
   private oceanY = -7;
@@ -2268,6 +2281,8 @@ export class World {
     this.decor = [];
     this.dragon = null;
     this.bells = [];
+    this.thrones = [];
+    this.tilt = null;
     for (const l of this.locks.values()) disposeSprite(l.sign);
     this.locks.clear();
     this.starSpots = def.stars.map((s) => [...s] as [number, number, number]);
@@ -2405,12 +2420,20 @@ export class World {
     for (const c of def.castles ?? []) {
       const info = buildCastle({ group: this.group, platforms: this.platforms, solids: this.solids, anim: this.anim }, c, c.y ?? 0.3);
       this.bells.push(info.bell);
+      this.thrones.push(info.throne);
       if (c.dragon && !this.dragon) {
         const d = new Dragon(info.perch, info.facing, info.centre, c.dragon.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
         this.group.add(d.group);
         this.anim.push((t, dt) => d.update(t, dt));
         this.dragon = d;
       }
+    }
+    if (def.knightRings?.length) {
+      const k = new KnightRings();
+      k.build(def.knightRings.map(([x, z, h]) => [x, this.groundAt(x, z, 6)?.y ?? 0.3, z, h]));
+      this.group.add(k.group);
+      this.anim.push((t, dt) => k.update(t, dt));
+      this.tilt = k;
     }
     if (def.bigFish) this.buildBigFish(def.bigFish[0], def.bigFish[1], def.sea ?? 0);
     for (const [tx, ty, tz, color] of def.tents ?? []) {

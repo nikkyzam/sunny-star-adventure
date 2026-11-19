@@ -318,6 +318,11 @@ export class Herds {
   // ── riding ────────────────────────────────────────────────────────────────
 
   /** The nearest free animal a kid at pos can climb onto (within reach), or null. */
+  /** Where the nearest animal someone could ride is (for tests). */
+  nearestRide(pos: THREE.Vector3): THREE.Vector3 | null {
+    return this.nearestRideable(pos, Infinity)?.m.root.position ?? null;
+  }
+
   mountable(pos: THREE.Vector3, reach: number): AnimalKind | null {
     return this.nearestRideable(pos, reach)?.kind ?? null;
   }
