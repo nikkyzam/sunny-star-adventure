@@ -84,6 +84,33 @@ function makeHat(i: number): THREE.Group | null {
     const mid = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), mat(0xffd93d));
     mid.position.set(0.24, 1.74, 0.1);
     g.add(mid);
+  } else if (i === 5) {
+    // a knight's helmet: an open-face dome with a nose guard, cheek pieces and a red plume
+    const steel = new THREE.MeshStandardMaterial({ color: 0xc9d1da, metalness: 0.75, roughness: 0.3, flatShading: true });
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.31, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), steel);
+    dome.position.y = 1.59;
+    g.add(dome);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.03, 6, 20).rotateX(Math.PI / 2), steel);
+    rim.position.y = 1.6;
+    g.add(rim);
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.2, 0.03), steel);
+    nose.position.set(0, 1.54, 0.315);
+    g.add(nose);
+    for (const sx of [-1, 1]) {
+      const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.2), steel);
+      cheek.position.set(0.3 * sx, 1.5, 0.06);
+      g.add(cheek);
+    }
+    const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.5), mat(0xffc93c));
+    ridge.position.set(0, 1.89, 0);
+    g.add(ridge);
+    const plumeM = mat(0xe8434f);
+    for (let k = 0; k < 5; k++) {
+      const f = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.18, 4, 6), plumeM);
+      f.position.set(0, 1.97 + Math.sin(k * 0.7) * 0.06, 0.08 - k * 0.09);
+      f.rotation.x = -0.4 - k * 0.3;
+      g.add(f);
+    }
   } else {
     return null;
   }

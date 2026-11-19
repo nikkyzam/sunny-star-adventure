@@ -46,6 +46,10 @@ export interface CastleInfo {
   slide: { board: THREE.Vector3; path: THREE.CatmullRomCurve3 };
   /** The fireworks crate over the gate, and lighting it (false while the last lot is still going). */
   fireworks: { pos: THREE.Vector3; launch: () => boolean };
+  /** The armour stand: a knight's helmet and a shield to try on. */
+  armour: { pos: THREE.Vector3 };
+  /** Singing stones in the courtyard: where each one is (low to high notes), one to press, one to glow. */
+  chimes: { stones: THREE.Vector3[]; press: (i: number) => void; guide: (i: number) => void };
 }
 
 interface Solid { minX: number; maxX: number; minZ: number; maxZ: number; topY: number }
@@ -672,6 +676,60 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     return true;
   };
 
+  // ── the armour of God: a wooden stand with a knight's helmet and a shield with a cross ──
+  const armourAt = { x: -4.7, z: 2.3 };
+  {
+    const { x, z } = armourAt;
+    const steel = std(0xc9d1da, 0.3, { metalness: 0.75, flatShading: true });
+    const stand = new THREE.Group();
+    stand.position.set(x, 0, z);
+    stand.rotation.y = 0.5; // turned toward the gate
+    g.add(stand);
+    const put = (geo: THREE.BufferGeometry, m: THREE.Material, px: number, py: number, pz: number) => mesh(geo, m, px, py, pz, stand);
+    put(new THREE.CylinderGeometry(0.35, 0.4, 0.15, 10), wood, 0, 0.075, 0);
+    put(new THREE.CylinderGeometry(0.05, 0.05, 1.5, 8), wood, 0, 0.8, 0);
+    put(new THREE.BoxGeometry(0.7, 0.07, 0.07), wood, 0, 1.25, 0);
+    // a breastplate on the cross-bar and the helmet on top, plume and all
+    put(new THREE.BoxGeometry(0.5, 0.55, 0.22), steel, 0, 1.12, 0.03);
+    put(new THREE.SphereGeometry(0.22, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2), steel, 0, 1.55, 0);
+    put(new THREE.SphereGeometry(0.16, 10, 8), wood, 0, 1.5, 0);
+    put(new THREE.BoxGeometry(0.04, 0.16, 0.03), steel, 0, 1.47, 0.22);
+    const plume = std(0xe8434f, 0.8);
+    for (let k = 0; k < 4; k++) put(new THREE.CapsuleGeometry(0.04, 0.14, 4, 6), plume, 0, 1.8 + Math.sin(k * 0.8) * 0.04, 0.06 - k * 0.07).rotation.x = -0.4 - k * 0.3;
+    // the shield of faith leaning on the post, with a gold cross
+    const shield = put(new THREE.CylinderGeometry(0.38, 0.38, 0.06, 20).rotateX(Math.PI / 2), std(0x2f6fd6, 0.6), 0.05, 0.5, 0.28);
+    shield.scale.y = 1.25;
+    shield.rotation.x = -0.15;
+    put(new THREE.BoxGeometry(0.08, 0.5, 0.02), gold, 0.05, 0.52, 0.32).rotation.x = -0.15;
+    put(new THREE.BoxGeometry(0.34, 0.08, 0.02), gold, 0.05, 0.6, 0.31).rotation.x = -0.15;
+    solid(x, z, 0.35, 0.35, 1.8);
+  }
+
+  // ── singing stones: a row of coloured flagstones across the courtyard, low notes to high.
+  // Step on one and it sings; the one that glows plays the next note of a song ──
+  const CHIME_COLS = [0xff4757, 0xffa53a, 0xffd93d, 0x3fbf6b, 0x2fd0ff, 0x2f80ed, 0xb06bff, 0xff6bd6];
+  const chimeStones: { m: THREE.Mesh; mat: THREE.MeshStandardMaterial; dip: number; lit: boolean }[] = [];
+  const chimeZ = 4.95;
+  const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.16), new THREE.MeshBasicMaterial({ color: 0xfff3a0 }));
+  star.visible = false;
+  g.add(star);
+  CHIME_COLS.forEach((col, i) => {
+    const mat = std(col, 0.5, { emissive: col, emissiveIntensity: 0.1 });
+    const m = mesh(new THREE.CylinderGeometry(0.42, 0.45, 0.1, 16), mat, -2.9 + i * 0.95, 0.05, chimeZ);
+    chimeStones.push({ m, mat, dip: 0, lit: false });
+  });
+  w.anim.push((t, dt) => {
+    for (const c of chimeStones) {
+      c.dip = Math.max(0, c.dip - dt * 3);
+      c.m.position.y = 0.05 - Math.sin(c.dip * Math.PI) * 0.04;
+      c.mat.emissiveIntensity = 0.1 + c.dip * 0.9 + (c.lit ? 0.35 + Math.sin(t * 6) * 0.25 : 0);
+      if (c.lit) {
+        star.position.set(c.m.position.x, 0.75 + Math.sin(t * 4) * 0.12, chimeZ);
+        star.rotation.y = t * 2;
+      }
+    }
+  });
+
   const kz = -S + T / 2 + 2.2 + 1.6;
   const thx = -2.5 - 1.6, thz = kz + 2.2 + 1.2;
   return {
@@ -688,6 +746,15 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
       path: new THREE.CatmullRomCurve3(slidePts.map((p) => new THREE.Vector3(wx(p.x, p.z), base + p.y, wz(p.x, p.z))), false, "centripetal"),
     },
     fireworks: { pos: new THREE.Vector3(wx(fwAt.x, fwAt.z), base + H, wz(fwAt.x, fwAt.z)), launch },
+    armour: { pos: new THREE.Vector3(wx(armourAt.x, armourAt.z), base, wz(armourAt.x, armourAt.z)) },
+    chimes: {
+      stones: chimeStones.map((c) => new THREE.Vector3(wx(c.m.position.x, chimeZ), base + 0.1, wz(c.m.position.x, chimeZ))),
+      press: (i) => { if (chimeStones[i]) chimeStones[i].dip = 1; },
+      guide: (i) => {
+        chimeStones.forEach((c, k) => { c.lit = k === i; });
+        star.visible = i >= 0 && i < chimeStones.length;
+      },
+    },
   };
 
   function torch(x: number, y: number, z: number): void {

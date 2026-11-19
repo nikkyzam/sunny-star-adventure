@@ -18,7 +18,7 @@ export const OUTFITS: KidPalette[] = [
 ];
 
 /** Hat choices shown on the title screen; index matches makeHat() in player.ts. */
-export const HATS = ["🧢", "👑", "🐰", "🧙", "🌸"];
+export const HATS = ["🧢", "👑", "🐰", "🧙", "🌸", "🛡️"];
 
 // the last one is alien green (the Moon's villagers wear it; kids can too)
 export const SKINS = [0xffd9b3, 0xf2c39a, 0xd9a273, 0xb07a50, 0x7d5236, 0x8fe07a];

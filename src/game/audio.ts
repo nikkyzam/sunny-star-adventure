@@ -365,6 +365,18 @@ export class AudioSystem {
     this.sea = null;
   }
 
+  /** A singing stone: a bright bell-like note, step `i` of the C major scale (0 = middle C). */
+  note(i: number): void {
+    if (this.disposed || this.muted) return;
+    const ctx = this.ensureCtx();
+    if (!this.master) return;
+    const t = ctx.currentTime;
+    const f = 523.25 * Math.pow(2, [0, 2, 4, 5, 7, 9, 11, 12][Math.max(0, Math.min(7, i))] / 12);
+    this.blip("sine", f, f, t, 0.9, 0.2);
+    this.blip("sine", f * 2, f * 2, t, 0.4, 0.06);
+    this.blip("triangle", f * 3, f * 3, t, 0.15, 0.03);
+  }
+
   sfx(id: SfxId): void {
     if (this.disposed || this.muted) return; // muted: no context is created either
     const ctx = this.ensureCtx();

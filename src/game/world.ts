@@ -979,6 +979,8 @@ const ADVENTURE_ISLAND: LevelDef = {
         "Brave knights ride a horse through the five rings outside. Can you get them all?",
         "Climb up on the wall and whoosh down the big spiral slide into the hay!",
         "There's a box of fireworks on the wall over the gate. Give the handle a push!",
+        "Try on the knight's helmet by the throne. Put on the armour of God!",
+        "The coloured stones by the gate sing when you step on them. Follow the glowing one to play a song!",
       ],
     },
     {
@@ -1966,6 +1968,10 @@ export class World {
   slides: { board: THREE.Vector3; path: THREE.CatmullRomCurve3 }[] = [];
   /** Castle fireworks crates. */
   fireworks: { pos: THREE.Vector3; launch: () => boolean }[] = [];
+  /** Castle armour stands (the helmet to try on). */
+  armours: { pos: THREE.Vector3 }[] = [];
+  /** Castle singing stones. */
+  chimes: { stones: THREE.Vector3[]; press: (i: number) => void; guide: (i: number) => void }[] = [];
   /** The knight's ring course, if this level has one. */
   tilt: KnightRings | null = null;
   /** How fast the Ferris wheel turns (1 = its normal slow turn; boot speeds it up to bring a rider down). */
@@ -2290,6 +2296,8 @@ export class World {
     this.thrones = [];
     this.slides = [];
     this.fireworks = [];
+    this.armours = [];
+    this.chimes = [];
     this.tilt = null;
     for (const l of this.locks.values()) disposeSprite(l.sign);
     this.locks.clear();
@@ -2431,6 +2439,8 @@ export class World {
       this.thrones.push(info.throne);
       this.slides.push(info.slide);
       this.fireworks.push(info.fireworks);
+      this.armours.push(info.armour);
+      this.chimes.push(info.chimes);
       if (c.dragon && !this.dragon) {
         const d = new Dragon(info.perch, info.facing, info.centre, c.dragon.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
         this.group.add(d.group);

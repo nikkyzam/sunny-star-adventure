@@ -131,7 +131,7 @@ declare global {
       /** Sparky: where he is and what he's doing (null if this level has no dragon). */
       dragon: () => { state: string; x: number; y: number; z: number; perch: number[]; bells: number[][] } | null;
       /** The castle's fun: thrones, the ring course, and what the kid wears and does. */
-      castleFun: () => { thrones: { seat: number[]; facing: number }[]; rings: number[][]; passed: number; hat: number; seated: boolean; big: number; facing: number; horse: number[] | null; slides: { board: number[]; end: number[]; len: number }[]; sliding: number | null; fireworks: number[][] };
+      castleFun: () => { thrones: { seat: number[]; facing: number }[]; rings: number[][]; passed: number; hat: number; seated: boolean; big: number; facing: number; horse: number[] | null; slides: { board: number[]; end: number[]; len: number }[]; sliding: number | null; fireworks: number[][]; armour: number[][]; stones: number[][]; songAt: number };
       /** Onto the highest ground at (x, z), or the floor just below y when given (inside a house). */
       warp: (x: number, z: number, y?: number) => void;
       /** Test hook: park the car somewhere else. */
@@ -475,6 +475,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
     for (const [p, c] of crowned) p.setHat(c.hat);
     crowned.clear();
     sliding.clear();
+    chimeOn.clear();
+    songAt = 0;
+    songShown = -1;
     mounts.clear();
     world.ferrisSpin = 1;
   }
@@ -607,6 +610,14 @@ export function startGame(canvas: HTMLCanvasElement): void {
         cheerNear(p.pos, 30);
         hud.showToast("🎆 Whoosh… BOOM! \"The heavens declare the glory of God!\" (Psalm 19:1)");
       } };
+      const arm = world.armours.find((a) => Math.hypot(p.pos.x - a.pos.x, p.pos.z - a.pos.z) < 1.5 && Math.abs(p.pos.y - a.pos.y) < 1.2);
+      if (arm && p.hat_ !== 5) return { kid: p, icon: "🛡️", label: "Put on the helmet", go: () => {
+        if (!crowned.has(p)) crowned.set(p, { hat: p.hat_, x: arm.pos.x, z: arm.pos.z });
+        p.setHat(5);
+        audio.sfx("powerup");
+        particles.burst(p.pos.x, p.pos.y + 2, p.pos.z, 0xc9d1da, 16, 2.5, 0.8, 3);
+        hud.showToast("🛡️ A brave knight! \"Put on the full armour of God.\" (Ephesians 6:11)");
+      } };
       const bell = world.bells.find((b) => Math.hypot(p.pos.x - b.pos.x, p.pos.z - b.pos.z) < 1.9 && Math.abs(p.pos.y - b.pos.y) < 1.5);
       if (bell) return { kid: p, icon: "🔔", label: "Ring the bell", go: () => {
         bell.ring();
@@ -685,6 +696,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       p.setHat(c.hat);
       crowned.delete(p);
     }
+    updateChimes();
     const tilt = world.tilt;
     if (!tilt) return;
     for (const p of players) {
@@ -702,6 +714,43 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
   }
   const CHEST = new THREE.Vector3();
+
+  /** "Jesus loves me, this I know, for the Bible tells me so" on the singing stones (0 = C). */
+  const SONG = [4, 2, 2, 1, 2, 4, 4, 5, 5, 7, 5, 5, 4, 4];
+  const chimeOn = new Map<Player, number>();
+  let songAt = 0, songWon = false, songShown = -1;
+  function updateChimes(): void {
+    const ch = world.chimes[0];
+    if (!ch) return;
+    for (const p of players) {
+      let on = -1;
+      if (p.onGround && !p.riding) on = ch.stones.findIndex((s) => Math.hypot(p.pos.x - s.x, p.pos.z - s.z) < 0.46 && Math.abs(p.pos.y - s.y) < 0.5);
+      const was = chimeOn.get(p) ?? -1;
+      chimeOn.set(p, on);
+      if (on < 0 || on === was) continue;
+      audio.note(on);
+      ch.press(on);
+      particles.burst(ch.stones[on].x, ch.stones[on].y + 0.4, ch.stones[on].z, 0xfff3a0, 6, 1.5, 0.5, 2);
+      if (on !== SONG[songAt]) continue;
+      songAt++;
+      if (songAt === 1) hud.showToast("🎵 Follow the glowing stone! Hop to play the same note again.");
+      if (songAt < SONG.length) continue;
+      songAt = 0;
+      cheerNear(p.pos, 20);
+      audio.sfx("win");
+      particles.burst(p.pos.x, p.pos.y + 2, p.pos.z, 0xff6bd6, 24, 3.5, 1, 4);
+      if (!songWon) {
+        songWon = true;
+        earn(25);
+        hud.setCoins(bank);
+      }
+      hud.showToast("🎶 \"Jesus loves me, this I know!\" Beautiful singing! \"Sing to the Lord a new song!\" (Psalm 96:1)");
+    }
+    if (songShown !== songAt) {
+      songShown = songAt;
+      ch.guide(SONG[songAt]);
+    }
+  }
   const SLIDE_T = new THREE.Vector3();
 
   function updateMounts(dt: number, axes: (i: number) => { wishX: number; wishZ: number }, jumps: boolean[]): void {
@@ -3142,6 +3191,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
       slides: world.slides.map((sl) => ({ board: sl.board.toArray(), end: sl.path.getPointAt(1).toArray(), len: sl.path.getLength() })),
       sliding: sliding.has(players[0]) ? sliding.get(players[0])!.s / sliding.get(players[0])!.len : null,
       fireworks: world.fireworks.map((f) => f.pos.toArray()),
+      armour: world.armours.map((a) => a.pos.toArray()),
+      stones: world.chimes[0]?.stones.map((v) => v.toArray()) ?? [],
+      songAt,
     }),
     dragon: () => {
       const d = world.dragon;
