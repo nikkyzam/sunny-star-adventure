@@ -12,7 +12,7 @@
 export type SfxId =
   | "jump" | "doublejump" | "land" | "boing" | "stomp" | "star" | "hurt"
   | "portal" | "checkpoint" | "ui" | "win" | "lose" | "unlock" | "fall"
-  | "coin" | "chest" | "buddy" | "powerup" | "honk" | "splash" | "talk" | "pet" | "munch" | "baa" | "rustle" | "meow" | "coo" | "dig" | "bell" | "roar";
+  | "coin" | "chest" | "buddy" | "powerup" | "honk" | "splash" | "talk" | "pet" | "munch" | "baa" | "rustle" | "meow" | "coo" | "dig" | "bell" | "roar" | "whee" | "fireworks";
 
 export type TrackId = "meadow" | "island" | "city" | "snow";
 
@@ -442,6 +442,21 @@ export class AudioSystem {
         this.blip("sawtooth", 260, 420, t, 0.12, 0.12);
         this.blip("sawtooth", 420, 200, t + 0.12, 0.3, 0.12);
         this.blip("triangle", 140, 60, t + 0.35, 0.4, 0.18);
+        break;
+      case "whee":
+        // a slide whistle going up and swooping down
+        this.blip("sine", 500, 1400, t, 0.35, 0.12);
+        this.blip("sine", 1400, 420, t + 0.35, 0.9, 0.1);
+        break;
+      case "fireworks":
+        // whistles going up, then a pop and a crackle each (timed with the rockets: 0.28 s apart, ~1.3 s up)
+        for (let k = 0; k < 10; k++) {
+          const at = t + k * 0.28 + (k >= 6 ? 0.1 : 0);
+          this.blip("sine", 700, 1700, at, 1.1, 0.025);
+          this.blip("sine", 140, 45, at + 1.3, 0.35, 0.22);
+          this.hiss("bandpass", 3000, 1200, at + 1.3, 0.5, 0.08);
+          for (let c = 0; c < 4; c++) this.blip("square", 2000 + Math.random() * 1500, 1500, at + 1.55 + c * 0.07 + Math.random() * 0.05, 0.02, 0.025);
+        }
         break;
       case "coo":
         this.blip("sine", 420, 380, t, 0.18, 0.14);

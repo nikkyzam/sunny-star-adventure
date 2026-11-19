@@ -42,6 +42,10 @@ export interface CastleInfo {
   bell: { pos: THREE.Vector3; ring: () => void };
   /** The throne: the top of its cushion, and the way someone sitting on it faces. */
   throne: { seat: THREE.Vector3; facing: number };
+  /** The helter-skelter: where to get on (on the wall walkway), and the slide's path (world points). */
+  slide: { board: THREE.Vector3; path: THREE.CatmullRomCurve3 };
+  /** The fireworks crate over the gate, and lighting it (false while the last lot is still going). */
+  fireworks: { pos: THREE.Vector3; launch: () => boolean };
 }
 
 interface Solid { minX: number; maxX: number; minZ: number; maxZ: number; topY: number }
@@ -494,6 +498,180 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     }
   };
 
+  // ── a helter-skelter outside the side wall: a striped tower with a slide spiralling round it ──
+  // from a little deck on the walkway the chute crosses the wall, winds twice round the tower and
+  // runs out into a big pile of hay
+  const SX = S + 3.4, SZ = 0.4, SR = 2.1, ST = 1.2, TOPY = H + 1.35;
+  const slidePts: THREE.Vector3[] = [new THREE.Vector3(S - 0.3, TOPY, SZ - SR), new THREE.Vector3(S + 1.6, TOPY - 0.2, SZ - SR)];
+  {
+    const turns = 2, y0 = TOPY - 0.45, y1 = 0.75, n = turns * 16;
+    for (let i = 0; i <= n; i++) {
+      const a = Math.PI / 2 - (i / n) * turns * Math.PI * 2; // from the wall side, heading outward
+      slidePts.push(new THREE.Vector3(SX + Math.cos(a) * SR, y0 + (y1 - y0) * (i / n), SZ - Math.sin(a) * SR));
+    }
+    slidePts.push(new THREE.Vector3(SX + 1.6, 0.55, SZ - SR), new THREE.Vector3(SX + 3.2, 0.4, SZ - SR));
+  }
+  const slideLocal = new THREE.CatmullRomCurve3(slidePts, false, "centripetal");
+  {
+    const chuteM = std(0xffc93c, 0.45, { side: THREE.DoubleSide });
+    const chute = new THREE.Mesh(troughGeometry(slideLocal, 260, 0.5), chuteM);
+    chute.castShadow = true;
+    chute.receiveShadow = true;
+    g.add(chute);
+    // the tower: red and white bands, a pointed roof and a flag
+    const bands = 9, bandH = (TOPY + 0.9) / bands;
+    const red = std(0xe8434f, 0.7), white = std(0xfdf6e3, 0.7);
+    for (let i = 0; i < bands; i++) mesh(new THREE.CylinderGeometry(ST, ST, bandH, 18), i % 2 ? white : red, SX, bandH * (i + 0.5), SZ);
+    mesh(new THREE.ConeGeometry(ST + 0.5, 2.0, 18), roofM, SX, TOPY + 0.9 + 1.0, SZ);
+    mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.3, 6), wood, SX, TOPY + 2.9 + 0.65, SZ);
+    const pennant = mesh(new THREE.ConeGeometry(0.22, 0.8, 3).rotateZ(-Math.PI / 2), flagM, SX + 0.4, TOPY + 3.4, SZ);
+    w.anim.push((t) => { pennant.rotation.x = Math.sin(t * 4) * 0.25; });
+    // brackets from the tower out under the chute
+    for (let i = 4; i < slidePts.length - 2; i += 2) {
+      const pt = slidePts[i];
+      const dx = pt.x - SX, dz = pt.z - SZ, d = Math.hypot(dx, dz);
+      const arm = mesh(new THREE.BoxGeometry(d - ST + 0.1, 0.1, 0.1), wood, SX + (dx / d) * (ST + d) / 2, pt.y - 0.12, SZ + (dz / d) * (ST + d) / 2);
+      arm.rotation.y = -Math.atan2(dz, dx);
+    }
+    // legs under the bridge over the wall, and a little deck to climb on at the top
+    for (const dz of [-0.4, 0.4]) mesh(new THREE.CylinderGeometry(0.07, 0.07, TOPY, 6), wood, S + 1.5, TOPY / 2, SZ - SR + dz);
+    const deck = std(0x9b6a3c, 0.9);
+    mesh(new THREE.BoxGeometry(0.9, 0.3, 1.1), deck, S - 0.3, H + 0.15, SZ - SR);
+    plat(S - 0.3, SZ - SR, 0.45, 0.55, H + 0.3);
+    // a sign: "Slide!" with an arrow
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.36, 0.06), new THREE.MeshStandardMaterial({ map: textTexture("Slide!", "#e8434f", "#ffffff"), roughness: 0.8 }));
+    sign.position.set(S - 0.3, H + 1.5, SZ - SR - 0.62);
+    g.add(sign);
+    mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.3, 6), wood, S - 0.3, H + 0.85, SZ - SR - 0.66);
+    // the hay pile at the bottom
+    const hay = std(0xe9c46a, 1, { flatShading: true });
+    const end = slidePts[slidePts.length - 1];
+    const pile = mesh(new THREE.IcosahedronGeometry(1.3, 1), hay, end.x + 1.1, 0.15, end.z);
+    pile.scale.set(1.3, 0.55, 1.2);
+    for (let i = 0; i < 6; i++) {
+      const bale = mesh(new THREE.BoxGeometry(0.9, 0.5, 0.55), hay, end.x + 1.1 + Math.cos(i) * 1.7, 0.25, end.z + Math.sin(i * 2.1) * 1.5);
+      bale.rotation.y = i * 1.3;
+    }
+    solid(SX, SZ, ST, ST, TOPY + 0.9);
+  }
+
+  // ── fireworks: a crate of rockets on the walkway over the gate. Light it and they shoot up
+  // from the towers and burst in colours over the castle ──
+  const fwAt = { x: 1.3, z: S - 0.15 };
+  {
+    const { x, z } = fwAt;
+    const crate = std(0x8a5a2e, 0.9);
+    mesh(new THREE.BoxGeometry(0.8, 0.5, 0.55), crate, x, H + 0.25, z);
+    const cols = [0xff4757, 0x2f80ed, 0x3fbf6b, 0xffd93d, 0xb06bff];
+    for (let i = 0; i < 5; i++) {
+      const rx = x - 0.3 + i * 0.15, rz = z + (i % 2 ? 0.1 : -0.1);
+      mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.45, 6), std(cols[i], 0.6), rx, H + 0.7, rz);
+      mesh(new THREE.ConeGeometry(0.07, 0.15, 6), std(0xffffff, 0.6), rx, H + 1.0, rz);
+    }
+    // a plunger to push
+    mesh(new THREE.BoxGeometry(0.3, 0.25, 0.3), std(0xe8434f, 0.6), x + 0.65, H + 0.12, z);
+    mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.4, 6), iron, x + 0.65, H + 0.45, z);
+    mesh(new THREE.BoxGeometry(0.3, 0.06, 0.06), iron, x + 0.65, H + 0.65, z);
+  }
+  const dot = (() => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 32;
+    const ctx = c.getContext("2d")!;
+    const gr = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, "rgba(255,255,255,1)");
+    gr.addColorStop(0.4, "rgba(255,255,255,0.9)");
+    gr.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gr;
+    ctx.fillRect(0, 0, 32, 32);
+    return new THREE.CanvasTexture(c);
+  })();
+  const PALETTE = [0xff4757, 0xffd93d, 0x2fd0ff, 0x3fbf6b, 0xff6bd6, 0xb06bff, 0xffa53a, 0xffffff];
+  interface Rocket { o: THREE.Mesh; vy: number; wait: number; burstAt: number; color: number }
+  interface Burst { pts: THREE.Points; vel: Float32Array; age: number }
+  const rockets: Rocket[] = [];
+  const bursts: Burst[] = [];
+  const rocketGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.5, 6);
+  const sparkM = new THREE.MeshBasicMaterial({ color: 0xffd27a });
+  const pads: [number, number, number][] = [];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) pads.push([sx * (S + 1.6), H + 3.2 + 0.7, sz * (S + 1.6)]);
+  for (const sx of [-1, 1]) pads.push([sx * (G / 2 + 1.0), H + 1.9, S + T / 2 + 0.9]);
+  const boom = (at: THREE.Vector3, color: number) => {
+    const n = 90;
+    const pos = new Float32Array(n * 3), vel = new Float32Array(n * 3), col = new Float32Array(n * 3);
+    const c1 = new THREE.Color(color), c2 = new THREE.Color(PALETTE[(PALETTE.indexOf(color) + 3) % PALETTE.length]);
+    for (let i = 0; i < n; i++) {
+      // an even sphere of sparks, the outer shell one colour and an inner ring another
+      const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r = Math.sqrt(1 - u * u);
+      const sp = i < 60 ? 7 + Math.random() * 1.2 : 3.5 + Math.random();
+      vel.set([Math.cos(a) * r * sp, u * sp, Math.sin(a) * r * sp], i * 3);
+      pos.set([at.x, at.y, at.z], i * 3);
+      (i < 60 ? c1 : c2).toArray(col, i * 3);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: 1.25, map: dot, vertexColors: true, transparent: true, depthWrite: false }));
+    pts.frustumCulled = false;
+    w.group.add(pts);
+    bursts.push({ pts, vel, age: 0 });
+  };
+  w.anim.push((_t, dt) => {
+    for (let i = rockets.length - 1; i >= 0; i--) {
+      const r = rockets[i];
+      if (r.wait > 0) { r.wait -= dt; r.o.visible = r.wait <= 0; continue; }
+      r.o.position.y += r.vy * dt;
+      r.vy = Math.max(6, r.vy - dt * 6);
+      if (Math.random() < 0.6) {
+        const s = new THREE.Mesh(new THREE.SphereGeometry(0.06, 4, 3), sparkM);
+        s.position.copy(r.o.position);
+        s.userData.age = 0;
+        w.group.add(s);
+        trail.push(s);
+      }
+      if (r.o.position.y >= r.burstAt) {
+        boom(r.o.position, r.color);
+        w.group.remove(r.o);
+        rockets.splice(i, 1);
+      }
+    }
+    for (let i = trail.length - 1; i >= 0; i--) {
+      const s = trail[i];
+      s.userData.age += dt;
+      s.position.y -= dt * 0.6;
+      s.scale.setScalar(Math.max(0.01, 1 - s.userData.age * 2));
+      if (s.userData.age > 0.5) { w.group.remove(s); s.geometry.dispose(); trail.splice(i, 1); }
+    }
+    for (let i = bursts.length - 1; i >= 0; i--) {
+      const b = bursts[i];
+      b.age += dt;
+      const p = b.pts.geometry.getAttribute("position") as THREE.BufferAttribute;
+      const drag = Math.exp(-dt * 1.6);
+      for (let k = 0; k < p.count; k++) {
+        b.vel[k * 3] *= drag; b.vel[k * 3 + 1] = b.vel[k * 3 + 1] * drag - dt * 2.2; b.vel[k * 3 + 2] *= drag;
+        p.setXYZ(k, p.getX(k) + b.vel[k * 3] * dt, p.getY(k) + b.vel[k * 3 + 1] * dt, p.getZ(k) + b.vel[k * 3 + 2] * dt);
+      }
+      p.needsUpdate = true;
+      const m = b.pts.material as THREE.PointsMaterial;
+      m.opacity = Math.max(0, 1 - Math.max(0, b.age - 0.8) / 1.2) * (b.age > 1 ? 0.75 + 0.25 * Math.sin(b.age * 40 + i) : 1); // fade, with a twinkle
+      if (b.age > 2) { w.group.remove(b.pts); b.pts.geometry.dispose(); m.dispose(); bursts.splice(i, 1); }
+    }
+  });
+  const trail: THREE.Mesh[] = [];
+  const launch = (): boolean => {
+    if (rockets.length || bursts.length > 2) return false;
+    pads.forEach(([lx, ly, lz], k) => {
+      for (let j = 0; j < (k < 4 ? 2 : 1); j++) {
+        const color = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+        const o = new THREE.Mesh(rocketGeo, new THREE.MeshBasicMaterial({ color }));
+        o.position.set(wx(lx, lz), base + ly, wz(lx, lz));
+        o.visible = false;
+        w.group.add(o);
+        rockets.push({ o, vy: 16, wait: (j * 6 + k) * 0.28 + Math.random() * 0.1, burstAt: base + 17 + Math.random() * 7, color });
+      }
+    });
+    return true;
+  };
+
   const kz = -S + T / 2 + 2.2 + 1.6;
   const thx = -2.5 - 1.6, thz = kz + 2.2 + 1.2;
   return {
@@ -505,6 +683,11 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
       pos: new THREE.Vector3(wx(bellAt.x, bellAt.z), base, wz(bellAt.x, bellAt.z)),
       ring: () => { swingT = 0; release(); },
     },
+    slide: {
+      board: new THREE.Vector3(wx(S - 0.3, SZ - SR), base + H, wz(S - 0.3, SZ - SR)),
+      path: new THREE.CatmullRomCurve3(slidePts.map((p) => new THREE.Vector3(wx(p.x, p.z), base + p.y, wz(p.x, p.z))), false, "centripetal"),
+    },
+    fireworks: { pos: new THREE.Vector3(wx(fwAt.x, fwAt.z), base + H, wz(fwAt.x, fwAt.z)), launch },
   };
 
   function torch(x: number, y: number, z: number): void {
@@ -516,6 +699,35 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     const ph = x * 3.1 + z;
     w.anim.push((t) => { f.scale.set(1, 0.85 + Math.sin(t * 13 + ph) * 0.15 + Math.sin(t * 7.3 + ph) * 0.1, 1); });
   }
+}
+
+/**
+ * A slide's chute: a half-pipe following the curve (the curve runs along its bottom), open at the top.
+ */
+function troughGeometry(curve: THREE.Curve<THREE.Vector3>, segments: number, halfW: number): THREE.BufferGeometry {
+  const M = 10;
+  const pos: number[] = [], idx: number[] = [];
+  const up = new THREE.Vector3(0, 1, 0), side = new THREE.Vector3(), n = new THREE.Vector3(), t = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let i = 0; i <= segments; i++) {
+    curve.getPointAt(i / segments, c);
+    curve.getTangentAt(i / segments, t);
+    side.crossVectors(t, up).normalize();
+    n.crossVectors(side, t).normalize();
+    for (let j = 0; j <= M; j++) {
+      const th = (j / M) * Math.PI;
+      const p = c.clone().addScaledVector(side, -Math.cos(th) * halfW).addScaledVector(n, (1 - Math.sin(th)) * halfW * 0.9);
+      pos.push(p.x, p.y, p.z);
+    }
+  }
+  for (let i = 0; i < segments; i++) for (let j = 0; j < M; j++) {
+    const a = i * (M + 1) + j, b = a + M + 1;
+    idx.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
 }
 
 /** Hundreds of stones, merlons and planks: one mesh per material, so the castle draws quickly. */
