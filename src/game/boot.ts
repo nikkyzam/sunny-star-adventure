@@ -49,6 +49,7 @@ import { Props } from "./props";
 import { Particles } from "./particles";
 import { Hud, type HudAction } from "./hud";
 import { storage, highScore } from "./storage";
+import { StickerBook, CASTLE_STICKERS, type StickerId } from "./stickers";
 import {
   OUTFITS, HATS, SKINS, PETS, HAIR_COLORS, HAIR_STYLES, GLASSES, CLOTHES, BODIES, loadProfile, saveProfile, rerollName, nameText,
   lookOf, safeLook, safeName, safeHat, safePet,
@@ -131,7 +132,7 @@ declare global {
       /** Sparky: where he is and what he's doing (null if this level has no dragon). */
       dragon: () => { state: string; x: number; y: number; z: number; perch: number[]; bells: number[][] } | null;
       /** The castle's fun: thrones, the ring course, and what the kid wears and does. */
-      castleFun: () => { thrones: { seat: number[]; facing: number }[]; rings: number[][]; passed: number; hat: number; seated: boolean; big: number; facing: number; horse: number[] | null; slides: { board: number[]; end: number[]; len: number }[]; sliding: number | null; fireworks: number[][]; armour: number[][]; stones: number[][]; songAt: number; keys: number[][]; found: number; chest: number[] | null; opened: boolean; peacocks: number[][]; bouncy: { min: number[]; max: number[] }[]; catapults: { pos: number[]; raft: number[]; aim: number[] }[]; catHits: number; bounces: number };
+      castleFun: () => { thrones: { seat: number[]; facing: number }[]; rings: number[][]; passed: number; hat: number; seated: boolean; big: number; facing: number; horse: number[] | null; slides: { board: number[]; end: number[]; len: number }[]; sliding: number | null; fireworks: number[][]; armour: number[][]; stones: number[][]; songAt: number; keys: number[][]; found: number; chest: number[] | null; opened: boolean; peacocks: number[][]; bouncy: { min: number[]; max: number[] }[]; catapults: { pos: number[]; raft: number[]; aim: number[] }[]; catHits: number; bounces: number; oven: { pos: number[]; baking: boolean; ready: boolean } | null; buds: number[][]; bloomed: number; swing: { pivot: number[]; rope: number } | null; swinging: boolean; fishing: { pos: number[]; state: string; kinds: number } | null; sandcastle: { pos: number[]; stage: number; washing: boolean } | null; guide: string | null; theatre: { pos: number[]; scene: number; story: number } | null };
       /** Onto the highest ground at (x, z), or the floor just below y when given (inside a house). */
       warp: (x: number, z: number, y?: number) => void;
       /** Test hook: park the car somewhere else. */
@@ -464,10 +465,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   // ── Animal and Ferris-wheel rides ────────────────────────────────────────
   /** Kids on an animal's back or in a Ferris-wheel gondola (the Car rides keep their own seats). */
-  const mounts = new Map<Player, "animal" | "dragon" | "throne" | "slide" | { cab: number; turned: number; down: boolean }>();
+  const mounts = new Map<Player, "animal" | "dragon" | "throne" | "slide" | "swing" | { cab: number; turned: number; down: boolean }>();
   /** Kids wearing the throne's crown: the hat they had before (it comes back when they leave the castle). */
   const crowned = new Map<Player, { hat: number; x: number; z: number }>();
   /** Kids whooshing down a helter-skelter: how far along (metres) and how fast. */
+  const swinging = new Map<Player, { sw: World["swings"][number]; t: number; amp: number }>();
   const sliding = new Map<Player, { path: THREE.CatmullRomCurve3; len: number; s: number; v: number }>();
 
   function endMounts(): void {
@@ -482,6 +484,19 @@ export function startGame(canvas: HTMLCanvasElement): void {
     bouncedYet = false;
     bounceTen = false;
     catHits = 0;
+    ovenWas = false;
+    showScene = -1;
+    showsSeen = 0;
+    gardenDone = false;
+    swungYet = false;
+    fishKinds.clear();
+    fishAll = false;
+    fishFirst = false;
+    fishWas = "idle";
+    scWashAt = 0;
+    sandPaid = false;
+    for (const p of swinging.keys()) { p.riding = false; p.seated = false; }
+    swinging.clear();
     for (const tr of world.treasures) tr.reset();
     songAt = 0;
     songShown = -1;
@@ -490,7 +505,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   /** What a walking kid could climb on right now: an animal or the Ferris wheel. */
-  function mountInReach(): { kid: Player; what: "animal" | "ferris" | "dragon" | "throne" | "slide"; icon: string } | null {
+  function mountInReach(): { kid: Player; what: "animal" | "ferris" | "dragon" | "throne" | "slide" | "swing"; icon: string } | null {
     const gate = world.ferrisGate;
     for (const p of players) {
       if (p.riding) continue;
@@ -499,6 +514,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       if (world.dragon?.canBoard(p.pos) && ![...mounts.values()].includes("dragon")) return { kid: p, what: "dragon", icon: "🐉" };
       if (throneNear(p) && ![...mounts.values()].includes("throne")) return { kid: p, what: "throne", icon: "👑" };
       if (slideNear(p)) return { kid: p, what: "slide", icon: "🛝" };
+      if (swingNear(p) && ![...swinging.values()].some((v) => v.sw === swingNear(p))) return { kid: p, what: "swing", icon: "🌳" };
       if (gate && Math.hypot(p.pos.x - gate.x, p.pos.z - gate.z) < 3 && Math.abs(p.pos.y - gate.y) < 2) return { kid: p, what: "ferris", icon: "🎡" };
     }
     return null;
@@ -508,11 +524,29 @@ export function startGame(canvas: HTMLCanvasElement): void {
     return world.thrones.find((t) => Math.hypot(p.pos.x - t.seat.x, p.pos.z - t.seat.z) < 1.7 && Math.abs(p.pos.y - (t.seat.y - 0.6)) < 1) ?? null;
   }
 
+  function swingNear(p: Player) {
+    return world.swings.find((s) => Math.hypot(p.pos.x - s.pivot.x, p.pos.z - s.pivot.z) < 1.4 && Math.abs(p.pos.y - (s.pivot.y - s.rope - 0.6)) < 1) ?? null;
+  }
+
+  /** Off the swing: it settles, and the kid hops off in front. */
+  function swingOff(p: Player): void {
+    const st = swinging.get(p);
+    swinging.delete(p);
+    mounts.delete(p);
+    p.riding = false;
+    p.seated = false;
+    if (!st) return;
+    st.sw.set(0);
+    p.pos.set(st.sw.pivot.x + st.sw.dir.x * 1.1, st.sw.pivot.y - st.sw.rope - 0.4, st.sw.pivot.z + st.sw.dir.z * 1.1);
+    p.vel.set(0, 0, 0);
+    audio.sfx("ui");
+  }
+
   function slideNear(p: Player) {
     return world.slides.find((sl) => Math.hypot(p.pos.x - sl.board.x, p.pos.z - sl.board.z) < 1.6 && Math.abs(p.pos.y - sl.board.y - 0.15) < 1) ?? null;
   }
 
-  function mountUp(m: { kid: Player; what: "animal" | "ferris" | "dragon" | "throne" | "slide" }): void {
+  function mountUp(m: { kid: Player; what: "animal" | "ferris" | "dragon" | "throne" | "slide" | "swing" }): void {
     const p = m.kid;
     p.invuln = 0;
     p.group.visible = true;
@@ -525,6 +559,22 @@ export function startGame(canvas: HTMLCanvasElement): void {
       mounts.set(p, "slide");
       sliding.set(p, { path: sl.path, len: sl.path.getLength(), s: 0, v: 2.5 });
       audio.sfx("whee");
+      return;
+    }
+    if (m.what === "swing") {
+      const sw = swingNear(p);
+      if (!sw) return;
+      p.riding = true;
+      p.seated = true;
+      p.vel.set(0, 0, 0);
+      mounts.set(p, "swing");
+      swinging.set(p, { sw, t: 0, amp: 0.15 });
+      sticker("swing");
+      audio.sfx("whee");
+      if (!swungYet) {
+        swungYet = true;
+        hud.showToast("🌳 Up, up, up! \"This is the day the Lord has made; let us rejoice and be glad in it!\" (Psalm 118:24)");
+      }
       return;
     }
     if (m.what === "throne") {
@@ -543,6 +593,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       particles.burst(t.seat.x, t.seat.y + 1.6, t.seat.z, 0xffd93d, 26, 3.5, 1.1, 4);
       particles.burst(t.seat.x, t.seat.y + 1.6, t.seat.z, 0xff6b9d, 18, 3, 1.1, 4);
       cheerNear(p.pos, 14);
+      sticker("throne");
       hud.showToast("👑 Hooray for the king or queen of Sunny Castle! Jesus is the King of kings! (Revelation 19:16)");
       return;
     }
@@ -550,6 +601,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       const d = world.dragon;
       if (!d) return;
       d.startTour();
+      if (world.thrones.length) sticker("dragon");
       p.riding = true;
       mounts.set(p, "dragon");
       audio.sfx("roar");
@@ -584,6 +636,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       return true;
     }
     if (m === "slide") return true; // no getting off halfway down!
+    if (m === "swing") { swingOff(p); return true; }
     if (m === "dragon") {
       world.dragon?.hurry();
       hud.showToast("🐉 Sparky heads for home…");
@@ -614,6 +667,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       if (fw) return { kid: p, icon: "🎆", label: "Light the fireworks", go: () => {
         if (!fw.launch()) { hud.showToast("🎆 Wait for these ones to finish!"); return; }
         audio.sfx("fireworks");
+        sticker("fireworks");
         cheerNear(p.pos, 30);
         hud.showToast("🎆 Whoosh… BOOM! \"The heavens declare the glory of God!\" (Psalm 19:1)");
       } };
@@ -621,6 +675,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       if (arm && p.hat_ !== 5) return { kid: p, icon: "🛡️", label: "Put on the helmet", go: () => {
         if (!crowned.has(p)) crowned.set(p, { hat: p.hat_, x: arm.pos.x, z: arm.pos.z });
         p.setHat(5);
+        sticker("helmet");
         audio.sfx("powerup");
         particles.burst(p.pos.x, p.pos.y + 2, p.pos.z, 0xc9d1da, 16, 2.5, 0.8, 3);
         hud.showToast("🛡️ A brave knight! \"Put on the full armour of God.\" (Ephesians 6:11)");
@@ -636,6 +691,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
           }
           chestOpened = true;
           tr.open();
+          sticker("treasure");
           audio.sfx("chest");
           audio.sfx("win");
           earn(60);
@@ -645,6 +701,69 @@ export function startGame(canvas: HTMLCanvasElement): void {
           hud.showToast("💰 The king's treasure! +60 coins! \"Where your treasure is, there will your heart be also.\" (Matthew 6:21)");
         } };
       }
+      const fsh = world.fishings.find((o) => Math.hypot(p.pos.x - o.pos.x, p.pos.z - o.pos.z) < 1.3 && Math.abs(p.pos.y - o.pos.y) < 1);
+      if (fsh) {
+        const st = fsh.state();
+        if (st === "idle") return { kid: p, icon: "🎣", label: "Cast the line", go: () => {
+          if (fsh.cast()) { audio.sfx("whee"); hud.showToast("🎣 Plop! Shh… wait for the bobber to bob."); }
+        } };
+        if (st === "wait") return { kid: p, icon: "🎣", label: "Wait for a bite…", go: () => hud.showToast("🎣 Patience… watch the red bobber!") };
+        if (st === "bite") return { kid: p, icon: "🐟", label: "Reel it in!", go: () => {
+          const k = fsh.reel();
+          if (k < 0) return;
+          audio.sfx("splash");
+          audio.sfx("coin");
+          fishKinds.add(k);
+          sticker("fish");
+          if (fishKinds.size === FISH_NAMES.length) sticker("fish5");
+          const name = FISH_NAMES[k];
+          if (fishKinds.size === FISH_NAMES.length && !fishAll) {
+            fishAll = true;
+            earn(20);
+            hud.setCoins(bank);
+            audio.sfx("win");
+            cheerNear(p.pos, 20);
+            hud.showToast(`🐟 ${name}! That's all five kinds of fish! +20 coins. Splash, back it goes!`);
+          } else if (fishKinds.size === 1 && !fishFirst) {
+            fishFirst = true;
+            hud.showToast(`🐟 You caught ${name}! Jesus said, "Follow me, and I will make you fishers of people." (Matthew 4:19)`);
+          } else hud.showToast(`🐟 You caught ${name}! (${fishKinds.size} of ${FISH_NAMES.length} kinds) Back in the sea it goes!`);
+        } };
+      }
+      const sc = world.sandcastles.find((o) => Math.hypot(p.pos.x - o.pos.x, p.pos.z - o.pos.z) < 1.4 && Math.abs(p.pos.y - o.pos.y) < 1);
+      if (sc && !sc.washing() && sc.stage() < 4) return { kid: p, icon: "🏖️", label: "Build the sandcastle", go: () => {
+        const n = sc.build();
+        if (n < 0) return;
+        audio.sfx("dig");
+        particles.burst(sc.pos.x, sc.pos.y + 0.6, sc.pos.z, 0xf2d48f, 10, 2, 0.5, 4);
+        hud.showToast(["🏖️ Pat, pat, pat. A good big mound!", "🏖️ A tall tower in the middle!", "🏖️ Four little towers round it!", "🏰 A flag and shells. What a sandcastle! But wait… here comes a wave!"][n - 1]);
+        if (n === 4) { scWashAt = timer + 2.5; sticker("sandcastle"); }
+      } };
+      const gd = world.gardens[0];
+      const bi = gd ? gd.buds.findIndex((b, k) => !gd.watered(k) && Math.hypot(p.pos.x - b.x, p.pos.z - b.z) < 1.5 && Math.abs(p.pos.y - b.y) < 1.2) : -1;
+      if (gd && bi >= 0) return { kid: p, icon: "🚿", label: "Water the flower", go: () => {
+        if (!gd.water(bi)) { hud.showToast("🚿 The watering can is busy. One flower at a time!"); return; }
+        audio.sfx("splash");
+        hud.showToast(`🌱 Splish-splash! Watch it grow… (${[...gd.buds.keys()].filter((k) => gd.watered(k)).length} of ${gd.buds.length} watered)`);
+      } };
+      const ov = world.ovens.find((o) => Math.hypot(p.pos.x - o.pos.x, p.pos.z - o.pos.z) < 1.5 && Math.abs(p.pos.y - o.pos.y) < 1.2);
+      if (ov) return { kid: p, icon: ov.ready() ? "🍞" : "🔥", label: ov.ready() ? "Eat the bread" : ov.baking() ? "Baking…" : "Bake bread", go: () => {
+        if (ov.ready()) {
+          ov.take();
+          sticker("bread");
+          audio.sfx("munch");
+          hearts = Math.min(maxHearts, hearts + 1);
+          hud.setHearts(hearts, maxHearts);
+          particles.burst(p.pos.x, p.pos.y + 1.4, p.pos.z, 0xf3d9a0, 12, 2.5, 0.6, 4);
+          hud.showToast("🍞 Warm bread, yum! +1 ♥ Jesus said, \"I am the bread of life.\" (John 6:35)");
+          return;
+        }
+        if (!ov.bake()) { hud.showToast("🔥 The bread is baking… nearly ready!"); return; }
+        audio.sfx("rustle");
+        hud.showToast("🔥 Into the hot oven goes the dough! Watch the smoke puff…");
+      } };
+      const th = world.theatres.find((o) => Math.hypot(p.pos.x - o.pos.x, p.pos.z - o.pos.z) < 1.8 && Math.abs(p.pos.y - o.pos.y) < 1.2);
+      if (th && th.scene() < 0) return { kid: p, icon: "🎭", label: "Start the puppet show", go: () => { if (th.play()) audio.sfx("ui"); } };
       const cat = world.catapults.find((c) => Math.hypot(p.pos.x - c.pos.x, p.pos.z - c.pos.z) < 1.5 && Math.abs(p.pos.y - c.pos.y) < 1.2);
       if (cat) return { kid: p, icon: "🎯", label: "Fling a pom-pom", go: () => {
         if (!cat.fire()) { hud.showToast("🎯 Loading another pom-pom…"); return; }
@@ -655,6 +774,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       if (pi >= 0) return { kid: p, icon: "🦚", label: "Pat the peacock", go: () => {
         const q = world.peacocks[0].pos[pi];
         world.peacocks[0].show(pi);
+        sticker("peacock");
         audio.sfx("pet");
         particles.burst(q.x, q.y + 1.2, q.z, 0xff6b9d, 8, 2, 0.6, 3);
         hud.showToast("🦚 Look at those feathers! \"God saw everything that he had made, and it was very good.\" (Genesis 1:31)");
@@ -662,6 +782,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       const bell = world.bells.find((b) => Math.hypot(p.pos.x - b.pos.x, p.pos.z - b.pos.z) < 1.9 && Math.abs(p.pos.y - b.pos.y) < 1.5);
       if (bell) return { kid: p, icon: "🔔", label: "Ring the bell", go: () => {
         bell.ring();
+        sticker("bell");
         audio.sfx("bell");
         hud.showToast("🔔 Ding-dong! Up fly the doves! \"Make a joyful noise to the Lord!\" (Psalm 100:1)");
       } };
@@ -731,7 +852,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   /** The crown goes back when its wearer wanders far from the castle. Knights' rings count for riders. */
-  function updateCastle(): void {
+  function updateCastle(dt: number): void {
     for (const [p, c] of crowned) {
       if (mounts.get(p) === "throne" || Math.hypot(p.pos.x - c.x, p.pos.z - c.z) < 26) continue;
       p.setHat(c.hat);
@@ -741,6 +862,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
     updateTreasure();
     updateBouncy();
     updateCatapult();
+    updateGuide(dt);
+    updateBakery();
     const tilt = world.tilt;
     if (!tilt) return;
     for (const p of players) {
@@ -754,7 +877,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       hud.showToast(n === tilt.total
         ? "🏆 All the rings! You're a brave knight of Sunny Castle! \"Be strong and courageous!\" (Joshua 1:9)"
         : `🏇 Ring ${n} of ${tilt.total}! Ride on, brave knight!`);
-      if (n === tilt.total) cheerNear(p.pos, 20);
+      if (n === tilt.total) { cheerNear(p.pos, 20); sticker("rings"); }
     }
   }
   const CHEST = new THREE.Vector3();
@@ -800,11 +923,154 @@ export function startGame(canvas: HTMLCanvasElement): void {
       if (!bouncedYet) {
         bouncedYet = true;
         hud.showToast("🏰 Boing! \"Walking, and leaping, and praising God!\" (Acts 3:8)");
-      } else if (run.n === 10) {
+      }
+      if (run.n === 10) sticker("bouncy");
+      if (run.n === 10 && bouncedYet) {
         hud.showToast(bounceTen ? "🏰 Ten bounces in a row! Boing-boing-boing!" : "🏰 Ten bounces in a row! +5 coins!");
         if (!bounceTen) { bounceTen = true; earn(5); hud.setCoins(bank); audio.sfx("coin"); }
       }
     }
+  }
+
+  /** The castle sticker book: one sticker for each thing to do at Sunny Castle. */
+  const book = new StickerBook();
+  function showStickers(): void {
+    hud.setCastleStickers(world.thrones.length ? CASTLE_STICKERS.map((x) => ({ icon: x.icon, name: x.name, got: book.has(x.id) })) : null);
+  }
+  function sticker(id: StickerId): void {
+    if (!book.award(id)) return;
+    const st = CASTLE_STICKERS.find((x) => x.id === id)!;
+    audio.sfx("star");
+    hud.popSticker(st.icon, st.name, book.count, book.total);
+    showStickers();
+    if (book.count === book.total) {
+      earn(50);
+      hud.setCoins(bank);
+      window.setTimeout(() => {
+        audio.sfx("win");
+        hud.showToast("🏆 Every castle sticker! You're a Royal Explorer of Sunny Castle! +50 coins");
+      }, 3600);
+    }
+  }
+
+  /** A gentle gold sparkle over the nearest castle thing this kid has no sticker for yet. */
+  let guideT = 0, guideId: string | null = null;
+  const GUIDE = new THREE.Vector3();
+  function stickerSpot(id: StickerId): THREE.Vector3 | null {
+    const v = (q: THREE.Vector3 | undefined, dy = 0) => (q ? GUIDE.set(q.x, q.y + dy, q.z) : null);
+    switch (id) {
+      case "throne": return v(world.thrones[0]?.seat, 1.6);
+      case "feast": return null;
+      case "bell": return v(world.bells[0]?.pos, 2.6);
+      case "rings": { const c = world.tilt?.centres[0]; return c ? GUIDE.set(c[0], c[1] + 1.5, c[2]) : null; }
+      case "dragon": return v(world.dragon?.perch, 2.5);
+      case "slide": return v(world.slides[0]?.board, 1.8);
+      case "fireworks": return v(world.fireworks[0]?.pos, 1.6);
+      case "helmet": return v(world.armours[0]?.pos, 2.4);
+      case "song": return v(world.chimes[0]?.stones[3], 1.2);
+      case "treasure": return v(world.treasures[0]?.chest, 1.8);
+      case "peacock": return v(world.peacocks[0]?.pos[0], 1.8);
+      case "bouncy": { const b = world.bouncies[0]; return b ? GUIDE.set((b.min.x + b.max.x) / 2, b.min.y + 3.6, (b.min.z + b.max.z) / 2) : null; }
+      case "catapult": return v(world.catapults[0]?.pos, 2.2);
+      case "bread": return v(world.ovens[0]?.pos, 2.4);
+      case "puppets": return v(world.theatres[0]?.pos, 3.2);
+      case "garden": return v(world.gardens[0]?.buds[1], 1.8);
+      case "swing": { const sw = world.swings[0]; return sw ? GUIDE.set(sw.pivot.x, sw.pivot.y + 0.6, sw.pivot.z) : null; }
+      case "fish": case "fish5": return v(world.fishings[0]?.pos, 2.0);
+      case "sandcastle": return v(world.sandcastles[0]?.pos, 1.6);
+    }
+    return null;
+  }
+  function updateGuide(dt: number): void {
+    guideT -= dt;
+    if (guideT > 0 || !world.thrones.length) return;
+    guideT = 0.7;
+    const p = players[0];
+    if (!p || p.riding) return;
+    let best: THREE.Vector3 | null = null, bestD = 22;
+    guideId = null;
+    const at = new THREE.Vector3();
+    for (const st of CASTLE_STICKERS) {
+      if (book.has(st.id)) continue;
+      const q = stickerSpot(st.id);
+      if (!q) continue;
+      const d = Math.hypot(q.x - p.pos.x, q.z - p.pos.z);
+      if (d < bestD && d > 1.2) { bestD = d; best = at.copy(q); guideId = st.id; }
+    }
+    if (best) particles.burst(best.x, best.y, best.z, 0xffe066, 7, 1.2, 0.8, -0.6);
+  }
+
+  /** The oven rings when the bread is ready; the puppet show tells its story scene by scene. */
+  let ovenWas = false, showScene = -1, showsSeen = 0, gardenDone = false, swungYet = false;
+  const FISH_NAMES = ["an orange goldfish", "a blue tang", "a pink snapper", "a green perch", "a purple rainbow fish"];
+  const fishKinds = new Set<number>();
+  let fishAll = false, fishFirst = false, fishWas = "idle", scWashAt = 0, sandPaid = false;
+  const SHOW_LINES = [[
+    "🎭 The puppet show is starting: Noah's Ark!",
+    "🚢 Noah built a great big boat, just like God told him to.",
+    "🦒 The animals came in, two by two!",
+    "🕊️ The dove came back with an olive leaf. The flood was over!",
+    "🌈 God put a rainbow in the sky: a promise to the whole earth! (Genesis 9:13)",
+  ], [
+    "🎭 The puppet show is starting: Jonah and the Big Fish!",
+    "⛵ Jonah ran away from God on a boat, and a big storm came!",
+    "🐋 Splash! Jonah fell in, and a great big fish swallowed him up!",
+    "🙏 Inside the fish, Jonah prayed to God, and God heard him.",
+    "☀️ The fish put Jonah out on dry land. God gives second chances! (Jonah 2:10)",
+  ]];
+  function updateBakery(): void {
+    const ov = world.ovens[0];
+    if (ov) {
+      const r = ov.ready();
+      if (r && !ovenWas) {
+        audio.sfx("bell");
+        hud.showToast("🍞 Ding! The bread is ready. Come and eat it while it's warm!");
+      }
+      ovenWas = r;
+    }
+    const fsh = world.fishings[0];
+    if (fsh) {
+      const st = fsh.state();
+      if (st === "bite" && fishWas !== "bite") { audio.sfx("splash"); hud.showToast("🎣 A bite! Quick, reel it in!"); }
+      if (fsh.gotAway()) hud.showToast("🐟 Oh! The fish got away. Cast again!");
+      fishWas = st;
+    }
+    const sand = world.sandcastles[0];
+    if (sand && scWashAt > 0 && timer >= scWashAt) {
+      scWashAt = 0;
+      sand.wash();
+      audio.sfx("splash");
+      hud.showToast("🌊 Whoosh! The wave washed the sandcastle away. Jesus said a wise man builds his house on the rock, not on the sand. (Matthew 7:24-27)");
+      if (!sandPaid) { sandPaid = true; earn(10); hud.setCoins(bank); }
+    }
+    const gd = world.gardens[0];
+    if (gd && !gardenDone && gd.bloomed() === gd.buds.length) {
+      gardenDone = true;
+      sticker("garden");
+      audio.sfx("win");
+      earn(15);
+      hud.setCoins(bank);
+      cheerNear(gd.buds[0], 20);
+      particles.burst(gd.buds[1].x, gd.buds[1].y + 1.5, gd.buds[1].z, 0xff9ecf, 30, 3.5, 1, 4);
+      hud.showToast("🦋 The whole garden is in bloom, and here come the butterflies! +15 coins \"Consider the lilies of the field, how they grow.\" (Matthew 6:28)");
+    }
+    const th = world.theatres[0];
+    if (!th) return;
+    const sc = th.scene();
+    if (sc === showScene) return;
+    if (sc >= 0) {
+      const story = th.story();
+      hud.showToast(SHOW_LINES[story][sc]);
+      if (sc === 2) audio.sfx(story === 0 ? "baa" : "splash");
+    } else if (showScene === 4) {
+      audio.sfx("win");
+      cheerNear(th.pos, 20);
+      showsSeen++;
+      sticker("puppets");
+      if (showsSeen === 1) { earn(10); hud.setCoins(bank); hud.showToast("👏 The end! Hooray! +10 coins for watching."); }
+      else hud.showToast("👏 The end! Hooray!");
+    }
+    showScene = sc;
   }
 
   /** The catapult's pom-poms land on the target raft (coins) or splash in the sea. */
@@ -818,6 +1084,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
         return;
       }
       catHits++;
+      sticker("catapult");
       audio.sfx("coin");
       audio.sfx("win");
       earn(5);
@@ -853,6 +1120,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       cheerNear(p.pos, 20);
       audio.sfx("win");
       particles.burst(p.pos.x, p.pos.y + 2, p.pos.z, 0xff6bd6, 24, 3.5, 1, 4);
+      sticker("song");
       if (!songWon) {
         songWon = true;
         earn(25);
@@ -900,6 +1168,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
           audio.sfx("rustle");
           audio.sfx("land");
           particles.burst(p.pos.x, p.pos.y + 0.5, p.pos.z, 0xe9c46a, 22, 3.5, 0.9, 6);
+          sticker("slide");
           hud.showToast("🛝 Wheee! Into the hay! Climb back up the wall for another go!");
           continue;
         }
@@ -907,6 +1176,23 @@ export function startGame(canvas: HTMLCanvasElement): void {
         p.pos.y -= 0.18; // seated on the chute's bottom, legs along it
         p.vel.set(0, 0, 0);
         p.facing = Math.atan2(tan.x, tan.z);
+        p.group.rotation.y = p.facing;
+        continue;
+      }
+      if (m === "swing") {
+        const st = swinging.get(p);
+        if (!st) { p.riding = false; p.seated = false; mounts.delete(p); continue; }
+        st.t += dt;
+        // a push on the stick (after settling in) hops off; otherwise it swings higher and higher
+        const a = axes(i);
+        if (st.t > 0.8 && Math.hypot(a.wishX, a.wishZ) > 0.3) { swingOff(p); continue; }
+        st.amp = Math.min(0.85, st.amp + dt * 0.12);
+        const ang = st.amp * Math.sin(st.t * 2.1);
+        st.sw.set(ang);
+        const L = st.sw.rope;
+        p.pos.set(st.sw.pivot.x + st.sw.dir.x * Math.sin(ang) * L, st.sw.pivot.y - Math.cos(ang) * L - 0.45, st.sw.pivot.z + st.sw.dir.z * Math.sin(ang) * L);
+        p.vel.set(0, 0, 0);
+        p.facing = st.sw.facing;
         p.group.rotation.y = p.facing;
         continue;
       }
@@ -1134,6 +1420,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     // rides: nobody stays seated across a level load
     for (const v of rides) v.clearRiders();
     endMounts();
+    showStickers();
     audio.engineStop();
     car.group.visible = world.def.carSpawn !== undefined;
     car.shoreY = world.def.sea !== undefined ? world.def.sea - 0.3 : null;
@@ -2567,7 +2854,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
 
     if (mounts.size) updateMounts(dt, axesOf, [jumpNow, jump2Now]);
-    updateCastle();
+    updateCastle(dt);
 
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
@@ -2839,7 +3126,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (launchT >= 0) hud.setCarUi(null);
     else if (ride) hud.setCarUi(inRide ? "out" : "in", RIDE_ICON[ride.kind]);
     else if (mounted === "slide") hud.setCarUi(null);
-    else if (mounted) hud.setCarUi("out", mounted === "animal" ? "🐴" : mounted === "dragon" ? "🐉" : mounted === "throne" ? "👑" : "🎡");
+    else if (mounted) hud.setCarUi("out", mounted === "animal" ? "🐴" : mounted === "dragon" ? "🐉" : mounted === "throne" ? "👑" : mounted === "swing" ? "🌳" : "🎡");
     else if (canMount && canMount.what !== "ferris") hud.setCarUi("in", canMount.icon);
     else if (useNow) hud.setCarUi("in", useNow.icon, useNow.label);
     else if (canMount) hud.setCarUi("in", canMount.icon);
@@ -2916,6 +3203,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       if (p.riding) continue;
       const f = foods.eatNear(p.pos);
       if (!f) continue;
+      if (world.thrones.some((t) => Math.hypot(f.base.x - t.seat.x, f.base.z - t.seat.z) < 12)) sticker("feast");
       score += 15;
       hud.setScore(score);
       audio.sfx("munch");
@@ -3232,6 +3520,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     herds: herds.positions(),
     quest: quests.label(),
     use: useInReach()?.label ?? null,
+    canMount: mountInReach()?.what ?? null,
     questHome: quests.homeCount,
     questTargets: () => quests.debugTargets(),
     questHomeSpot: quests.homeSpot,
@@ -3317,6 +3606,15 @@ export function startGame(canvas: HTMLCanvasElement): void {
       catapults: world.catapults.map((c) => ({ pos: c.pos.toArray(), raft: c.raft.toArray(), aim: c.aim.toArray() })),
       catHits,
       bounces: bounceRun.get(players[0])?.n ?? 0,
+      oven: world.ovens[0] ? { pos: world.ovens[0].pos.toArray(), baking: world.ovens[0].baking(), ready: world.ovens[0].ready() } : null,
+      buds: world.gardens[0]?.buds.map((b) => b.toArray()) ?? [],
+      bloomed: world.gardens[0]?.bloomed() ?? 0,
+      swing: world.swings[0] ? { pivot: world.swings[0].pivot.toArray(), rope: world.swings[0].rope } : null,
+      swinging: swinging.has(players[0]),
+      guide: guideId,
+      fishing: world.fishings[0] ? { pos: world.fishings[0].pos.toArray(), state: world.fishings[0].state(), kinds: fishKinds.size } : null,
+      sandcastle: world.sandcastles[0] ? { pos: world.sandcastles[0].pos.toArray(), stage: world.sandcastles[0].stage(), washing: world.sandcastles[0].washing() } : null,
+      theatre: world.theatres[0] ? { pos: world.theatres[0].pos.toArray(), scene: world.theatres[0].scene(), story: world.theatres[0].story() } : null,
     }),
     dragon: () => {
       const d = world.dragon;

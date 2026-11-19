@@ -59,6 +59,12 @@ export class Hud {
   private carBtn = el("btn-car");
   private honkBtn = el("btn-honk");
   private photoBtn = el("btn-photo");
+  private readBtn = el("btn-read");
+  private castlePill = el("hud-castle");
+  private stickerPop = el("sticker-pop");
+  private stickerTimer: number | null = null;
+  private stickerList: { icon: string; name: string; got: boolean }[] = [];
+  private reading = false;
   private carMode: string | null = null;
   private talkBtn = el("btn-talk");
   private bookBtn = el("btn-book");
@@ -72,6 +78,21 @@ export class Hud {
   jumpHeld = false;
 
   constructor() {
+    let saved = false;
+    try { saved = localStorage.getItem("game.readAloud") === "1"; } catch { /* private mode */ }
+    this.reading = saved;
+    this.readBtn.classList.toggle("on", saved);
+    try { window.speechSynthesis?.getVoices(); } catch { /* loads the voice list early */ }
+    this.castlePill.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); this.openStickerBook(); });
+    el("sticker-close").addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); el("sticker-book").style.display = "none"; });
+    el("sticker-book").addEventListener("click", (e) => { if (e.target === e.currentTarget) el("sticker-book").style.display = "none"; });
+    this.readBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.setReading(!this.reading);
+      const ok = (() => { try { return window.speechSynthesis.getVoices().some((v) => v.localService && /^en/i.test(v.lang)); } catch { return false; } })();
+      this.showToast(this.reading ? (ok ? "🗣️ Read to me is on! I'll read the messages out loud." : "🗣️ Sorry, this device doesn't have a reading voice.") : "🗣️ Read to me is off.");
+    });
     const bind = (elm: HTMLElement, action: HudAction) => {
       const fn = (e: Event) => {
         e.preventDefault();
@@ -182,6 +203,9 @@ export class Hud {
     this.topbar.style.display = playing ? "" : "none";
     this.jumpBtn.style.display = playing ? "" : "none";
     this.photoBtn.style.display = playing ? "" : "none";
+    this.readBtn.style.display = playing ? "" : "none";
+    this.castlePill.style.display = playing && this.stickerList.length ? "" : "none";
+    if (!playing) el("sticker-book").style.display = "none";
     document.body.classList.toggle("playing", playing);
     if (!playing) this.jumpHeld = false;
     this.stickerBar.style.display = playing ? "" : "none";
@@ -391,9 +415,75 @@ export class Hud {
 
   showToast(text: string): void {
     this.toast.textContent = text;
+    if (this.reading) this.say(text);
     this.toast.classList.add("show");
     if (this.toastTimer !== null) clearTimeout(this.toastTimer);
-    this.toastTimer = window.setTimeout(() => this.toast.classList.remove("show"), 2200);
+    // long messages stay up long enough to read (about 14 letters a second), up to 8 s
+    const ms = Math.min(8000, Math.max(2200, 900 + text.length * 70));
+    this.toastTimer = window.setTimeout(() => this.toast.classList.remove("show"), ms);
+  }
+
+  /** The castle sticker counter in the top bar (null hides it). */
+  setCastleStickers(list: { icon: string; name: string; got: boolean }[] | null): void {
+    this.castlePill.style.display = list ? "" : "none";
+    if (!list) { this.stickerList = []; return; }
+    this.stickerList = list;
+    this.castlePill.textContent = `🏰 ${list.filter((x) => x.got).length}/${list.length}`;
+  }
+
+  /** A new sticker: a little gold badge pops up at the bottom for a few seconds. */
+  popSticker(icon: string, name: string, n: number, total: number): void {
+    this.stickerPop.textContent = `${icon} New castle sticker: ${name}! (${n} of ${total})`;
+    this.stickerPop.classList.add("show");
+    if (this.stickerTimer !== null) clearTimeout(this.stickerTimer);
+    this.stickerTimer = window.setTimeout(() => this.stickerPop.classList.remove("show"), 3500);
+  }
+
+  private openStickerBook(): void {
+    const got = this.stickerList.filter((x) => x.got).length;
+    el("sticker-count").textContent = got === this.stickerList.length
+      ? `All ${got} stickers! You're a Royal Explorer of Sunny Castle! 🏆`
+      : `${got} of ${this.stickerList.length} stickers. Explore the castle to find the rest!`;
+    const grid = el("sticker-grid");
+    grid.replaceChildren(...this.stickerList.map((x) => {
+      const d = document.createElement("div");
+      d.className = x.got ? "sticker got" : "sticker";
+      const big = document.createElement("span");
+      big.className = "big";
+      big.textContent = x.icon;
+      d.append(big, x.name);
+      d.title = x.name;
+      return d;
+    }));
+    el("sticker-book").style.display = "";
+  }
+
+  /** Read to me: on/off (remembered on this device). */
+  private setReading(on: boolean): void {
+    this.reading = on;
+    this.readBtn.classList.toggle("on", on);
+    try { localStorage.setItem("game.readAloud", on ? "1" : "0"); } catch { /* private mode */ }
+    if (!on) try { speechSynthesis.cancel(); } catch { /* no speech */ }
+  }
+
+  /** Speak a message with a voice that runs on the device (never one that sends text away). */
+  private say(text: string): void {
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) return;
+      const voices = synth.getVoices().filter((v) => v.localService && /^en/i.test(v.lang));
+      if (!voices.length) return;
+      const voice = voices.find((v) => /samantha|karen|moira|tessa|serena|female/i.test(v.name)) ?? voices[0];
+      const words = text.replace(/\p{Extended_Pictographic}|\uFE0F|\u200D|♥/gu, "").replace(/\s+/g, " ").trim();
+      if (!words) return;
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(words);
+      u.voice = voice;
+      u.lang = voice.lang;
+      u.rate = 0.92;
+      u.pitch = 1.1;
+      synth.speak(u);
+    } catch { /* no speech on this device */ }
   }
 
   flashHurt(): void {

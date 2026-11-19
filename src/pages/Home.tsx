@@ -39,11 +39,24 @@ export default function Home() {
           <span id="hud-time" className="hud-pill">0:00</span>
           <span id="hud-score" className="hud-pill score">0</span>
           <span id="hud-room" className="hud-pill room" style={{ display: 'none' }} />
+          <button id="hud-castle" className="hud-pill castle" aria-label="Castle sticker book" style={{ display: 'none' }}>🏰 0/20</button>
+        </div>
+        {/* the castle sticker book (src/game/stickers.ts): a sticker for each thing to do at Sunny Castle */}
+        <div id="sticker-pop" className="sticker-pop" />
+        <div id="sticker-book" className="sticker-book" style={{ display: 'none' }}>
+          <div className="sticker-card">
+            <button id="sticker-close" className="sticker-close" aria-label="Close">✖</button>
+            <h2>🏰 Sunny Castle Sticker Book</h2>
+            <p id="sticker-count" className="sticker-sub" />
+            <div id="sticker-grid" className="sticker-grid" />
+          </div>
         </div>
 
         <button id="btn-mute" className="round-btn" aria-label="Mute">🔊</button>
         {/* photo mode: a selfie postcard (saving it is behind the grown-up question) */}
         <button id="btn-photo" className="round-btn photo-btn" aria-label="Take a photo" style={{ display: 'none' }}>📸</button>
+        {/* read to me: messages read aloud by the device's own voice, for kids still learning to read */}
+        <button id="btn-read" className="round-btn read-btn" aria-label="Read to me" style={{ display: 'none' }}>🗣️</button>
         {/* touch thumb-stick: drawn where the left thumb lands (src/game/input.ts moves it) */}
         <div id="stick-base" className="stick-base"><div id="stick-knob" className="stick-knob" /></div>
         <button id="btn-jump" className="jump-btn" aria-label="Jump">⬆ JUMP</button>

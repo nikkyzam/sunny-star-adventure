@@ -985,6 +985,12 @@ const ADVENTURE_ISLAND: LevelDef = {
         "Have you met the peacocks? Walk up close and they'll show you their beautiful tails.",
         "Round the back of the castle there's a bouncy castle! Hop in and boing, higher and higher!",
         "Behind the castle is a catapult full of soft pom-pom balls. Wait till the target raft floats past, then fling!",
+        "Smell that? The baker's oven is in the back corner. Bake a loaf of bread and eat it warm!",
+        "There's a puppet show by the throne! Press the button and watch the story of Noah's Ark.",
+        "The flower garden by the gate is fast asleep. Water the buds and see what happens!",
+        "Have a go on the rope swing by the slide. Up, up, up into the sky!",
+        "Down on the beach there's a fishing jetty. There are five kinds of fish to catch, and we always let them go!",
+        "Build a sandcastle on the beach! But watch out for the waves…",
       ],
     },
     {
@@ -1984,6 +1990,18 @@ export class World {
   bouncies: CastleInfo["bouncy"][] = [];
   /** Castle catapults. */
   catapults: CastleInfo["catapult"][] = [];
+  /** Castle bread ovens. */
+  ovens: CastleInfo["oven"][] = [];
+  /** Castle puppet theatres. */
+  theatres: CastleInfo["theatre"][] = [];
+  /** Castle flower gardens. */
+  gardens: CastleInfo["garden"][] = [];
+  /** Castle rope swings. */
+  swings: CastleInfo["swing"][] = [];
+  /** Castle fishing jetties. */
+  fishings: CastleInfo["fishing"][] = [];
+  /** Castle beach sandcastles. */
+  sandcastles: CastleInfo["sandcastle"][] = [];
   /** The knight's ring course, if this level has one. */
   tilt: KnightRings | null = null;
   /** How fast the Ferris wheel turns (1 = its normal slow turn; boot speeds it up to bring a rider down). */
@@ -2314,6 +2332,12 @@ export class World {
     this.peacocks = [];
     this.bouncies = [];
     this.catapults = [];
+    this.ovens = [];
+    this.theatres = [];
+    this.gardens = [];
+    this.swings = [];
+    this.fishings = [];
+    this.sandcastles = [];
     this.tilt = null;
     for (const l of this.locks.values()) disposeSprite(l.sign);
     this.locks.clear();
@@ -2461,6 +2485,12 @@ export class World {
       this.peacocks.push(info.peacocks);
       this.bouncies.push(info.bouncy);
       this.catapults.push(info.catapult);
+      this.ovens.push(info.oven);
+      this.theatres.push(info.theatre);
+      this.gardens.push(info.garden);
+      this.swings.push(info.swing);
+      this.fishings.push(info.fishing);
+      this.sandcastles.push(info.sandcastle);
       if (c.dragon && !this.dragon) {
         const d = new Dragon(info.perch, info.facing, info.centre, c.dragon.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
         this.group.add(d.group);

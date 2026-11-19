@@ -57,6 +57,18 @@ export interface CastleInfo {
   /** The bouncy castle: its floor (a world box at floor height) and a wobble when someone bounces. */
   bouncy: { min: THREE.Vector3; max: THREE.Vector3; squish: () => void };
   /** The catapult: where to stand to fire it, firing (false while busy), and hearing where the ball lands. */
+  /** The bread oven: where to stand, baking (false if busy or a loaf is waiting), and the loaf. */
+  oven: { pos: THREE.Vector3; bake: () => boolean; baking: () => boolean; ready: () => boolean; take: () => void };
+  /** The puppet theatre: where to watch, starting Noah's Ark (false if it's on), and which scene is on (-1 = none). */
+  theatre: { pos: THREE.Vector3; play: () => boolean; scene: () => number; story: () => number };
+  /** The flower garden: where each bud is, watering one (false if busy or done), how many have bloomed. */
+  garden: { buds: THREE.Vector3[]; water: (i: number) => boolean; bloomed: () => number; watered: (i: number) => boolean; reset: () => void };
+  /** The rope swing: the top bar's middle, the rope length, the way it swings out, and posing it (radians). */
+  swing: { pivot: THREE.Vector3; rope: number; dir: THREE.Vector3; facing: number; set: (a: number) => void };
+  /** The fishing jetty: where to stand, what the line is doing, casting, reeling in (the fish kind, or -1). */
+  fishing: { pos: THREE.Vector3; state: () => "idle" | "wait" | "bite" | "catch"; cast: () => boolean; reel: () => number; gotAway: () => boolean };
+  /** The sandcastle on the beach: where to stand, how built it is (0-4), building the next bit, and the wave. */
+  sandcastle: { pos: THREE.Vector3; stage: () => number; washing: () => boolean; build: () => number; wash: () => void };
   catapult: { pos: THREE.Vector3; raft: THREE.Vector3; aim: THREE.Vector3; fire: () => boolean; onLand: ((hit: boolean, close: boolean, at: THREE.Vector3) => void) | null };
 }
 
@@ -1069,6 +1081,731 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     ball.visible = !(flyT > FLY);
   });
 
+  // ── a bread oven in the courtyard's back corner: a brick dome with a fire inside and a
+  // chimney. Bake a loaf, wait while the smoke puffs, then eat it warm ──
+  const OX = 5.7, OZ = -6.4;
+  let bakeT = -1, loafReady = false;
+  const loaf = new THREE.Group();
+  const fire = new THREE.Group();
+  const ovenGlow = new THREE.PointLight(0xff9a3c, 1.2, 4);
+  const puffs: THREE.Mesh[] = [];
+  {
+    const brick = std(0xb5532f, 0.95, { flatShading: true });
+    const dark = new THREE.MeshBasicMaterial({ color: 0x1a0d08 });
+    mesh(new THREE.BoxGeometry(1.9, 0.9, 1.7), darkStone, OX, 0.45, OZ);
+    const dome = mesh(new THREE.SphereGeometry(0.85, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), brick, OX, 0.9, OZ - 0.05);
+    dome.scale.set(1, 0.95, 0.9);
+    // the mouth: a dark arch on the front, with the fire glowing inside it
+    const mouth = new THREE.Mesh(new THREE.CircleGeometry(0.36, 14, 0, Math.PI), dark);
+    mouth.position.set(OX, 0.92, OZ + 0.72);
+    g.add(mouth);
+    mesh(new THREE.TorusGeometry(0.4, 0.07, 6, 14, Math.PI), brick, OX, 0.92, OZ + 0.72);
+    fire.position.set(OX, 0.93, OZ + 0.74);
+    g.add(fire);
+    const flameM = new THREE.MeshBasicMaterial({ color: 0xffb23e }), flameM2 = new THREE.MeshBasicMaterial({ color: 0xff6a2a });
+    for (let i = 0; i < 4; i++) {
+      const f = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.2, 6), i % 2 ? flameM : flameM2);
+      f.position.set((i - 1.5) * 0.09, 0.08, 0);
+      fire.add(f);
+    }
+    ovenGlow.position.set(OX, 1.1, OZ + 1.1);
+    g.add(ovenGlow);
+    // the chimney at the back, and puffs of smoke
+    mesh(new THREE.BoxGeometry(0.3, 0.9, 0.3), brick, OX + 0.45, 1.85, OZ - 0.5);
+    const smokeM = new THREE.MeshStandardMaterial({ color: 0xeeeeee, transparent: true, opacity: 0.5, depthWrite: false });
+    for (let i = 0; i < 5; i++) {
+      const p = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 1), smokeM.clone());
+      p.userData.ph = i / 5;
+      g.add(p);
+      puffs.push(p);
+    }
+    // a wooden peel leaning on the side, and a sack of flour
+    const peel = mesh(new THREE.BoxGeometry(0.06, 1.5, 0.06), wood, OX - 1.05, 0.75, OZ + 0.5);
+    peel.rotation.z = 0.2;
+    mesh(new THREE.BoxGeometry(0.3, 0.03, 0.35), wood, OX - 1.2, 0.1, OZ + 0.5).rotation.z = 0.2;
+    const sack = mesh(new THREE.SphereGeometry(0.3, 10, 8), std(0xe8dcc0, 1), OX + 1.25, 0.28, OZ + 0.3);
+    sack.scale.set(1, 1.2, 0.9);
+    // the loaf: a golden cob on the ledge in front of the mouth (shown when it's baked)
+    const crust = std(0xd9973f, 0.8, { flatShading: true });
+    const cob = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), crust);
+    cob.scale.set(1.3, 0.75, 0.9);
+    cob.castShadow = true;
+    loaf.add(cob);
+    for (let k = -1; k <= 1; k++) {
+      const cut = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.22), std(0xf3d9a0, 0.9));
+      cut.position.set(k * 0.1, 0.15, 0);
+      cut.rotation.y = 0.5;
+      loaf.add(cut);
+    }
+    loaf.position.set(OX, 1.02, OZ + 0.95);
+    loaf.visible = false;
+    g.add(loaf);
+    solid(OX, OZ, 0.95, 0.85, 1.9);
+  }
+  w.anim.push((t, dt) => {
+    const baking = bakeT >= 0;
+    if (baking) {
+      bakeT += dt;
+      if (bakeT >= 4) { bakeT = -1; loafReady = true; loaf.visible = true; loaf.scale.setScalar(0.01); }
+    }
+    if (loaf.visible && loaf.scale.x < 1) loaf.scale.setScalar(Math.min(1, loaf.scale.x + dt * 3));
+    const roar = baking ? 1.8 : 1;
+    fire.children.forEach((f, i) => { f.scale.set(roar, roar * (0.8 + Math.sin(t * 14 + i * 2) * 0.25), roar); });
+    ovenGlow.intensity = (baking ? 3 : 1.2) + Math.sin(t * 11) * 0.3;
+    for (const p of puffs) {
+      const k = ((t * (baking ? 0.6 : 0.3)) + p.userData.ph) % 1;
+      p.position.set(OX + 0.45 + Math.sin(k * 5 + p.userData.ph * 9) * 0.15, 2.35 + k * (baking ? 2.2 : 1.2), OZ - 0.5 - k * 0.3);
+      p.scale.setScalar(0.6 + k * 1.6);
+      (p.material as THREE.MeshStandardMaterial).opacity = (baking ? 0.7 : 0.35) * (1 - k);
+    }
+  });
+  const oven = {
+    pos: new THREE.Vector3(wx(OX, OZ + 1.8), base, wz(OX, OZ + 1.8)),
+    bake: () => { if (bakeT >= 0 || loafReady) return false; bakeT = 0; return true; },
+    baking: () => bakeT >= 0,
+    ready: () => loafReady,
+    take: () => { loafReady = false; loaf.visible = false; },
+  };
+
+  // ── a puppet theatre in the courtyard: press to watch Noah's Ark. The curtains open, the ark
+  // sails in on the waves, the animals come two by two, the dove brings a leaf, and a rainbow ──
+  const PX = -4.3, PZ = -3.8;
+  const booth = new THREE.Group();
+  booth.position.set(PX, 0, PZ);
+  g.add(booth);
+  let showT = -1;
+  const stage = new THREE.Group();          // everything that moves in the show
+  booth.add(stage);
+  const curtains: THREE.Mesh[] = [];
+  const ark = new THREE.Group(), dove = new THREE.Group(), bow = new THREE.Group();
+  const waves: THREE.Mesh[] = [];
+  const pairs: THREE.Group[] = [];
+  {
+    const put = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = booth) => mesh(geo, m, x, y, z, parent);
+    const red = std(0xc0283a, 0.85), gold2 = std(0xe8b830, 0.5), paint = std(0x8fd8ff, 0.9);
+    // the frame: a red skirt below, posts, a top board with the sign
+    put(new THREE.BoxGeometry(2.2, 1.2, 0.7), red, 0, 0.6, 0);
+    for (const sx of [-1, 1]) put(new THREE.BoxGeometry(0.2, 1.1, 0.7), red, sx * 1.0, 1.75, 0);
+    put(new THREE.BoxGeometry(2.4, 0.5, 0.75), red, 0, 2.55, 0);
+    put(new THREE.BoxGeometry(2.4, 0.06, 0.8), gold2, 0, 2.83, 0);
+    put(new THREE.BoxGeometry(2.25, 0.05, 0.75), gold2, 0, 1.22, 0);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 0.42), new THREE.MeshBasicMaterial({ map: textTexture("Puppet Show", "#c0283a", "#ffe9a8") }));
+    sign.position.set(0, 2.55, 0.38);
+    booth.add(sign);
+    // the painted sky at the back of the stage
+    put(new THREE.PlaneGeometry(1.85, 1.0), paint, 0, 1.72, -0.3);
+    // the waves: three rows of blue humps that rock side to side
+    const waveM = [std(0x2f7fd6, 0.6), std(0x4aa3f0, 0.6), std(0x2f7fd6, 0.6)];
+    for (let i = 0; i < 3; i++) {
+      const shape = new THREE.Shape();
+      shape.moveTo(-1.0, 0);
+      for (let k = 0; k <= 8; k++) shape.lineTo(-1.0 + k * 0.25, 0.12 + (k % 2 ? 0.08 : 0));
+      shape.lineTo(1.0, 0);
+      const wv = put(new THREE.ShapeGeometry(shape), waveM[i], 0, 1.24, -0.15 + i * 0.12, stage);
+      wv.userData.row = i;
+      waves.push(wv);
+    }
+    // the ark: a brown hull with a little house and a window
+    const hullM = std(0x8a5a2e, 0.9), roofM2 = std(0xc0392b, 0.8);
+    const hull = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.22, 0.12), hullM);
+    hull.position.y = 0.15;
+    ark.add(hull);
+    const bowEnd = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.12, 3).rotateX(Math.PI / 2), hullM);
+    bowEnd.position.set(0.5, 0.15, 0);
+    ark.add(bowEnd);
+    const house = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.22, 0.1), std(0xd9a066, 0.9));
+    house.position.set(-0.12, 0.37, 0);
+    ark.add(house);
+    const roof2 = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.16, 4).rotateY(Math.PI / 4), roofM2);
+    roof2.scale.set(1, 1, 0.3);
+    roof2.position.set(-0.12, 0.56, 0);
+    ark.add(roof2);
+    ark.position.set(-1.6, 1.25, -0.08);
+    stage.add(ark);
+    // animals two by two: giraffes, elephants, lions (simple cut-outs that pop up on the deck)
+    const animal = (kind: number) => {
+      const a = new THREE.Group();
+      const col = [0xf2c14e, 0x9aa3ad, 0xe0a040][kind];
+      const m = std(col, 0.8, { flatShading: true });
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), m);
+      body.scale.set(1.3, 1, 0.8);
+      body.position.y = 0.07;
+      a.add(body);
+      if (kind === 0) {
+        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.18, 6), m);
+        neck.position.set(0.05, 0.18, 0);
+        neck.rotation.z = -0.3;
+        a.add(neck);
+        const hd = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 5), m);
+        hd.position.set(0.1, 0.27, 0);
+        a.add(hd);
+      } else {
+        const hd = new THREE.Mesh(new THREE.SphereGeometry(kind === 1 ? 0.055 : 0.05, 8, 6), m);
+        hd.position.set(0.09, 0.1, 0);
+        a.add(hd);
+        if (kind === 1) {
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.016, 0.09, 5), m);
+          trunk.position.set(0.14, 0.06, 0);
+          a.add(trunk);
+        } else {
+          const mane = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.022, 5, 10), std(0xa0522d, 0.9));
+          mane.position.set(0.09, 0.1, -0.01);
+          mane.rotation.y = Math.PI / 2;
+          a.add(mane);
+        }
+      }
+      return a;
+    };
+    for (let k = 0; k < 3; k++) {
+      const pr = new THREE.Group();
+      for (const dx of [-0.07, 0.07]) {
+        const a = animal(k);
+        a.position.x = dx;
+        a.scale.setScalar(k === 0 ? 0.9 : 1);
+        pr.add(a);
+      }
+      pr.position.set(0.28 - k * 0.27, 0.26, 0.07);
+      pr.scale.setScalar(0.01);
+      ark.add(pr);
+      pairs.push(pr);
+    }
+    // the dove with an olive leaf
+    const white = std(0xffffff, 0.6);
+    const db = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), white);
+    db.scale.set(1.5, 1, 1);
+    dove.add(db);
+    for (const s of [-1, 1]) {
+      const wing = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.08), std(0xffffff, 0.6, { side: THREE.DoubleSide }));
+      wing.position.set(0, 0.04, s * 0.04);
+      wing.rotation.x = s * 0.6;
+      wing.name = "wing";
+      dove.add(wing);
+    }
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 4), std(0x4caf50, 0.7));
+    leaf.scale.set(1.6, 0.6, 0.6);
+    leaf.position.set(0.1, -0.01, 0);
+    dove.add(leaf);
+    dove.visible = false;
+    stage.add(dove);
+    // the rainbow: coloured arcs behind everything
+    [0xff4757, 0xff9f43, 0xffd93d, 0x3fbf6b, 0x2f80ed, 0x8e5be8].forEach((c, i) => {
+      const arc = new THREE.Mesh(new THREE.TorusGeometry(0.75 - i * 0.06, 0.03, 6, 30, Math.PI), new THREE.MeshBasicMaterial({ color: c }));
+      bow.add(arc);
+    });
+    bow.position.set(0, 1.3, -0.26);
+    bow.scale.setScalar(0.01);
+    stage.add(bow);
+    // the curtains: two red drapes that slide apart
+    const drapeM = std(0x9e1b2e, 0.9, { side: THREE.DoubleSide });
+    for (const s of [-1, 1]) {
+      const cgeo = new THREE.PlaneGeometry(0.95, 1.05, 6, 1).translate(-s * 0.475, 0, 0);
+      const cp = cgeo.getAttribute("position");
+      for (let k = 0; k < cp.count; k++) cp.setZ(k, Math.sin(cp.getX(k) * 18) * 0.03);
+      cgeo.computeVertexNormals();
+      const cm = new THREE.Mesh(cgeo, drapeM);
+      cm.position.set(s * 0.95, 1.73, 0.3);
+      booth.add(cm);
+      curtains.push(cm);
+    }
+    solid(PX, PZ, 1.2, 0.4, 2.9);
+  }
+  // Jonah and the big fish: a little boat on stormy waves, Jonah, a great blue fish, a beach and the sun
+  const jBoat = new THREE.Group(), jonah = new THREE.Group(), whale = new THREE.Group(), shore = new THREE.Group(), sun = new THREE.Group();
+  {
+    const hullM = std(0xa0522d, 0.9);
+    const hull = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.1), hullM);
+    hull.position.y = 0.1;
+    jBoat.add(hull);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.45, 5), hullM);
+    mast.position.set(0, 0.38, 0);
+    jBoat.add(mast);
+    const sail = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.28).translate(0.11, 0, 0), std(0xffffff, 0.7, { side: THREE.DoubleSide }));
+    sail.position.set(0.01, 0.42, 0);
+    jBoat.add(sail);
+    // Jonah: a little figure in a blue robe with a brown beard
+    const robe = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.18, 8), std(0x3d6fd6, 0.8));
+    robe.position.y = 0.09;
+    jonah.add(robe);
+    const hd = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), std(0xe0b48a, 0.8));
+    hd.position.y = 0.21;
+    jonah.add(hd);
+    const beard = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 4), std(0x6b4a2b, 0.9));
+    beard.position.set(0, 0.19, 0.02);
+    jonah.add(beard);
+    jonah.position.set(-0.1, 0.16, 0.03);
+    jBoat.add(jonah);
+    // the great fish: a big blue body, a tail, a smile and a spout
+    const fishM = std(0x4a86e8, 0.6, { flatShading: true });
+    const fb = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 8).scale(1.6, 0.85, 0.5), fishM);
+    whale.add(fb);
+    const ft = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.26, 4).rotateZ(-Math.PI / 2).scale(1, 1, 0.3), fishM);
+    ft.position.set(0.48, 0.08, 0);
+    ft.rotation.z = 0.5;
+    whale.add(ft);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 4), std(0x111111, 0.3));
+    eye.position.set(-0.24, 0.07, 0.11);
+    whale.add(eye);
+    const smile = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.012, 4, 10, Math.PI), std(0x1d3f8a, 0.6));
+    smile.position.set(-0.3, -0.04, 0.1);
+    smile.rotation.z = Math.PI;
+    whale.add(smile);
+    whale.position.set(0.1, 0.9, -0.02);
+    stage.add(whale);
+    // the dry land Jonah lands on, and the sun coming up
+    const sandM = std(0xf2d48f, 1, { flatShading: true });
+    const hill = new THREE.Mesh(new THREE.SphereGeometry(0.4, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.5, 0.3), sandM);
+    shore.add(hill);
+    const palm = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.35, 5), std(0x8a5a2e, 0.9));
+    palm.position.set(0.1, 0.3, 0);
+    shore.add(palm);
+    const frond = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.08, 6), std(0x3f9e3a, 0.8));
+    frond.position.set(0.1, 0.48, 0);
+    shore.add(frond);
+    shore.position.set(0.78, 1.22, 0.02);
+    stage.add(shore);
+    stage.add(jBoat);
+    const sunM = new THREE.MeshBasicMaterial({ color: 0xffd93d });
+    sun.add(new THREE.Mesh(new THREE.CircleGeometry(0.16, 16), sunM));
+    for (let k = 0; k < 8; k++) {
+      const ray = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.09), sunM);
+      const a = (k / 8) * Math.PI * 2;
+      ray.position.set(Math.cos(a) * 0.23, Math.sin(a) * 0.23, 0);
+      ray.rotation.z = a - Math.PI / 2;
+      sun.add(ray);
+    }
+    sun.position.set(-0.5, 1.3, -0.27);
+    stage.add(sun);
+  }
+  const SHOW = 17;
+  let story = 0, plays = 0;                 // 0 = Noah's Ark, 1 = Jonah and the big fish
+  const sceneAt = (s: number) => s < 1 ? 0 : s < 4.5 ? 1 : s < 9 ? 2 : s < 12 ? 3 : 4;
+  const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+  w.anim.push((t, dt) => {
+    for (const wv of waves) wv.position.x = Math.sin(t * (story === 1 && showT >= 0 ? 3.2 : 1.6) + wv.userData.row * 1.4) * (story === 1 && showT >= 0 && showT < 9 ? 0.1 : 0.06);
+    const s = showT;
+    if (s >= 0) showT += dt;
+    if (showT > SHOW) showT = -1;
+    // curtains open at the start and close at the end
+    const open = s < 0 ? 0 : Math.min(1, s / 1, (SHOW - s) / 1.2);
+    curtains.forEach((c, i) => { c.scale.x = 1 - open * 0.8; c.position.x = (i ? 1 : -1) * 0.95; });
+    const noah = s >= 0 && story === 0, jon = s >= 0 && story === 1;
+    ark.visible = noah;
+    dove.visible = noah && s > 9 && s < 15.5;
+    bow.visible = noah;
+    for (const p of pairs) p.visible = noah;
+    jBoat.visible = jon && s < 9.5;
+    whale.visible = jon && s > 5;
+    shore.visible = jon && s > 10.5;
+    sun.visible = jon && s > 12;
+    if (s < 0) {
+      ark.position.x = -1.6; bow.scale.setScalar(0.01);
+      for (const p of pairs) p.scale.setScalar(0.01);
+      jonah.visible = true;
+      if (jonah.parent !== jBoat) { jBoat.add(jonah); jonah.position.set(-0.1, 0.16, 0.03); jonah.rotation.set(0, 0, 0); }
+      return;
+    }
+    if (noah) {
+      ark.position.x = -1.6 + clamp01((s - 1) / 3) * 1.6;
+      ark.position.y = 1.25 + Math.sin(t * 2.2) * 0.02;
+      ark.rotation.z = Math.sin(t * 1.8) * 0.05;
+      pairs.forEach((p, k) => {
+        const g2 = clamp01((s - (4.8 + k * 1.3)) / 0.35);
+        p.scale.setScalar(Math.max(0.01, g2 * (1 + Math.sin(g2 * Math.PI) * 0.4)));
+        p.position.y = 0.26 + (g2 > 0 ? Math.abs(Math.sin(t * 6 + k)) * 0.03 : 0);
+      });
+      if (dove.visible) {
+        const k = Math.min(1, (s - 9) / 2.5);
+        dove.position.set(-1.0 + k * 1.1, 2.05 - k * 0.4 + Math.sin(t * 8) * 0.02, 0.05);
+        dove.children.forEach((c) => { if (c.name === "wing") c.rotation.x = Math.sign(c.position.z) * (0.4 + Math.sin(t * 20) * 0.5); });
+      }
+      bow.scale.setScalar(Math.max(0.01, Math.min(1, (s - 12) / 1.5)));
+      return;
+    }
+    // Jonah: the boat tossed by the storm; overboard; swallowed; praying inside; out onto the sand
+    const bx = -1.6 + clamp01((s - 1) / 2.5) * 1.3 + clamp01((s - 5.5) / 3) * 2.0;
+    jBoat.position.set(bx, 1.27 + Math.sin(t * 5) * 0.04, -0.06);
+    jBoat.rotation.z = Math.sin(t * 4) * 0.2;
+    if (s > 4.6 && jonah.parent === jBoat) {
+      // over the side he goes
+      stage.add(jonah);
+      jonah.position.set(bx - 0.1, 1.45, 0.04);
+    }
+    if (jonah.parent === stage) {
+      if (s < 6.1) {
+        const k = clamp01((s - 4.6) / 0.8);
+        jonah.position.set(-0.4 - k * 0.05, 1.45 - k * 0.25, 0.04);
+        jonah.rotation.z = k * 1.2;
+        jonah.visible = true;
+      } else if (s < 12.3) {
+        jonah.visible = false;            // inside the fish
+      } else {
+        // spat out onto the beach in a happy arc
+        const k = clamp01((s - 12.3) / 0.7);
+        jonah.visible = true;
+        jonah.rotation.z = (1 - k) * 2.5;
+        jonah.position.set(0.25 + k * 0.5, 1.35 + Math.sin(k * Math.PI) * 0.35 + k * 0.05, 0.05);
+      }
+    }
+    // the fish rises under Jonah, gulps, and floats; it swims over to the beach to let him out
+    const rise = clamp01((s - 5.0) / 0.9);
+    const toShore = clamp01((s - 11.2) / 1.0);
+    whale.position.set(-0.35 + toShore * 0.45, 0.95 + rise * 0.33 + Math.sin(t * 2) * 0.02, -0.02);
+    whale.rotation.z = Math.sin(t * 1.5) * 0.06 + (s > 9 && s < 12 ? Math.sin(t * 3) * 0.04 : 0);
+    sun.position.y = 1.3 + clamp01((s - 12) / 2) * 0.6;
+    sun.rotation.z = t * 0.4;
+  });
+  const theatre = {
+    pos: new THREE.Vector3(wx(PX, PZ + 1.6), base, wz(PX, PZ + 1.6)),
+    play: () => { if (showT >= 0) return false; story = plays % 2; plays++; showT = 0; return true; },
+    scene: () => (showT < 0 ? -1 : sceneAt(showT)),
+    story: () => story,
+  };
+
+  // ── a flower garden outside the gate: six sleepy buds in a raised bed. Water each one and it
+  // opens into a big bloom; when all six are out, butterflies come ──
+  const GX = 6.4, GZ = 12.6, GW = 2.2, GD = 1.0;  // centre, half width (along x), half depth
+  const buds: { stem: THREE.Group; head: THREE.Group; petals: THREE.Mesh[]; grow: number; want: boolean }[] = [];
+  const flies: THREE.Group[] = [];
+  const can = new THREE.Group();
+  let canT = -1, canAt = new THREE.Vector3();
+  {
+    const plank = std(0x9a6a3a, 0.9), soil = std(0x5a3d26, 1, { flatShading: true });
+    mesh(new THREE.BoxGeometry(GW * 2 - 0.2, 0.3, GD * 2 - 0.2), soil, GX, 0.18, GZ);
+    for (const s of [-1, 1]) {
+      mesh(new THREE.BoxGeometry(GW * 2, 0.4, 0.12), plank, GX, 0.2, GZ + s * (GD - 0.06));
+      mesh(new THREE.BoxGeometry(0.12, 0.4, GD * 2), plank, GX + s * (GW - 0.06), 0.2, GZ);
+    }
+    solid(GX, GZ, GW, GD, 0.4);
+    const stemM = std(0x3f9e3a, 0.8), leafM = std(0x56b84a, 0.8, { side: THREE.DoubleSide });
+    const cols = [0xff6b9d, 0xffd93d, 0xb197fc, 0xff4757, 0xffffff, 0xff9f43];
+    for (let i = 0; i < 6; i++) {
+      const x = GX - 1.4 + (i % 3) * 1.4, z = GZ + (i < 3 ? -0.45 : 0.45);
+      const stem = new THREE.Group();
+      stem.position.set(x, 0.33, z);
+      g.add(stem);
+      const st = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 1, 6).translate(0, 0.5, 0), stemM);
+      stem.add(st);
+      for (const s of [-1, 1]) {
+        const lf = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 4).scale(1.4, 0.25, 0.6), leafM);
+        lf.position.set(s * 0.1, 0.25, 0);
+        lf.rotation.z = s * 0.4;
+        stem.add(lf);
+      }
+      const head = new THREE.Group();
+      head.position.y = 1;
+      stem.add(head);
+      const petalM = std(cols[i], 0.6, { side: THREE.DoubleSide, emissive: new THREE.Color(cols[i]).multiplyScalar(0.12) });
+      const petals: THREE.Mesh[] = [];
+      for (let k = 0; k < 7; k++) {
+        const pt = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 5).scale(0.55, 0.18, 1).translate(0, 0, 0.11), petalM);
+        pt.rotation.y = (k / 7) * Math.PI * 2;
+        head.add(pt);
+        petals.push(pt);
+      }
+      const mid = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), std(0xffb02e, 0.6));
+      mid.position.y = 0.02;
+      head.add(mid);
+      buds.push({ stem, head, petals, grow: 0, want: false });
+    }
+    // butterflies (they come when the garden is in bloom)
+    const wingCols = [0xff9ecf, 0x7fc8ff, 0xffe066];
+    for (let i = 0; i < 3; i++) {
+      const b = new THREE.Group();
+      const wm = std(wingCols[i], 0.6, { side: THREE.DoubleSide });
+      for (const s of [-1, 1]) {
+        const wg = new THREE.Mesh(new THREE.CircleGeometry(0.09, 10).scale(1, 1.3, 1).translate(s * 0.09, 0, 0), wm);
+        wg.rotation.x = -Math.PI / 2;
+        wg.name = s < 0 ? "L" : "R";
+        b.add(wg);
+      }
+      b.add(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.14, 4).rotateX(Math.PI / 2), std(0x333333)));
+      b.visible = false;
+      g.add(b);
+      flies.push(b);
+    }
+    // the watering can on a post at the corner (it floats over a bud to water it)
+    mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 6), wood, GX + GW + 0.25, 0.35, GZ - GD - 0.1);
+    const tin = std(0x5fa8d3, 0.4, { metalness: 0.3 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.3, 12), tin);
+    can.add(body);
+    const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, 0.36, 6), tin);
+    spout.position.set(0.22, 0.06, 0);
+    spout.rotation.z = -1.0;
+    can.add(spout);
+    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.02, 4, 10, Math.PI), tin);
+    handle.position.y = 0.15;
+    can.add(handle);
+    can.position.set(GX + GW + 0.25, 0.85, GZ - GD - 0.1);
+    g.add(can);
+  }
+  const canHome = can.position.clone();
+  const drops: THREE.Mesh[] = [];
+  {
+    const dm = new THREE.MeshBasicMaterial({ color: 0x9fd8ff });
+    for (let i = 0; i < 6; i++) { const d = new THREE.Mesh(new THREE.SphereGeometry(0.025, 4, 3), dm); d.visible = false; g.add(d); drops.push(d); }
+  }
+  w.anim.push((t, dt) => {
+    let open = 0;
+    buds.forEach((b, i) => {
+      if (b.want) b.grow = Math.min(1, b.grow + dt * 0.7);
+      const k = b.grow;
+      if (k >= 1) open++;
+      b.stem.scale.set(1, 0.45 + k * 0.55, 1);
+      b.stem.rotation.z = Math.sin(t * 1.5 + i) * 0.05;
+      // petals fold up into a bud, then spread wide, a little bigger, and the head nods
+      for (const pt of b.petals) pt.rotation.x = -1.3 * (1 - k);
+      b.head.scale.setScalar(0.6 + k * 0.9);
+    });
+    // the watering can flies over, tips, and drips, then goes home
+    if (canT >= 0) {
+      canT += dt;
+      const k = canT < 0.5 ? canT / 0.5 : canT < 1.6 ? 1 : Math.max(0, 1 - (canT - 1.6) / 0.5);
+      can.position.lerpVectors(canHome, canAt, k);
+      can.rotation.z = canT > 0.5 && canT < 1.6 ? -0.7 : 0;
+      drops.forEach((d, i) => {
+        d.visible = canT > 0.5 && canT < 1.6;
+        const f = ((canT * 2 + i / 6) % 1);
+        d.position.set(canAt.x + 0.3 + (i % 2) * 0.03, canAt.y - 0.1 - f * 0.6, canAt.z + (i % 3 - 1) * 0.03);
+      });
+      if (canT > 2.1) { canT = -1; can.position.copy(canHome); can.rotation.z = 0; }
+    }
+    const all = open === buds.length;
+    flies.forEach((b, i) => {
+      b.visible = all;
+      if (!all) return;
+      const a = t * (0.6 + i * 0.15) + i * 2.1;
+      b.position.set(GX + Math.sin(a) * (GW - 0.3), 1.6 + Math.sin(t * 2 + i) * 0.25, GZ + Math.cos(a * 1.3) * (GD - 0.1));
+      b.rotation.y = -a;
+      const flap = Math.sin(t * 22 + i) * 0.9;
+      for (const c of b.children) if (c.name) c.rotation.y = c.name === "L" ? flap : -flap;
+    });
+  });
+  const garden = {
+    buds: buds.map((b) => new THREE.Vector3(wx(b.stem.position.x, b.stem.position.z), base + 0.33, wz(b.stem.position.x, b.stem.position.z))),
+    water: (i: number) => {
+      const b = buds[i];
+      if (!b || b.want || canT >= 0) return false;
+      b.want = true;
+      canT = 0;
+      canAt.set(b.stem.position.x - 0.3, 1.5, b.stem.position.z);
+      return true;
+    },
+    bloomed: () => buds.filter((b) => b.grow >= 1).length,
+    watered: (i: number) => !!buds[i]?.want,
+    reset: () => { for (const b of buds) { b.want = false; b.grow = 0; } },
+  };
+
+  // ── a rope swing on a wooden frame beside the castle: sit on it and swing out over the meadow ──
+  const SWX = 12.8, SWZ = 5.5, ROPE = 2.3, PIV = 2.95;
+  const swingG = new THREE.Group();          // turns round the top bar
+  swingG.position.set(SWX, PIV, SWZ);
+  g.add(swingG);
+  {
+    for (const s of [-1, 1]) for (const lean of [-1, 1]) {
+      const leg = mesh(new THREE.CylinderGeometry(0.07, 0.08, 3.2, 6), wood, SWX + lean * 0.55, 1.5, SWZ + s * 1.25);
+      leg.rotation.z = lean * 0.36;
+    }
+    mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.8, 8).rotateX(Math.PI / 2), wood, SWX, PIV + 0.05, SWZ);
+    const ropeM = std(0xd9c39a, 1);
+    for (const s of [-1, 1]) mesh(new THREE.CylinderGeometry(0.02, 0.02, ROPE, 4), ropeM, 0, -ROPE / 2, s * 0.32, swingG);
+    mesh(new THREE.BoxGeometry(0.42, 0.06, 0.8), std(0xff6b9d, 0.7), 0, -ROPE, 0, swingG);
+    for (const s of [-1, 1]) solid(SWX, SWZ + s * 1.25, 0.65, 0.12, 3.1);
+  }
+  const fwd = new THREE.Vector3(wx(1, 0) - wx(0, 0), 0, wz(1, 0) - wz(0, 0));
+  const ropeSwing = {
+    pivot: new THREE.Vector3(wx(SWX, SWZ), base + PIV, wz(SWX, SWZ)),
+    rope: ROPE,
+    dir: fwd,
+    facing: Math.atan2(fwd.x, fwd.z),
+    set: (a: number) => { swingG.rotation.z = a; },
+  };
+
+  // ── a little fishing jetty off the beach: cast the line, wait for the bobber to dip, reel in a
+  // fish, have a look, and let it go. Five kinds to find ──
+  const JZ = 5, J0 = -18.2, J1 = -25.0;     // the jetty runs out along -x
+  const sea = -0.5 - base;                   // the sea's height, in the castle's frame
+  const DECK = 0.1;
+  const bobber = new THREE.Group();
+  const rod = new THREE.Group();
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xffffff }));
+  const fish = new THREE.Group();
+  const FISH_COLS = [0xffa62b, 0x2f80ed, 0xff6b9d, 0x3fbf6b, 0xb06bff];
+  const fishBody = new THREE.MeshStandardMaterial({ color: 0xffa62b, roughness: 0.4, flatShading: true });
+  let fishState: "idle" | "wait" | "bite" | "catch" = "idle", fishT = 0, biteAt = 0, fishKind = 0;
+  const bobAt = new THREE.Vector3(J1 - 2.4, sea + 0.05, JZ + 0.3);
+  {
+    const plank = std(0xa77b4f, 0.95), post = std(0x6b4a2b, 0.95);
+    // the deck: one low step from the sand, then the long boards
+    mesh(new THREE.BoxGeometry(1.0, 0.12, 1.5), plank, J0 - 0.5, -0.16, JZ);
+    plat(J0 - 0.5, JZ, 0.5, 0.75, -0.1);
+    const len = Math.abs(J1 - (J0 - 1));
+    const cx = (J1 + J0 - 1) / 2;
+    for (let i = 0; i < Math.round(len / 0.35); i++) mesh(new THREE.BoxGeometry(0.3, 0.1, 1.5), plank, J0 - 1.15 - i * 0.35, DECK - 0.05, JZ);
+    plat(cx, JZ, len / 2, 0.75, DECK);
+    for (let i = 0; i <= 3; i++) for (const s of [-1, 1]) {
+      const x = J0 - 1.2 - (i / 3) * (len - 0.4);
+      mesh(new THREE.CylinderGeometry(0.09, 0.1, 1.6, 6), post, x, DECK - 0.6, JZ + s * 0.7);
+    }
+    // a rail on one side, and the rod in a holder at the end
+    for (let i = 0; i <= 3; i++) mesh(new THREE.BoxGeometry(0.07, 0.75, 0.07), post, J0 - 1.3 - (i / 3) * (len - 0.6), DECK + 0.38, JZ - 0.7);
+    mesh(new THREE.BoxGeometry(len - 0.5, 0.07, 0.07), post, cx - 0.1, DECK + 0.75, JZ - 0.7);
+    for (const s of [-1, 1]) solid(cx, JZ + s * 0.82, len / 2, 0.08, DECK + 0.9);
+    solid(J1 - 0.12, JZ, 0.08, 0.8, DECK + 0.9);
+    rod.position.set(J1 + 0.3, DECK + 0.45, JZ + 0.55);
+    g.add(rod);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.035, 2.2, 6).translate(0, 1.1, 0), std(0x333a44, 0.5));
+    rod.add(pole);
+    const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.05, 10).rotateZ(Math.PI / 2), std(0xd94a4a, 0.5));
+    reel.position.set(0.05, 0.35, 0);
+    rod.add(reel);
+    rod.rotation.z = 0.5;
+    mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.5, 8), post, J1 + 0.3, DECK + 0.25, JZ + 0.55);
+    // a bucket for the catch (it's always let go again)
+    mesh(new THREE.CylinderGeometry(0.2, 0.16, 0.3, 12, 1, true), std(0x8fb3c9, 0.5, { side: THREE.DoubleSide, metalness: 0.3 }), J1 + 0.9, DECK + 0.15, JZ - 0.35);
+    // the bobber: red top, white bottom
+    const top = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), std(0xe84a5f, 0.5));
+    const bot = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), std(0xffffff, 0.5));
+    bobber.add(top, bot);
+    bobber.visible = false;
+    g.add(bobber);
+    line.visible = false;
+    line.frustumCulled = false;
+    g.add(line);
+    // a fish to show off when it's caught
+    const fb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 6).scale(1.6, 0.9, 0.55), fishBody);
+    fish.add(fb);
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.22, 4).rotateZ(Math.PI / 2).scale(1, 1, 0.3), fishBody);
+    tail.position.x = -0.3;
+    fish.add(tail);
+    for (const s of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 4), std(0x111111, 0.3));
+      eye.position.set(0.17, 0.04, s * 0.07);
+      fish.add(eye);
+    }
+    fish.visible = false;
+    g.add(fish);
+  }
+  const tip = new THREE.Vector3();
+  w.anim.push((t, dt) => {
+    fishT += dt;
+    // the rod: upright in its holder, swung out while fishing, bending on a bite
+    const want = fishState === "idle" ? 0.5 : fishState === "bite" ? 1.0 + Math.sin(t * 30) * 0.08 : 0.85;
+    rod.rotation.z += (want - rod.rotation.z) * Math.min(1, dt * 6);
+    bobber.visible = fishState === "wait" || fishState === "bite";
+    if (bobber.visible) {
+      const fly = Math.min(1, fishT / 0.5);
+      const dip = fishState === "bite" ? -0.12 + Math.sin(t * 18) * 0.06 : Math.sin(t * 2.5) * 0.02;
+      bobber.position.set(bobAt.x, bobAt.y + dip + (fishState === "wait" && fly < 1 ? Math.sin(fly * Math.PI) * 1.2 : 0), bobAt.z);
+      if (fishState === "wait" && fly < 1) bobber.position.x = rod.position.x + (bobAt.x - rod.position.x) * fly;
+      if (fishState === "wait" && fishT > biteAt) { fishState = "bite"; fishT = 0; }
+      if (fishState === "bite" && fishT > 2.6) { fishState = "idle"; fishT = 0; lost = true; }
+    }
+    tip.set(0, 2.2, 0);
+    rod.localToWorld(tip);
+    g.worldToLocal(tip);
+    line.visible = bobber.visible || fish.visible;
+    if (line.visible) {
+      const pts = line.geometry.getAttribute("position") as THREE.BufferAttribute;
+      const end = fish.visible ? fish.position : bobber.position;
+      pts.setXYZ(0, tip.x, tip.y, tip.z);
+      pts.setXYZ(1, end.x, end.y + 0.1, end.z);
+      pts.needsUpdate = true;
+    }
+    // the catch: up it comes, wriggling, then back with a splash
+    fish.visible = fishState === "catch";
+    if (fish.visible) {
+      const k = fishT;
+      const up = k < 0.6 ? k / 0.6 : k < 2.2 ? 1 : Math.max(0, 1 - (k - 2.2) / 0.5);
+      fish.position.set(bobAt.x + 1.2 * up, sea + up * 1.6, bobAt.z);
+      fish.rotation.z = up < 1 ? -1.2 * (1 - up) : Math.sin(t * 14) * 0.35;
+      fish.rotation.y = Math.sin(t * 9) * 0.3;
+      if (k > 2.7) { fishState = "idle"; fishT = 0; }
+    }
+  });
+  let lost = false;
+  const fishing = {
+    pos: new THREE.Vector3(wx(J1 + 0.7, JZ), base + DECK, wz(J1 + 0.7, JZ)),
+    state: () => fishState,
+    cast: () => {
+      if (fishState !== "idle") return false;
+      fishState = "wait";
+      fishT = 0;
+      biteAt = 2 + Math.random() * 2.5;
+      lost = false;
+      return true;
+    },
+    reel: () => {
+      if (fishState !== "bite") return -1;
+      fishState = "catch";
+      fishT = 0;
+      fishKind = Math.floor(Math.random() * FISH_COLS.length);
+      fishBody.color.setHex(FISH_COLS[fishKind]);
+      return fishKind;
+    },
+    /** true once after a fish got away (it was not reeled in in time). */
+    gotAway: () => { const l = lost; lost = false; return l; },
+  };
+
+  // ── a sandcastle to build on the beach, a bit at a time. Then a wave comes up the sand… ──
+  const SCX = -18.9, SCZ = -4;
+  const sand = std(0xf2d48f, 1, { flatShading: true });
+  const sandParts: THREE.Object3D[][] = [[], [], [], []];
+  const sc = new THREE.Group();
+  sc.position.set(SCX, -0.3, SCZ);
+  g.add(sc);
+  const wave = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.18, 4.5), new THREE.MeshStandardMaterial({ color: 0x8fd3ff, transparent: true, opacity: 0.75, roughness: 0.2 }));
+  wave.visible = false;
+  g.add(wave);
+  let scStage = 0, washT = -1;
+  {
+    const put = (stage: number, geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number) => {
+      const o = mesh(geo, m, x, y, z, sc);
+      o.visible = false;
+      sandParts[stage].push(o);
+      return o;
+    };
+    // 1: the base mound and a moat ring; 2: the middle tower; 3: four little towers; 4: a flag and shells
+    put(0, new THREE.CylinderGeometry(0.75, 0.9, 0.3, 14), sand, 0, 0.15, 0);
+    put(0, new THREE.TorusGeometry(1.05, 0.06, 4, 20).rotateX(Math.PI / 2), std(0x7cc6f2, 0.3), 0, 0.03, 0);
+    put(1, new THREE.CylinderGeometry(0.32, 0.38, 0.55, 10), sand, 0, 0.57, 0);
+    put(1, new THREE.ConeGeometry(0.34, 0.3, 10), sand, 0, 1.0, 0);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      put(2, new THREE.CylinderGeometry(0.15, 0.18, 0.4, 8), sand, Math.cos(a) * 0.55, 0.5, Math.sin(a) * 0.55);
+      put(2, new THREE.ConeGeometry(0.17, 0.2, 8), sand, Math.cos(a) * 0.55, 0.8, Math.sin(a) * 0.55);
+    }
+    put(3, new THREE.CylinderGeometry(0.012, 0.012, 0.5, 4), std(0x6b4a2b), 0, 1.35, 0);
+    const fl = put(3, new THREE.PlaneGeometry(0.3, 0.18).translate(0.15, 0, 0), std(0xff6b9d, 0.7, { side: THREE.DoubleSide }), 0.01, 1.5, 0);
+    fl.castShadow = false;
+    const shellM = std(0xfff0e6, 0.6);
+    for (let i = 0; i < 5; i++) put(3, new THREE.SphereGeometry(0.06, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2), shellM, Math.cos(i * 1.3) * 0.82, 0.3, Math.sin(i * 1.3) * 0.82);
+    // a bucket and spade beside it
+    mesh(new THREE.CylinderGeometry(0.16, 0.12, 0.26, 10), std(0xff4757, 0.6), 1.1, 0.13, 0.7, sc);
+    const spade = mesh(new THREE.BoxGeometry(0.03, 0.5, 0.03), std(0x2f80ed, 0.6), 1.2, 0.25, -0.6, sc);
+    spade.rotation.z = 0.5;
+  }
+  w.anim.push((t, dt) => {
+    sandParts.forEach((list, i) => list.forEach((o) => { o.visible = i < scStage; }));
+    if (washT >= 0) {
+      washT += dt;
+      // the wave runs up the sand over the castle and back again; the castle melts flat
+      const k = washT < 1.2 ? washT / 1.2 : Math.max(0, 1 - (washT - 1.6) / 1.0);
+      wave.visible = washT < 2.6;
+      wave.position.set(SCX - 3.2 + k * 4.4, -0.38, SCZ);
+      wave.scale.set(1 + k, 1, 1);
+      (wave.material as THREE.MeshStandardMaterial).opacity = 0.75 * Math.min(1, k * 3);
+      if (washT > 0.9) sc.scale.set(1 + (washT - 0.9) * 0.2, Math.max(0.05, 1 - (washT - 0.9) * 1.6), 1 + (washT - 0.9) * 0.2);
+      if (washT > 2.8) { washT = -1; scStage = 0; sc.scale.set(1, 1, 1); wave.visible = false; }
+    }
+  });
+  const sandcastle = {
+    pos: new THREE.Vector3(wx(SCX + 1.4, SCZ), base - 0.3, wz(SCX + 1.4, SCZ)),
+    stage: () => scStage,
+    washing: () => washT >= 0,
+    build: () => { if (washT >= 0 || scStage >= 4) return -1; scStage++; return scStage; },
+    wash: () => { if (washT < 0 && scStage > 0) washT = 0; },
+  };
+
   const kz = -S + T / 2 + 2.2 + 1.6;
   const thx = -2.5 - 1.6, thz = kz + 2.2 + 1.2;
   return {
@@ -1100,6 +1837,12 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
       squish: () => { squishT = 1; },
     },
     catapult,
+    oven,
+    theatre,
+    garden,
+    swing: ropeSwing,
+    fishing,
+    sandcastle,
     chimes: {
       stones: chimeStones.map((c) => new THREE.Vector3(wx(c.m.position.x, chimeZ), base + 0.1, wz(c.m.position.x, chimeZ))),
       press: (i) => { if (chimeStones[i]) chimeStones[i].dip = 1; },
