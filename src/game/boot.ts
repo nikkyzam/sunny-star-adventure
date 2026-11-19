@@ -131,7 +131,7 @@ declare global {
       /** Sparky: where he is and what he's doing (null if this level has no dragon). */
       dragon: () => { state: string; x: number; y: number; z: number; perch: number[]; bells: number[][] } | null;
       /** The castle's fun: thrones, the ring course, and what the kid wears and does. */
-      castleFun: () => { thrones: { seat: number[]; facing: number }[]; rings: number[][]; passed: number; hat: number; seated: boolean; big: number; facing: number; horse: number[] | null; slides: { board: number[]; end: number[]; len: number }[]; sliding: number | null; fireworks: number[][]; armour: number[][]; stones: number[][]; songAt: number };
+      castleFun: () => { thrones: { seat: number[]; facing: number }[]; rings: number[][]; passed: number; hat: number; seated: boolean; big: number; facing: number; horse: number[] | null; slides: { board: number[]; end: number[]; len: number }[]; sliding: number | null; fireworks: number[][]; armour: number[][]; stones: number[][]; songAt: number; keys: number[][]; found: number; chest: number[] | null; opened: boolean; peacocks: number[][] };
       /** Onto the highest ground at (x, z), or the floor just below y when given (inside a house). */
       warp: (x: number, z: number, y?: number) => void;
       /** Test hook: park the car somewhere else. */
@@ -476,6 +476,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
     crowned.clear();
     sliding.clear();
     chimeOn.clear();
+    keysFound.clear();
+    chestOpened = false;
+    for (const tr of world.treasures) tr.reset();
     songAt = 0;
     songShown = -1;
     mounts.clear();
@@ -618,6 +621,34 @@ export function startGame(canvas: HTMLCanvasElement): void {
         particles.burst(p.pos.x, p.pos.y + 2, p.pos.z, 0xc9d1da, 16, 2.5, 0.8, 3);
         hud.showToast("🛡️ A brave knight! \"Put on the full armour of God.\" (Ephesians 6:11)");
       } };
+      const tr = world.treasures[0];
+      if (tr && Math.hypot(p.pos.x - tr.chest.x, p.pos.z - tr.chest.z) < 1.7 && Math.abs(p.pos.y - tr.chest.y) < 1.2 && !chestOpened) {
+        const ready = keysFound.size >= tr.keys.length;
+        return { kid: p, icon: ready ? "🗝️" : "🔒", label: ready ? "Open the treasure" : "Locked", go: () => {
+          if (!ready) {
+            audio.sfx("ui");
+            hud.showToast(`🔒 The king's treasure chest is locked! Find the golden keys hidden round the castle: ${keysFound.size} of ${tr.keys.length} so far. Look up high, down low, and even outside!`);
+            return;
+          }
+          chestOpened = true;
+          tr.open();
+          audio.sfx("chest");
+          audio.sfx("win");
+          earn(60);
+          hud.setCoins(bank);
+          particles.burst(tr.chest.x, tr.chest.y + 1.2, tr.chest.z, 0xffd93d, 40, 4, 1.2, 5);
+          cheerNear(p.pos, 20);
+          hud.showToast("💰 The king's treasure! +60 coins! \"Where your treasure is, there will your heart be also.\" (Matthew 6:21)");
+        } };
+      }
+      const pi = (world.peacocks[0]?.pos ?? []).findIndex((q) => Math.hypot(p.pos.x - q.x, p.pos.z - q.z) < 1.8);
+      if (pi >= 0) return { kid: p, icon: "🦚", label: "Pat the peacock", go: () => {
+        const q = world.peacocks[0].pos[pi];
+        world.peacocks[0].show(pi);
+        audio.sfx("pet");
+        particles.burst(q.x, q.y + 1.2, q.z, 0xff6b9d, 8, 2, 0.6, 3);
+        hud.showToast("🦚 Look at those feathers! \"God saw everything that he had made, and it was very good.\" (Genesis 1:31)");
+      } };
       const bell = world.bells.find((b) => Math.hypot(p.pos.x - b.pos.x, p.pos.z - b.pos.z) < 1.9 && Math.abs(p.pos.y - b.pos.y) < 1.5);
       if (bell) return { kid: p, icon: "🔔", label: "Ring the bell", go: () => {
         bell.ring();
@@ -697,6 +728,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       crowned.delete(p);
     }
     updateChimes();
+    updateTreasure();
     const tilt = world.tilt;
     if (!tilt) return;
     for (const p of players) {
@@ -714,6 +746,28 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
   }
   const CHEST = new THREE.Vector3();
+
+  /** The king's golden keys: walk into one to pick it up. Peacocks fan their tails at kids nearby. */
+  const keysFound = new Set<number>();
+  let chestOpened = false;
+  function updateTreasure(): void {
+    const pk = world.peacocks[0];
+    if (pk) pk.pos.forEach((q, i) => { if (players.some((p) => Math.hypot(p.pos.x - q.x, p.pos.z - q.z) < 2.6)) pk.show(i); });
+    const tr = world.treasures[0];
+    if (!tr) return;
+    for (const p of players) tr.keys.forEach((k, i) => {
+      if (keysFound.has(i) || Math.hypot(p.pos.x - k.x, p.pos.z - k.z) > 1.2 || Math.abs(p.pos.y + 0.6 - k.y) > 1.0) return;
+      keysFound.add(i);
+      tr.take(i);
+      audio.sfx("coin");
+      audio.sfx("unlock");
+      particles.burst(k.x, k.y, k.z, 0xffd93d, 16, 2.5, 0.7, 3);
+      const n = keysFound.size, all = tr.keys.length;
+      hud.showToast(n < all
+        ? `🗝️ A golden key! ${n} of ${all}. The king's treasure chest is by the keep door.`
+        : "🗝️ All five golden keys! Hurry to the treasure chest by the keep door!");
+    });
+  }
 
   /** "Jesus loves me, this I know, for the Bible tells me so" on the singing stones (0 = C). */
   const SONG = [4, 2, 2, 1, 2, 4, 4, 5, 5, 7, 5, 5, 4, 4];
@@ -3194,6 +3248,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
       armour: world.armours.map((a) => a.pos.toArray()),
       stones: world.chimes[0]?.stones.map((v) => v.toArray()) ?? [],
       songAt,
+      keys: world.treasures[0]?.keys.map((k) => k.toArray()) ?? [],
+      found: keysFound.size,
+      chest: world.treasures[0]?.chest.toArray() ?? null,
+      opened: chestOpened,
+      peacocks: world.peacocks[0]?.pos.map((q) => q.toArray()) ?? [],
     }),
     dragon: () => {
       const d = world.dragon;

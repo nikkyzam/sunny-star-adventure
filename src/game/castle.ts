@@ -50,6 +50,10 @@ export interface CastleInfo {
   armour: { pos: THREE.Vector3 };
   /** Singing stones in the courtyard: where each one is (low to high notes), one to press, one to glow. */
   chimes: { stones: THREE.Vector3[]; press: (i: number) => void; guide: (i: number) => void };
+  /** The king's treasure hunt: golden keys to pick up (hide one when found) and the chest they open. */
+  treasure: { keys: THREE.Vector3[]; take: (i: number) => void; chest: THREE.Vector3; open: () => void; reset: () => void };
+  /** Peacocks strolling in the courtyard: where each is, and asking one to fan its tail. */
+  peacocks: { pos: THREE.Vector3[]; show: (i: number) => void };
 }
 
 interface Solid { minX: number; maxX: number; minZ: number; maxZ: number; topY: number }
@@ -730,6 +734,166 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     }
   });
 
+  // ── the king's treasure: five golden keys hidden round the castle, and a locked chest by the keep ──
+  const keepZ = -S + T / 2 + 2.2 + 1.6;
+  const keySpots: [number, number, number][] = [
+    [-1.7, 8.5 + 0.7, keepZ - 1.5],            // up on the keep roof
+    [-S, H + 0.7, -S + 0.6],                   // the far corner of the wall walk
+    [S - T / 2 - 2.2, 1.35, 4.6],              // over the well
+    [-4.6, 0.75, -S + T / 2 + 1.0],            // tucked behind the keep
+    [SX + 4.6, 0.75, SZ - SR + 1.9],           // by the hay pile, outside
+  ];
+  const keyGeo = (() => {
+    const parts = [
+      new THREE.TorusGeometry(0.13, 0.04, 6, 14),
+      new THREE.BoxGeometry(0.06, 0.38, 0.05).translate(0, -0.3, 0),
+      new THREE.BoxGeometry(0.12, 0.05, 0.05).translate(0.07, -0.42, 0),
+      new THREE.BoxGeometry(0.09, 0.05, 0.05).translate(0.06, -0.31, 0),
+    ];
+    const m = mergeGeometries(parts.map((p) => p.toNonIndexed()));
+    for (const p of parts) p.dispose();
+    return m ?? new THREE.BoxGeometry(0.1, 0.4, 0.1);
+  })();
+  const keyM = std(0xffd23e, 0.3, { metalness: 0.6, emissive: 0x8a6400 });
+  const keys = keySpots.map(([x, y, z]) => {
+    const k = mesh(keyGeo, keyM, x, y, z);
+    k.scale.setScalar(1.3);
+    return k;
+  });
+  const chestAt = { x: 1.4, z: keepZ + 2.2 + 0.9 };
+  const lid = new THREE.Group();
+  const glow = new THREE.PointLight(0xffc94a, 0, 4);
+  let openT = -1;
+  {
+    const { x, z } = chestAt;
+    const chest = new THREE.Group();
+    chest.position.set(x, 0, z);
+    chest.rotation.y = -0.4;
+    g.add(chest);
+    const red = std(0x9c2a2a, 0.8);
+    const put = (geo: THREE.BufferGeometry, m: THREE.Material, px: number, py: number, pz: number, parent: THREE.Object3D = chest) => mesh(geo, m, px, py, pz, parent);
+    put(new THREE.BoxGeometry(1.0, 0.55, 0.65), red, 0, 0.3, 0);
+    for (const bx of [-0.35, 0.35]) put(new THREE.BoxGeometry(0.08, 0.57, 0.67), gold, bx, 0.3, 0);
+    lid.position.set(0, 0.58, -0.33);
+    chest.add(lid);
+    put(new THREE.CylinderGeometry(0.33, 0.33, 1.0, 12, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateX(-Math.PI / 2), red, 0, 0, 0.33, lid);
+    for (const bx of [-0.35, 0.35]) put(new THREE.CylinderGeometry(0.34, 0.34, 0.08, 12, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateX(-Math.PI / 2), gold, bx, 0, 0.33, lid);
+    // a big padlock, and gold coins piled inside (seen when it opens)
+    const lock = put(new THREE.BoxGeometry(0.2, 0.2, 0.08), gold, 0, 0.45, 0.36);
+    lock.name = "lock";
+    const coinM = std(0xffd23e, 0.3, { metalness: 0.6, emissive: 0x6a4a00 });
+    for (let i = 0; i < 14; i++) put(new THREE.CylinderGeometry(0.07, 0.07, 0.02, 10), coinM, (i % 5 - 2) * 0.17 + (i > 9 ? 0.08 : 0), 0.55 + Math.floor(i / 5) * 0.025, (Math.floor(i / 5) - 1) * 0.15).rotation.x = 0.3 * (i % 3 - 1);
+    glow.position.set(0, 1.0, 0);
+    chest.add(glow);
+    solid(x, z, 0.55, 0.45, 0.85);
+  }
+  w.anim.push((t, dt) => {
+    keys.forEach((k, i) => {
+      if (!k.visible) return;
+      k.rotation.y = t * 2 + i;
+      k.position.y = keySpots[i][1] + Math.sin(t * 2.5 + i) * 0.12;
+    });
+    if (openT >= 0) {
+      openT = Math.min(1, openT + dt * 1.5);
+      lid.rotation.x = -openT * 1.9;
+      glow.intensity = openT * 3;
+    }
+  });
+
+  // ── peacocks strolling in the courtyard; come close and they fan their tails ──
+  const peaM = std(0x1f7fb0, 0.5, { flatShading: true }), neckM = std(0x1747a6, 0.4, { flatShading: true, emissive: 0x081840 });
+  const eyeRing = std(0x2fb37a, 0.6, { side: THREE.DoubleSide }), eyeM = std(0x1747a6, 0.5), eyeGold = std(0xe8b830, 0.5);
+  const featherGeo = new THREE.PlaneGeometry(0.16, 1.0).translate(0, 0.5, 0);
+  const featherM = std(0x2f9e5a, 0.7, { side: THREE.DoubleSide });
+  const pea = [0, 1].map((i) => {
+    const o = new THREE.Group();
+    const home = new THREE.Vector3(-1.5 + i * 2.6, 0, 2.0 + i * 1.0);
+    o.position.copy(home);
+    g.add(o);
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8).scale(0.85, 0.8, 1.3), peaM);
+    body.position.y = 0.5;
+    o.add(body);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.45, 8), neckM);
+    neck.position.set(0, 0.8, 0.2);
+    neck.rotation.x = 0.25;
+    o.add(neck);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), neckM);
+    head.position.set(0, 1.03, 0.26);
+    o.add(head);
+    const beak = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.09, 5).rotateX(Math.PI / 2), std(0xd9c39a));
+    beak.position.set(0, 1.02, 0.36);
+    o.add(beak);
+    for (let k = -1; k <= 1; k++) {
+      const c = new THREE.Mesh(new THREE.SphereGeometry(0.02, 4, 3), neckM);
+      c.position.set(k * 0.03, 1.17, 0.24 - Math.abs(k) * 0.02);
+      o.add(c);
+    }
+    for (const sx of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.34, 4), std(0x9a8a70));
+      leg.position.set(sx * 0.07, 0.17, 0);
+      o.add(leg);
+    }
+    // the tail: feathers on a pivot at the rump; folded they trail behind, fanned they stand in a half circle
+    const tail = new THREE.Group();
+    tail.position.set(0, 0.5, -0.22);
+    o.add(tail);
+    const feathers: THREE.Group[] = [];
+    const N = 15;
+    for (let k = 0; k < N; k++) {
+      const f = new THREE.Group();
+      const blade = new THREE.Mesh(featherGeo, featherM);
+      f.add(blade);
+      const ring = new THREE.Mesh(new THREE.CircleGeometry(0.1, 10), eyeRing);
+      ring.position.set(0, 0.88, 0.005);
+      f.add(ring);
+      const gl = new THREE.Mesh(new THREE.CircleGeometry(0.065, 10), eyeGold);
+      gl.position.set(0, 0.88, 0.01);
+      f.add(gl);
+      const eye = new THREE.Mesh(new THREE.CircleGeometry(0.04, 8), eyeM);
+      eye.position.set(0, 0.88, 0.015);
+      f.add(eye);
+      f.userData.a = ((k / (N - 1)) - 0.5) * Math.PI * 0.95;
+      tail.add(f);
+      feathers.push(f);
+    }
+    return { o, home, tail, feathers, fan: 0, want: 0, target: home.clone(), wait: Math.random() * 3, step: 0, pos: new THREE.Vector3() };
+  });
+  const peaWorld = pea.map(() => new THREE.Vector3());
+  w.anim.push((t, dt) => {
+    pea.forEach((p, i) => {
+      p.want = Math.max(0, p.want - dt);
+      const showing = p.want > 0;
+      p.fan += ((showing ? 1 : 0) - p.fan) * Math.min(1, dt * 3);
+      // stroll between spots in the open part of the yard, standing still while showing off
+      if (!showing) {
+        const d = p.target.clone().sub(p.o.position);
+        d.y = 0;
+        if (d.length() < 0.15) {
+          p.wait -= dt;
+          if (p.wait <= 0) {
+            p.target.set(-3 + Math.random() * 4.8, 0, 0.8 + Math.random() * 3);
+            p.wait = 1.5 + Math.random() * 3;
+          }
+        } else {
+          const sp = 0.6 * dt;
+          p.o.position.addScaledVector(d.normalize(), Math.min(sp, d.length()));
+          const yaw = Math.atan2(d.x, d.z);
+          p.o.rotation.y += Math.atan2(Math.sin(yaw - p.o.rotation.y), Math.cos(yaw - p.o.rotation.y)) * Math.min(1, dt * 5);
+          p.step += dt * 9;
+        }
+      }
+      p.o.position.y = Math.abs(Math.sin(p.step)) * 0.02;
+      // the fan: each feather swings up from trailing behind to its place in the half circle
+      p.tail.rotation.x = -1.35 + p.fan * 1.15;
+      for (const f of p.feathers) {
+        f.rotation.z = f.userData.a * (0.15 + p.fan * 0.85);
+        f.scale.set(1 + p.fan * 0.3, 0.9 + p.fan * 0.5, 1);
+      }
+      if (showing) p.tail.rotation.z = Math.sin(t * 9) * 0.04 * p.fan; // a happy shimmer
+      peaWorld[i].set(wx(p.o.position.x, p.o.position.z), base, wz(p.o.position.x, p.o.position.z));
+    });
+  });
+
   const kz = -S + T / 2 + 2.2 + 1.6;
   const thx = -2.5 - 1.6, thz = kz + 2.2 + 1.2;
   return {
@@ -747,6 +911,14 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     },
     fireworks: { pos: new THREE.Vector3(wx(fwAt.x, fwAt.z), base + H, wz(fwAt.x, fwAt.z)), launch },
     armour: { pos: new THREE.Vector3(wx(armourAt.x, armourAt.z), base, wz(armourAt.x, armourAt.z)) },
+    treasure: {
+      keys: keySpots.map(([x, y, z]) => new THREE.Vector3(wx(x, z), base + y, wz(x, z))),
+      take: (i) => { if (keys[i]) keys[i].visible = false; },
+      chest: new THREE.Vector3(wx(chestAt.x, chestAt.z), base, wz(chestAt.x, chestAt.z)),
+      open: () => { if (openT < 0) openT = 0; },
+      reset: () => { for (const k of keys) k.visible = true; openT = -1; lid.rotation.x = 0; glow.intensity = 0; },
+    },
+    peacocks: { pos: peaWorld, show: (i) => { if (pea[i]) pea[i].want = 2.5; } },
     chimes: {
       stones: chimeStones.map((c) => new THREE.Vector3(wx(c.m.position.x, chimeZ), base + 0.1, wz(c.m.position.x, chimeZ))),
       press: (i) => { if (chimeStones[i]) chimeStones[i].dip = 1; },

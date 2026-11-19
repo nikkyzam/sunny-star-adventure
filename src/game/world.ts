@@ -981,6 +981,8 @@ const ADVENTURE_ISLAND: LevelDef = {
         "There's a box of fireworks on the wall over the gate. Give the handle a push!",
         "Try on the knight's helmet by the throne. Put on the armour of God!",
         "The coloured stones by the gate sing when you step on them. Follow the glowing one to play a song!",
+        "The king hid five golden keys round the castle. Find them all to open his treasure chest by the keep!",
+        "Have you met the peacocks? Walk up close and they'll show you their beautiful tails.",
       ],
     },
     {
@@ -1972,6 +1974,10 @@ export class World {
   armours: { pos: THREE.Vector3 }[] = [];
   /** Castle singing stones. */
   chimes: { stones: THREE.Vector3[]; press: (i: number) => void; guide: (i: number) => void }[] = [];
+  /** Castle treasure hunts (golden keys and the king's chest). */
+  treasures: { keys: THREE.Vector3[]; take: (i: number) => void; chest: THREE.Vector3; open: () => void; reset: () => void }[] = [];
+  /** Castle peacocks. */
+  peacocks: { pos: THREE.Vector3[]; show: (i: number) => void }[] = [];
   /** The knight's ring course, if this level has one. */
   tilt: KnightRings | null = null;
   /** How fast the Ferris wheel turns (1 = its normal slow turn; boot speeds it up to bring a rider down). */
@@ -2298,6 +2304,8 @@ export class World {
     this.fireworks = [];
     this.armours = [];
     this.chimes = [];
+    this.treasures = [];
+    this.peacocks = [];
     this.tilt = null;
     for (const l of this.locks.values()) disposeSprite(l.sign);
     this.locks.clear();
@@ -2441,6 +2449,8 @@ export class World {
       this.fireworks.push(info.fireworks);
       this.armours.push(info.armour);
       this.chimes.push(info.chimes);
+      this.treasures.push(info.treasure);
+      this.peacocks.push(info.peacocks);
       if (c.dragon && !this.dragon) {
         const d = new Dragon(info.perch, info.facing, info.centre, c.dragon.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
         this.group.add(d.group);
