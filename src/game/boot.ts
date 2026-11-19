@@ -131,7 +131,7 @@ declare global {
       /** Sparky: where he is and what he's doing (null if this level has no dragon). */
       dragon: () => { state: string; x: number; y: number; z: number; perch: number[]; bells: number[][] } | null;
       /** The castle's fun: thrones, the ring course, and what the kid wears and does. */
-      castleFun: () => { thrones: { seat: number[]; facing: number }[]; rings: number[][]; passed: number; hat: number; seated: boolean; big: number; facing: number; horse: number[] | null; slides: { board: number[]; end: number[]; len: number }[]; sliding: number | null; fireworks: number[][]; armour: number[][]; stones: number[][]; songAt: number; keys: number[][]; found: number; chest: number[] | null; opened: boolean; peacocks: number[][] };
+      castleFun: () => { thrones: { seat: number[]; facing: number }[]; rings: number[][]; passed: number; hat: number; seated: boolean; big: number; facing: number; horse: number[] | null; slides: { board: number[]; end: number[]; len: number }[]; sliding: number | null; fireworks: number[][]; armour: number[][]; stones: number[][]; songAt: number; keys: number[][]; found: number; chest: number[] | null; opened: boolean; peacocks: number[][]; bouncy: { min: number[]; max: number[] }[]; catapults: { pos: number[]; raft: number[]; aim: number[] }[]; catHits: number; bounces: number };
       /** Onto the highest ground at (x, z), or the floor just below y when given (inside a house). */
       warp: (x: number, z: number, y?: number) => void;
       /** Test hook: park the car somewhere else. */
@@ -478,6 +478,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
     chimeOn.clear();
     keysFound.clear();
     chestOpened = false;
+    bounceRun.clear();
+    bouncedYet = false;
+    bounceTen = false;
+    catHits = 0;
     for (const tr of world.treasures) tr.reset();
     songAt = 0;
     songShown = -1;
@@ -641,6 +645,12 @@ export function startGame(canvas: HTMLCanvasElement): void {
           hud.showToast("💰 The king's treasure! +60 coins! \"Where your treasure is, there will your heart be also.\" (Matthew 6:21)");
         } };
       }
+      const cat = world.catapults.find((c) => Math.hypot(p.pos.x - c.pos.x, p.pos.z - c.pos.z) < 1.5 && Math.abs(p.pos.y - c.pos.y) < 1.2);
+      if (cat) return { kid: p, icon: "🎯", label: "Fling a pom-pom", go: () => {
+        if (!cat.fire()) { hud.showToast("🎯 Loading another pom-pom…"); return; }
+        audio.sfx("boing");
+        audio.sfx("whee");
+      } };
       const pi = (world.peacocks[0]?.pos ?? []).findIndex((q) => Math.hypot(p.pos.x - q.x, p.pos.z - q.z) < 1.8);
       if (pi >= 0) return { kid: p, icon: "🦚", label: "Pat the peacock", go: () => {
         const q = world.peacocks[0].pos[pi];
@@ -729,6 +739,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
     updateChimes();
     updateTreasure();
+    updateBouncy();
+    updateCatapult();
     const tilt = world.tilt;
     if (!tilt) return;
     for (const p of players) {
@@ -767,6 +779,54 @@ export function startGame(canvas: HTMLCanvasElement): void {
         ? `🗝️ A golden key! ${n} of ${all}. The king's treasure chest is by the keep door.`
         : "🗝️ All five golden keys! Hurry to the treasure chest by the keep door!");
     });
+  }
+
+  /** The bouncy castle: land on its floor and boing back up, a little higher every time. */
+  const bounceRun = new Map<Player, { n: number; at: number }>();
+  let bouncedYet = false, bounceTen = false;
+  function updateBouncy(): void {
+    for (const b of world.bouncies) for (const p of players) {
+      if (!p.onGround || p.riding) continue;
+      if (p.pos.x < b.min.x + 0.15 || p.pos.x > b.max.x - 0.15 || p.pos.z < b.min.z + 0.15 || p.pos.z > b.max.z - 0.15) continue;
+      if (Math.abs(p.pos.y - (b.min.y + 0.08)) > 0.35) continue;
+      const run = bounceRun.get(p) ?? { n: 0, at: -9 };
+      run.n = timer - run.at < 1.6 ? run.n + 1 : 1;
+      run.at = timer;
+      bounceRun.set(p, run);
+      p.bounce(Math.min(12, 8.2 + run.n * 0.6));
+      b.squish();
+      audio.sfx("boing");
+      particles.burst(p.pos.x, p.pos.y + 0.2, p.pos.z, [0xff7eb6, 0xffd84a, 0x5aa9ff][run.n % 3], 6, 2, 0.5, 3);
+      if (!bouncedYet) {
+        bouncedYet = true;
+        hud.showToast("🏰 Boing! \"Walking, and leaping, and praising God!\" (Acts 3:8)");
+      } else if (run.n === 10) {
+        hud.showToast(bounceTen ? "🏰 Ten bounces in a row! Boing-boing-boing!" : "🏰 Ten bounces in a row! +5 coins!");
+        if (!bounceTen) { bounceTen = true; earn(5); hud.setCoins(bank); audio.sfx("coin"); }
+      }
+    }
+  }
+
+  /** The catapult's pom-poms land on the target raft (coins) or splash in the sea. */
+  let catHits = 0;
+  function updateCatapult(): void {
+    for (const c of world.catapults) c.onLand ??= (hit, close, at) => {
+      audio.sfx("splash");
+      particles.burst(at.x, at.y + 0.3, at.z, hit ? 0xffd93d : 0xbfe8ff, hit ? 24 : 12, 3, 0.8, 4);
+      if (!hit) {
+        hud.showToast(close ? "🎯 So close! Try again!" : "💦 Splash! Tip: fling just as the raft gets to the end of its trip.");
+        return;
+      }
+      catHits++;
+      audio.sfx("coin");
+      audio.sfx("win");
+      earn(5);
+      hud.setCoins(bank);
+      cheerNear(players[0].pos, 20);
+      hud.showToast(catHits === 1
+        ? "🎯 Bullseye! +5 coins! \"I press on toward the goal for the prize.\" (Philippians 3:14)"
+        : `🎯 Bullseye! +5 coins! That's ${catHits} hits!`);
+    };
   }
 
   /** "Jesus loves me, this I know, for the Bible tells me so" on the singing stones (0 = C). */
@@ -3253,6 +3313,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
       chest: world.treasures[0]?.chest.toArray() ?? null,
       opened: chestOpened,
       peacocks: world.peacocks[0]?.pos.map((q) => q.toArray()) ?? [],
+      bouncy: world.bouncies.map((b) => ({ min: b.min.toArray(), max: b.max.toArray() })),
+      catapults: world.catapults.map((c) => ({ pos: c.pos.toArray(), raft: c.raft.toArray(), aim: c.aim.toArray() })),
+      catHits,
+      bounces: bounceRun.get(players[0])?.n ?? 0,
     }),
     dragon: () => {
       const d = world.dragon;

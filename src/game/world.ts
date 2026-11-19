@@ -32,7 +32,7 @@ import type { JobId } from "./jobs";
 import type { TrafficLoop } from "./traffic";
 import type { HerdDef } from "./critters";
 import { buildBethlehem, type BethlehemDef } from "./bethlehem";
-import { buildCastle, type CastleDef } from "./castle";
+import { buildCastle, type CastleDef, type CastleInfo } from "./castle";
 import { Dragon } from "./dragon";
 import { KnightRings } from "./tilt";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -983,6 +983,8 @@ const ADVENTURE_ISLAND: LevelDef = {
         "The coloured stones by the gate sing when you step on them. Follow the glowing one to play a song!",
         "The king hid five golden keys round the castle. Find them all to open his treasure chest by the keep!",
         "Have you met the peacocks? Walk up close and they'll show you their beautiful tails.",
+        "Round the back of the castle there's a bouncy castle! Hop in and boing, higher and higher!",
+        "Behind the castle is a catapult full of soft pom-pom balls. Wait till the target raft floats past, then fling!",
       ],
     },
     {
@@ -1978,6 +1980,10 @@ export class World {
   treasures: { keys: THREE.Vector3[]; take: (i: number) => void; chest: THREE.Vector3; open: () => void; reset: () => void }[] = [];
   /** Castle peacocks. */
   peacocks: { pos: THREE.Vector3[]; show: (i: number) => void }[] = [];
+  /** Castle bouncy castles. */
+  bouncies: CastleInfo["bouncy"][] = [];
+  /** Castle catapults. */
+  catapults: CastleInfo["catapult"][] = [];
   /** The knight's ring course, if this level has one. */
   tilt: KnightRings | null = null;
   /** How fast the Ferris wheel turns (1 = its normal slow turn; boot speeds it up to bring a rider down). */
@@ -2306,6 +2312,8 @@ export class World {
     this.chimes = [];
     this.treasures = [];
     this.peacocks = [];
+    this.bouncies = [];
+    this.catapults = [];
     this.tilt = null;
     for (const l of this.locks.values()) disposeSprite(l.sign);
     this.locks.clear();
@@ -2451,6 +2459,8 @@ export class World {
       this.chimes.push(info.chimes);
       this.treasures.push(info.treasure);
       this.peacocks.push(info.peacocks);
+      this.bouncies.push(info.bouncy);
+      this.catapults.push(info.catapult);
       if (c.dragon && !this.dragon) {
         const d = new Dragon(info.perch, info.facing, info.centre, c.dragon.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
         this.group.add(d.group);

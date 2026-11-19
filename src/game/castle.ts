@@ -54,6 +54,10 @@ export interface CastleInfo {
   treasure: { keys: THREE.Vector3[]; take: (i: number) => void; chest: THREE.Vector3; open: () => void; reset: () => void };
   /** Peacocks strolling in the courtyard: where each is, and asking one to fan its tail. */
   peacocks: { pos: THREE.Vector3[]; show: (i: number) => void };
+  /** The bouncy castle: its floor (a world box at floor height) and a wobble when someone bounces. */
+  bouncy: { min: THREE.Vector3; max: THREE.Vector3; squish: () => void };
+  /** The catapult: where to stand to fire it, firing (false while busy), and hearing where the ball lands. */
+  catapult: { pos: THREE.Vector3; raft: THREE.Vector3; aim: THREE.Vector3; fire: () => boolean; onLand: ((hit: boolean, close: boolean, at: THREE.Vector3) => void) | null };
 }
 
 interface Solid { minX: number; maxX: number; minZ: number; maxZ: number; topY: number }
@@ -894,6 +898,177 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     });
   });
 
+  // ── a bouncy castle on the meadow behind the walls: pink and yellow, with puffy turrets. Its
+  // floor springs kids up, higher with every bounce; the front is open to hop in and out ──
+  const BX = -5, BZ = -13, BH = 2.1, BF = 0.55; // centre, half size, floor height
+  const bouncy = new THREE.Group();
+  bouncy.position.set(BX, 0, BZ);
+  g.add(bouncy);
+  let squishT = 0;
+  {
+    const puff = (color: number) => std(color, 0.45, { flatShading: false, emissive: new THREE.Color(color).multiplyScalar(0.08) });
+    const pink = puff(0xff7eb6), yellow = puff(0xffd84a), blue = puff(0x5aa9ff), white = puff(0xfff6fb);
+    const netM = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false });
+    const put = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number) => mesh(geo, m, x, y, z, bouncy);
+    // the puffy floor and a step at the open front (+x)
+    put(new THREE.BoxGeometry(BH * 2, BF, BH * 2), blue, 0, BF / 2, 0);
+    const floor = put(new THREE.BoxGeometry(BH * 2 - 0.2, 0.12, BH * 2 - 0.2), yellow, 0, BF + 0.02, 0);
+    floor.name = "floor";
+    put(new THREE.CapsuleGeometry(0.2, BH * 2 - 0.2, 4, 10).rotateX(Math.PI / 2), pink, BH + 0.25, 0.22, 0);
+    // three puffy walls: a fat tube along the bottom, a see-through net, a fat tube on top
+    const WALLH = 2.75;
+    for (const [ax, az, along] of [[-BH, 0, false], [0, -BH, true], [0, BH, true]] as [number, number, boolean][]) {
+      const len = BH * 2;
+      for (const [y, r, m] of [[BF + 0.35, 0.32, pink], [BF + WALLH, 0.24, yellow]] as [number, number, THREE.Material][]) {
+        const tube = new THREE.CapsuleGeometry(r, len - r * 2, 4, 12);
+        if (along) tube.rotateZ(Math.PI / 2); else tube.rotateX(Math.PI / 2);
+        put(tube, m, ax, y, az);
+      }
+      const net = new THREE.PlaneGeometry(len - 0.4, WALLH - 0.6);
+      if (!along) net.rotateY(Math.PI / 2);
+      const n = put(net, netM, ax, BF + 0.35 + (WALLH - 0.35) / 2, az);
+      n.castShadow = false;
+      // puffy stripes up the net, so it reads as one blown-up wall
+      for (let k = 1; k < 4; k++) {
+        const t = -BH + (k / 4) * len;
+        put(new THREE.CylinderGeometry(0.1, 0.1, WALLH - 0.35, 8), k % 2 ? white : blue, along ? t : ax, BF + 0.35 + (WALLH - 0.35) / 2, along ? az : t);
+      }
+    }
+    // turrets at the corners with pointy hats and little flags
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const x = sx * BH, z = sz * BH;
+      put(new THREE.CylinderGeometry(0.42, 0.48, 3.4, 14), sx > 0 ? yellow : pink, x, 1.7, z);
+      put(new THREE.SphereGeometry(0.46, 14, 8), white, x, 3.4, z);
+      put(new THREE.ConeGeometry(0.45, 0.9, 14), blue, x, 4.05, z);
+      put(new THREE.SphereGeometry(0.1, 8, 6), yellow, x, 4.55, z);
+    }
+    // an arch over the open front with a big smiley star
+    const arch = new THREE.TorusGeometry(BH - 0.1, 0.24, 10, 24, Math.PI).rotateY(Math.PI / 2);
+    put(arch, pink, BH, 3.15, 0).scale.set(1, 0.5, 1);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.75), new THREE.MeshBasicMaterial({ map: textTexture("Bounce!", "#ff4f9a", "#fff6c2"), transparent: true }));
+    sign.position.set(BH + 0.3, 3.75, 0);
+    sign.rotation.y = Math.PI / 2;
+    bouncy.add(sign);
+    // walls kids can't bounce over; the floor is something to stand on
+    for (const [ax, az, along] of [[-BH, 0, false], [0, -BH, true], [0, BH, true]] as [number, number, boolean][])
+      solid(BX + ax, BZ + az, along ? BH + 0.4 : 0.35, along ? 0.35 : BH + 0.4, BF + WALLH + 0.3);
+    plat(BX, BZ, BH - 0.1, BH - 0.1, BF + 0.08);
+    plat(BX + BH + 0.25, BZ, 0.3, BH - 0.3, 0.42);
+    w.anim.push((t, dt) => {
+      squishT = Math.max(0, squishT - dt * 3);
+      const k = Math.sin(squishT * Math.PI) * squishT;
+      floor.position.y = BF + 0.02 - k * 0.12;
+      bouncy.scale.set(1 + k * 0.025, 1 - k * 0.03 + Math.sin(t * 2.2) * 0.006, 1 + k * 0.025);
+    });
+  }
+
+  // ── a catapult on the meadow behind the castle: it flings big soft pom-pom balls out to a
+  // target raft bobbing on the sea. Time it right and the ball lands on the target ──
+  const CX = 4, CZ = -12.6;            // the catapult (it throws toward -z)
+  const LAND = -24.5;                  // where the balls come down (local z)
+  const cat = new THREE.Group();
+  cat.position.set(CX, 0, CZ);
+  g.add(cat);
+  const arm = new THREE.Group();
+  arm.position.set(0, 0.85, 0);
+  cat.add(arm);
+  const ballM = std(0xff6bb5, 0.95, { flatShading: true });
+  const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.32, 1), ballM);
+  ball.castShadow = true;
+  g.add(ball);
+  const raft = new THREE.Group();
+  g.add(raft);
+  {
+    const put = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = cat) => mesh(geo, m, x, y, z, parent);
+    const dark = std(0x5a3a1c, 0.9);
+    for (const sx of [-0.45, 0.45]) {
+      put(new THREE.BoxGeometry(0.16, 0.2, 2.2), wood, sx, 0.45, 0);
+      for (const sz of [-0.75, 0.75]) put(new THREE.CylinderGeometry(0.32, 0.32, 0.12, 14).rotateZ(Math.PI / 2), dark, sx * 1.25, 0.32, sz);
+      // the upright that stops the arm, and the axle posts
+      put(new THREE.BoxGeometry(0.14, 1.1, 0.14), wood, sx, 1.05, -0.55);
+      put(new THREE.BoxGeometry(0.14, 0.55, 0.14), wood, sx, 0.75, 0);
+    }
+    for (const z of [-0.95, 0.95]) put(new THREE.BoxGeometry(1.0, 0.16, 0.16), wood, 0, 0.45, z);
+    put(new THREE.BoxGeometry(1.06, 0.14, 0.18), std(0xc0392b, 0.6), 0, 1.6, -0.55); // padded crossbar
+    put(new THREE.CylinderGeometry(0.06, 0.06, 1.0, 8).rotateZ(Math.PI / 2), iron, 0, 0.85, 0);
+    // the arm with a cup on the end (it rests pointing back, cup low)
+    put(new THREE.BoxGeometry(0.14, 0.12, 1.7), wood, 0, 0, 0.85, arm);
+    const cup = put(new THREE.CylinderGeometry(0.3, 0.2, 0.2, 12, 1, true), dark, 0, 0.12, 1.65, arm);
+    cup.material = std(0x5a3a1c, 0.9, { side: THREE.DoubleSide });
+    put(new THREE.CircleGeometry(0.2, 12).rotateX(-Math.PI / 2), dark, 0, 0.03, 1.65, arm);
+    // a basket of pom-pom balls beside it
+    put(new THREE.CylinderGeometry(0.35, 0.28, 0.45, 12), std(0xc9a26b, 1), 1.1, 0.23, 0.6);
+    const cols = [0xff6bb5, 0xffd84a, 0x5aa9ff, 0x7ee08a];
+    for (let i = 0; i < 4; i++) put(new THREE.IcosahedronGeometry(0.15, 1), std(cols[i], 0.95, { flatShading: true }), 1.1 + (i % 2 - 0.5) * 0.18, 0.5 + (i > 1 ? 0.1 : 0), 0.6 + (i > 1 ? 0.08 : -0.08));
+    solid(CX, CZ, 0.7, 1.1, 1.7);
+    // the target: a round raft with red and white rings and a little flag
+    const ringCols = [0xffffff, 0xe84a5f, 0xffffff, 0xe84a5f];
+    put(new THREE.CylinderGeometry(1.35, 1.45, 0.3, 24), std(0x8a5a2e, 0.9), 0, 0, 0, raft);
+    ringCols.forEach((c, i) => put(new THREE.CircleGeometry(1.25 - i * 0.3, 24).rotateX(-Math.PI / 2), std(c, 0.7), 0, 0.16 + i * 0.004, 0, raft));
+    put(new THREE.CylinderGeometry(0.04, 0.04, 1.4, 6), wood, 1.1, 0.7, 0, raft);
+    const pennant = put(new THREE.ConeGeometry(0.22, 0.6, 3).rotateZ(-Math.PI / 2), std(0xffd84a, 0.7), 1.4, 1.25, 0, raft);
+    pennant.scale.z = 0.2;
+  }
+  const armRest = 0.22, armUp = -2.1;                     // arm tilt: resting back, and thrown up against the crossbar
+  arm.rotation.x = armRest;
+  let fireT = -1, flyT = -1, splashed = false, thrown = false;
+  const from = new THREE.Vector3(), cupAt = new THREE.Vector3();
+  const raftZ = LAND, raftSwing = 4.2, raftPeriod = 7;
+  const raftX = (t: number) => CX + Math.sin((t / raftPeriod) * Math.PI * 2) * raftSwing;
+  let raftNow = 0;
+  const FLY = 1.5;
+  const catapult = {
+    pos: new THREE.Vector3(wx(CX, CZ + 1.6), base, wz(CX, CZ + 1.6)),
+    raft: new THREE.Vector3(),
+    aim: new THREE.Vector3(wx(CX, LAND), base - 0.5, wz(CX, LAND)),
+    fire: () => {
+      if (fireT >= 0 || flyT >= 0) return false;
+      fireT = 0;
+      thrown = false;
+      return true;
+    },
+    onLand: null as ((hit: boolean, close: boolean, at: THREE.Vector3) => void) | null,
+  };
+  w.anim.push((t, dt) => {
+    raftNow = t;
+    raft.position.set(raftX(t), -0.55 + Math.sin(t * 1.7) * 0.06 - base, raftZ);
+    raft.rotation.z = Math.sin(t * 1.3) * 0.04;
+    catapult.raft.set(wx(raft.position.x, raftZ), -0.5, wz(raft.position.x, raftZ));
+    raft.rotation.x = Math.sin(t * 1.1) * 0.03;
+    // the arm: snap forward, hold, wind slowly back; the ball sits in the cup until it's thrown
+    if (fireT >= 0) {
+      fireT += dt;
+      const k = fireT < 0.22 ? fireT / 0.22 : fireT < 0.6 ? 1 : Math.max(0, 1 - (fireT - 0.6) / 1.6);
+      arm.rotation.x = armRest + (armUp - armRest) * (fireT < 0.22 ? k * k : k);
+      if (fireT >= 0.18 && !thrown) { thrown = true; flyT = 0; splashed = false; from.copy(ball.position); }
+      if (fireT > 2.2) { fireT = -1; arm.rotation.x = armRest; }
+    }
+    if (flyT >= 0) {
+      flyT += dt;
+      const k = Math.min(1, flyT / FLY);
+      // local positions (the castle group is turned, so work in its frame)
+      const lx = from.x, lz = from.z + (LAND - from.z) * k;
+      const y0 = from.y, y1 = -0.4 - base;
+      ball.position.set(lx, y0 + (y1 - y0) * k + 4 * 4.2 * k * (1 - k), lz);
+      ball.rotation.x -= dt * 8;
+      if (k >= 1 && !splashed) {
+        splashed = true;
+        const dx = Math.abs(lx - raftX(raftNow));
+        const at = new THREE.Vector3(wx(lx, LAND), base - 0.3, wz(lx, LAND));
+        catapult.onLand?.(dx < 1.35, dx < 2.6, at);
+      }
+      if (flyT > FLY + 0.15) flyT = -1;
+    }
+    if (flyT < 0) {
+      // back in the cup (it's a fresh ball from the basket)
+      cupAt.set(0, 0.32, 1.65);
+      arm.localToWorld(cupAt);
+      g.worldToLocal(cupAt);
+      ball.position.copy(cupAt);
+    }
+    ball.visible = !(flyT > FLY);
+  });
+
   const kz = -S + T / 2 + 2.2 + 1.6;
   const thx = -2.5 - 1.6, thz = kz + 2.2 + 1.2;
   return {
@@ -919,6 +1094,12 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
       reset: () => { for (const k of keys) k.visible = true; openT = -1; lid.rotation.x = 0; glow.intensity = 0; },
     },
     peacocks: { pos: peaWorld, show: (i) => { if (pea[i]) pea[i].want = 2.5; } },
+    bouncy: {
+      min: new THREE.Vector3(Math.min(wx(BX - BH, BZ - BH), wx(BX + BH, BZ + BH)), base + BF, Math.min(wz(BX - BH, BZ - BH), wz(BX + BH, BZ + BH))),
+      max: new THREE.Vector3(Math.max(wx(BX - BH, BZ - BH), wx(BX + BH, BZ + BH)), base + BF, Math.max(wz(BX - BH, BZ - BH), wz(BX + BH, BZ + BH))),
+      squish: () => { squishT = 1; },
+    },
+    catapult,
     chimes: {
       stones: chimeStones.map((c) => new THREE.Vector3(wx(c.m.position.x, chimeZ), base + 0.1, wz(c.m.position.x, chimeZ))),
       press: (i) => { if (chimeStones[i]) chimeStones[i].dip = 1; },
