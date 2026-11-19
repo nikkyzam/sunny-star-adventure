@@ -593,8 +593,8 @@ body.touch.playing .stick-base { display: flex; }
   border: 2px solid #d9d2f5; background: #fff; color: #5b4a86; cursor: pointer;
 }
 .teach-chip.on { background: #6c5ce7; border-color: #6c5ce7; color: #fff; }
-.teach-own { text-align: left; margin: 10px 0 4px; }
-.teach-own summary { cursor: pointer; font-weight: 800; color: #5b4a86; font-size: 15px; }
+.teach-own, .teach-progress { text-align: left; margin: 10px 0 4px; }
+.teach-own summary, .teach-progress summary { cursor: pointer; font-weight: 800; color: #5b4a86; font-size: 15px; }
 .teach-input {
   display: block; width: 100%; box-sizing: border-box; margin: 6px 0; padding: 8px 12px;
   font: inherit; font-size: 16px; font-weight: 700; color: #4a3b6b;
@@ -692,3 +692,7 @@ body.touch.playing .stick-base { display: flex; }
 .sticker .big { font-size: 36px; display: block; filter: grayscale(1) opacity(0.35); }
 .sticker.got { border: 3px solid #ffd93d; color: #4a3b6b; background: #fffbe6; }
 .sticker.got .big { filter: none; }
+
+/* the grown-ups' progress summary (behind the sum gate) */
+.teach-progress-list { margin: 8px 0 4px; padding-left: 20px; text-align: left; line-height: 1.5; color: #4a3b6b; font-weight: 600; }
+.teach-progress-list li span { color: #7a6a98; font-weight: 500; }

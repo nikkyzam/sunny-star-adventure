@@ -96,7 +96,7 @@ try {
   const bank0 = d.bank;
   await warp(3, -9.2);
   d = await until((x) => x.job === null);
-  check("F3 with every pair aboard, Noah pays 20", d.job === null && d.bank === bank0 + 20, `bank ${bank0} → ${d.bank}`);
+  check("F3 with every pair aboard, Noah pays 20", d.job === null && d.bank === bank0 + 20, `bank ${bank0} → ${d.bank} · state ${d.state} · at ${d.px?.toFixed(1)},${d.py?.toFixed(1)},${d.pz?.toFixed(1)} · job ${JSON.stringify(d.job)?.slice(0, 200)}`);
 
   // F4: the scroll on the little hill
   const sc = (await page.evaluate(() => window.__gameDebug().scrolls)).find((s) => s.ref === "Psalm 136:1");

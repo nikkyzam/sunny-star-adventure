@@ -17,11 +17,33 @@ Most useful first. ✅ = done, 🔨 = being built now.
    - Getting all 20 makes you a "Royal Explorer" and pays +50 coins.
    - Stickers are kept on the device only.
 4. ✅ **"What can I do here?" sparkle.** Gold sparkles float over the nearest activity, within about 20 m, that this kid has no sticker for yet. Once the sticker is earned, the sparkles move on to the next thing.
-5. **Smoother on iPads.** Join the castle's still parts into fewer pieces, so older tablets keep up. The newer castle additions aren't joined yet.
-6. ✅ (part) **More puppet shows.** Jonah and the Big Fish now takes turns with Noah's Ark. The storm, the fish gulping, praying inside and the beach end on Jonah 2:10, "God gives second chances". Still to come: David the shepherd boy, and Daniel and the lions.
-7. **A daily surprise.** A small gift chest each new day, saved on the device only, to give kids a reason to come back.
+5. ✅ (castle part) **Smoother on iPads.** Measured with `scripts/perf-castle.mjs`. Inside the castle, draw calls went from about 1,650 to about 1,470.
+   - Still parts are joined in a second pass.
+   - Peacock feathers are painted cards, so 15 draws per tail instead of 60.
+   - Each flower's petals are one piece.
+   - Tiny parts skip the shadow pass.
+   - **Still to do:** the rest of the island is about 1,000 more draws. Joining its trees, houses and fences is a bigger job for later.
+6. ✅ **More puppet shows.** The theatre now takes turns between three shows:
+   - **Noah's Ark** (Genesis 9:13)
+   - **Jonah and the Big Fish** (Jonah 2:10, "God gives second chances")
+   - **Daniel and the Lions** (Daniel 6:22). This is the gentle version: Daniel prays at his window, the lions pad in, and an angel comes and the lions lie down and fall asleep. In the morning he hops out safe.
+
+   David the shepherd boy is the next candidate.
+7. ✅ **A daily surprise.** The first play of each new day gives +10 coins and a "verse for today", which rotates through the verse library.
+   - Days in a row earn +4 more each day, up to +30.
+   - It's kept on the device only (no account), so it's safe and private.
+   - The coins arrive at once, and the message comes a moment later so the controls tip doesn't hide it.
 8. **Seasonal events.** An Easter egg hunt round the castle, a harvest festival and a Christmas lantern parade, which give news to share.
-9. **Grown-ups' progress page** (behind the maths gate). Verses learned, levels finished and time played, all kept on the device.
+9. ✅ **Grown-ups' progress page.** It's at the top of the parents' screen, behind the grown-up sum, under "📈 Progress on this device". It shows:
+   - verses typed from memory, and which ones
+   - worlds visited
+   - castle stickers
+   - Bible scrolls found
+   - helper jobs done
+   - days in a row
+   - coins saved
+
+   It's built only from what the device already remembers, and nothing is sent anywhere. It helps parents and teachers see the value, which matters for selling the game.
 10. **Day and night.** A gentle evening with lanterns and stars over the castle.
 11. **Real-iPad test.** Still not done; it needs a real device.
 

@@ -1017,6 +1017,12 @@ export function startGame(canvas: HTMLCanvasElement): void {
     "🐋 Splash! Jonah fell in, and a great big fish swallowed him up!",
     "🙏 Inside the fish, Jonah prayed to God, and God heard him.",
     "☀️ The fish put Jonah out on dry land. God gives second chances! (Jonah 2:10)",
+  ], [
+    "🎭 The puppet show is starting: Daniel and the Lions!",
+    "🙏 Daniel prayed to God every day, even when the king said not to.",
+    "🦁 So Daniel was put into a den of lions!",
+    "👼 God sent an angel, and the lions just lay down and went to sleep!",
+    "☀️ In the morning Daniel was safe! \"My God hath sent his angel.\" (Daniel 6:22)",
   ]];
   function updateBakery(): void {
     const ov = world.ovens[0];
@@ -1061,7 +1067,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (sc >= 0) {
       const story = th.story();
       hud.showToast(SHOW_LINES[story][sc]);
-      if (sc === 2) audio.sfx(story === 0 ? "baa" : "splash");
+      if (sc === 2) audio.sfx(story === 0 ? "baa" : story === 1 ? "splash" : "roar");
     } else if (showScene === 4) {
       audio.sfx("win");
       cheerNear(th.pos, 20);
@@ -1491,6 +1497,32 @@ export function startGame(canvas: HTMLCanvasElement): void {
     audio.startMusic();
     audio.sfx("ui");
     if (onTouch()) hud.showToast("👈 Left thumb moves · JUMP is on the right 👉");
+    dailyGift();
+  }
+
+  /** The first play of each new day: a little gift of coins and a verse for the day (kept on this device). */
+  function dailyGift(): void {
+    const day = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    const now = new Date();
+    const today = day(now);
+    const seen = storage.get<{ last: string; streak: number }>("daily", { last: "", streak: 0 });
+    if (seen.last === today) return;
+    const yesterday = day(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+    const streak = seen.last === yesterday ? seen.streak + 1 : 1;
+    storage.set("daily", { last: today, streak });
+    const coins = 10 + Math.min(5, streak - 1) * 4;
+    earn(coins);
+    hud.setCoins(bank);
+    const dayNo = Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 86400000);
+    const v = LIBRARY[dayNo % LIBRARY.length];
+    // the coins arrive straight away; the message waits a moment so it isn't lost behind the controls tip
+    window.setTimeout(() => {
+      if (sm.state !== "playing") return;
+      audio.sfx("chest");
+      const p = players[0];
+      if (p) particles.burst(p.pos.x, p.pos.y + 1.6, p.pos.z, 0xffd93d, 24, 3, 0.9, 4);
+      hud.showToast(`🎁 Daily surprise! +${coins} coins${streak > 1 ? ` · ${streak} days in a row!` : ""} Today's verse: "${v.text}" (${v.ref})`);
+    }, onTouch() ? 3200 : 1200);
   }
 
   function saveProgress(): void {
@@ -1880,9 +1912,37 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
     gate = null;
     setTeachStatus("");
+    drawProgress();
     drawTeach(plan, teachHandlers);
     hud.showOverlay("teach");
     audio.sfx("ui");
+  }
+
+  /** The grown-ups' progress summary: what this device remembers about the kid's play. */
+  function drawProgress(): void {
+    const list = document.getElementById("teach-progress");
+    if (!list) return;
+    const daily = storage.get<{ last: string; streak: number }>("daily", { last: "", streak: 0 });
+    const verses = [...memorized];
+    const rows: [string, string][] = [
+      [`📖 Verses typed from memory: ${verses.length}`, verses.length ? verses.slice(-12).join(", ") + (verses.length > 12 ? " …" : "") : "none yet"],
+      [`🗺️ Worlds visited: ${places.size} of ${LEVELS.length}`, [...places].slice(0, 14).join(", ")],
+      [`🏰 Sunny Castle stickers: ${book.count} of ${book.total}`, CASTLE_STICKERS.filter((x) => book.has(x.id)).map((x) => x.icon).join(" ") || "none yet"],
+      [`📜 Bible scrolls found: ${scrollsFound.size}`, ""],
+      [`🧰 Helper jobs done: ${jobsDone}`, ""],
+      [`🎁 Days in a row: ${daily.streak || 0}`, daily.last ? `last played ${daily.last}` : ""],
+      [`◉ Coins saved: ${bank}`, ""],
+    ];
+    list.replaceChildren(...rows.map(([head, detail]) => {
+      const li = document.createElement("li");
+      li.append(head);
+      if (detail) {
+        const sp = document.createElement("span");
+        sp.textContent = ` (${detail})`;
+        li.append(sp);
+      }
+      return li;
+    }));
   }
 
   function addOwnVerse(): void {

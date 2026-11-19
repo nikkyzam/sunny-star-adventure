@@ -166,6 +166,11 @@ export default function Home() {
         {/* teacher / parent screen: pick this week's verses, then start a class or use them here */}
         <div id="ov-teach" className="overlay" style={{ display: 'none' }}>
           <div className="panel teach-panel">
+            <details className="teach-progress" id="teach-progress-box">
+              <summary>📈 Progress on this device</summary>
+              <ul id="teach-progress" className="teach-progress-list" />
+              <p className="teach-note">All of this stays on this device. Nothing is sent anywhere.</p>
+            </details>
             <h2>Verses to memorize 📖</h2>
             <p className="tagline">Pick up to 8 verses. Kids learn them in the verse book and type them from memory to earn coins.</p>
             <h3 className="teach-h">Your verses <span id="teach-count" /></h3>

@@ -126,6 +126,26 @@ try {
   }
   await unfilm();
   check(jonahSeen, "Jonah 2:10");
+
+  // and the third is Daniel and the lions
+  await page.evaluate(([x, z]) => window.__gameDebug().warp(x, z, 1), [t[0], t[2]]);
+  await page.waitForTimeout(700);
+  await page.keyboard.press("KeyE");
+  await page.waitForTimeout(300);
+  check((await fun()).theatre.story === 2, "the third show is Daniel");
+  await page.evaluate(([x, z]) => window.__gameDebug().warp(x + 0.6, z + 1.8, 1), [t[0], t[2]]);
+  await film([t[0] - 1.6, 1.75, t[2]], [3.4, 0.6, 0.5]);
+  const dshots = [[2.6, "daniel-pray"], [7.6, "daniel-den"], [11, "daniel-angel"], [14.2, "daniel-safe"]];
+  const t2 = Date.now();
+  let dk = 0, danSeen = false;
+  while (Date.now() - t2 < 18000) {
+    const el = (Date.now() - t2) / 1000;
+    if (dk < dshots.length && el > dshots[dk][0]) { await page.screenshot({ path: shot(dshots[dk][1]) }); dk++; }
+    if (/Daniel 6:22/.test(await toast())) danSeen = true;
+    await page.waitForTimeout(150);
+  }
+  await unfilm();
+  check(danSeen, "Daniel 6:22");
   check(errors.length === 0, "no page errors", errors[0] ?? "");
 } finally {
   await browser.close();

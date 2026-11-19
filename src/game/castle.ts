@@ -164,8 +164,15 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     w.platforms.push({ kind: "box", x, z, r: 0, hw: a, hd: b, topY: base + top, spring: 0, baseX: x, baseZ: z, dx: 0, dz: 0, mesh: new THREE.Object3D(), squashT: 0 });
   };
 
-  const std = (color: number, rough = 0.9, extra: THREE.MeshStandardMaterialParameters = {}) =>
-    new THREE.MeshStandardMaterial({ color, roughness: rough, ...extra });
+  // one material per look, shared, so parts that look the same can be joined into one draw
+  // (nothing may change a std() material later; things that glow or fade make their own)
+  const mats = new Map<string, THREE.MeshStandardMaterial>();
+  const std = (color: number | THREE.Color, rough = 0.9, extra: THREE.MeshStandardMaterialParameters = {}) => {
+    const key = JSON.stringify([color instanceof THREE.Color ? color.getHex() : color, rough, extra], (_k, v) => (v && v.isTexture ? v.uuid : v && v.isColor ? v.getHex() : v));
+    let m = mats.get(key);
+    if (!m) { m = new THREE.MeshStandardMaterial({ color, roughness: rough, ...extra }); mats.set(key, m); }
+    return m;
+  };
   const stone = std(c.stone ?? 0xd9d2c3, 0.95, { map: stoneTexture() });
   const darkStone = std(new THREE.Color(c.stone ?? 0xd9d2c3).multiplyScalar(0.78).getHex(), 0.95, { map: stoneTexture() });
   const roofM = std(c.roof ?? 0x3f6fc4, 0.7, { flatShading: true });
@@ -732,10 +739,12 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
   const chimeZ = 4.95;
   const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.16), new THREE.MeshBasicMaterial({ color: 0xfff3a0 }));
   star.visible = false;
+  star.userData.keep = true;
   g.add(star);
   CHIME_COLS.forEach((col, i) => {
-    const mat = std(col, 0.5, { emissive: col, emissiveIntensity: 0.1 });
+    const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.5, emissive: col, emissiveIntensity: 0.1 });
     const m = mesh(new THREE.CylinderGeometry(0.42, 0.45, 0.1, 16), mat, -2.9 + i * 0.95, 0.05, chimeZ);
+    m.userData.keep = true;
     chimeStones.push({ m, mat, dip: 0, lit: false });
   });
   w.anim.push((t, dt) => {
@@ -774,6 +783,7 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
   const keys = keySpots.map(([x, y, z]) => {
     const k = mesh(keyGeo, keyM, x, y, z);
     k.scale.setScalar(1.3);
+    k.userData.keep = true;
     return k;
   });
   const chestAt = { x: 1.4, z: keepZ + 2.2 + 0.9 };
@@ -818,9 +828,9 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
 
   // ── peacocks strolling in the courtyard; come close and they fan their tails ──
   const peaM = std(0x1f7fb0, 0.5, { flatShading: true }), neckM = std(0x1747a6, 0.4, { flatShading: true, emissive: 0x081840 });
-  const eyeRing = std(0x2fb37a, 0.6, { side: THREE.DoubleSide }), eyeM = std(0x1747a6, 0.5), eyeGold = std(0xe8b830, 0.5);
-  const featherGeo = new THREE.PlaneGeometry(0.16, 1.0).translate(0, 0.5, 0);
-  const featherM = std(0x2f9e5a, 0.7, { side: THREE.DoubleSide });
+  // each feather is one painted card (blade and eye spot), so a whole tail is 15 draws, not 60
+  const featherGeo = new THREE.PlaneGeometry(0.22, 1.0).translate(0, 0.5, 0);
+  const featherM = new THREE.MeshStandardMaterial({ map: featherTexture(), roughness: 0.6, side: THREE.DoubleSide, alphaTest: 0.5 });
   const pea = [0, 1].map((i) => {
     const o = new THREE.Group();
     const home = new THREE.Vector3(-1.5 + i * 2.6, 0, 2.0 + i * 1.0);
@@ -858,16 +868,8 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     for (let k = 0; k < N; k++) {
       const f = new THREE.Group();
       const blade = new THREE.Mesh(featherGeo, featherM);
+      blade.position.z = k * 0.002; // a hair apart, so the overlapping cards don't flicker
       f.add(blade);
-      const ring = new THREE.Mesh(new THREE.CircleGeometry(0.1, 10), eyeRing);
-      ring.position.set(0, 0.88, 0.005);
-      f.add(ring);
-      const gl = new THREE.Mesh(new THREE.CircleGeometry(0.065, 10), eyeGold);
-      gl.position.set(0, 0.88, 0.01);
-      f.add(gl);
-      const eye = new THREE.Mesh(new THREE.CircleGeometry(0.04, 8), eyeM);
-      eye.position.set(0, 0.88, 0.015);
-      f.add(eye);
       f.userData.a = ((k / (N - 1)) - 0.5) * Math.PI * 0.95;
       tail.add(f);
       feathers.push(f);
@@ -926,6 +928,7 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     put(new THREE.BoxGeometry(BH * 2, BF, BH * 2), blue, 0, BF / 2, 0);
     const floor = put(new THREE.BoxGeometry(BH * 2 - 0.2, 0.12, BH * 2 - 0.2), yellow, 0, BF + 0.02, 0);
     floor.name = "floor";
+    floor.userData.keep = true;
     put(new THREE.CapsuleGeometry(0.2, BH * 2 - 0.2, 4, 10).rotateX(Math.PI / 2), pink, BH + 0.25, 0.22, 0);
     // three puffy walls: a fat tube along the bottom, a see-through net, a fat tube on top
     const WALLH = 2.75;
@@ -987,6 +990,7 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
   const ballM = std(0xff6bb5, 0.95, { flatShading: true });
   const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.32, 1), ballM);
   ball.castShadow = true;
+  ball.userData.keep = true;
   g.add(ball);
   const raft = new THREE.Group();
   g.add(raft);
@@ -1116,6 +1120,7 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     for (let i = 0; i < 5; i++) {
       const p = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 1), smokeM.clone());
       p.userData.ph = i / 5;
+      p.userData.keep = true;
       g.add(p);
       puffs.push(p);
     }
@@ -1304,6 +1309,7 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
       cgeo.computeVertexNormals();
       const cm = new THREE.Mesh(cgeo, drapeM);
       cm.position.set(s * 0.95, 1.73, 0.3);
+      cm.userData.keep = true;
       booth.add(cm);
       curtains.push(cm);
     }
@@ -1361,7 +1367,7 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     const frond = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.08, 6), std(0x3f9e3a, 0.8));
     frond.position.set(0.1, 0.48, 0);
     shore.add(frond);
-    shore.position.set(0.78, 1.22, 0.02);
+    shore.position.set(0.56, 1.24, 0.02);
     stage.add(shore);
     stage.add(jBoat);
     const sunM = new THREE.MeshBasicMaterial({ color: 0xffd93d });
@@ -1376,8 +1382,96 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     sun.position.set(-0.5, 1.3, -0.27);
     stage.add(sun);
   }
+  // Daniel and the lions: Daniel praying at his window, the den, two lions who fall asleep, an angel
+  const dan = new THREE.Group(), daniel = new THREE.Group(), den = new THREE.Group(), angel = new THREE.Group(), lions: THREE.Group[] = [];
+  {
+    const robe = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.2, 8), std(0x8e5be8, 0.8));
+    robe.position.y = 0.1;
+    daniel.add(robe);
+    const hd = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), std(0xc98f5e, 0.8));
+    hd.position.y = 0.24;
+    daniel.add(hd);
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.047, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), std(0x2b1d12, 0.9));
+    hair.position.y = 0.245;
+    daniel.add(hair);
+    dan.add(daniel);
+    // his window: a little arched frame on the painted sky
+    const frameM = std(0xd9a066, 0.9);
+    const win = new THREE.Group();
+    for (const sx of [-1, 1]) {
+      const side = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.34, 0.02), frameM);
+      side.position.set(sx * 0.15, 0, 0);
+      win.add(side);
+    }
+    const arch = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.015, 4, 12, Math.PI), frameM);
+    arch.position.y = 0.17;
+    win.add(arch);
+    const sill = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.03, 0.04), frameM);
+    sill.position.y = -0.17;
+    win.add(sill);
+    win.position.set(-0.45, 1.75, -0.25);
+    win.name = "window";
+    dan.add(win);
+    // the den: a dark rocky cave mouth
+    const rock = std(0x7a6a58, 1, { flatShading: true });
+    const cave = new THREE.Mesh(new THREE.SphereGeometry(0.6, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1.3, 0.85, 0.35), rock);
+    den.add(cave);
+    const hole = new THREE.Mesh(new THREE.CircleGeometry(0.32, 14, 0, Math.PI), new THREE.MeshBasicMaterial({ color: 0x2a1f18 }));
+    hole.position.set(0, 0, 0.22);
+    den.add(hole);
+    den.position.set(0.2, 1.24, -0.2);
+    dan.add(den);
+    // two friendly lions
+    const lionM = std(0xe0a040, 0.8, { flatShading: true }), maneM = std(0xa0522d, 0.9);
+    for (const sx of [-1, 1]) {
+      const l = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6).scale(1.5, 0.9, 0.8), lionM);
+      body.position.y = 0.09;
+      l.add(body);
+      const mane = new THREE.Mesh(new THREE.SphereGeometry(0.085, 8, 6), maneM);
+      mane.position.set(sx * -0.15, 0.16, 0);
+      l.add(mane);
+      const face = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), lionM);
+      face.position.set(sx * -0.19, 0.16, 0.03);
+      l.add(face);
+      const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.14, 4), lionM);
+      tail.position.set(sx * 0.17, 0.14, 0);
+      tail.rotation.z = sx * 0.8;
+      l.add(tail);
+      l.position.set(0.2 + sx * 0.42, 1.28, 0.02);
+      dan.add(l);
+      lions.push(l);
+    }
+    // the angel: a shining white robe, wings and a gold halo
+    const glowM = new THREE.MeshBasicMaterial({ color: 0xfffbe6 });
+    const ar = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.26, 10), glowM);
+    ar.position.y = 0.13;
+    angel.add(ar);
+    const ah = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), std(0xf2c79a, 0.8));
+    ah.position.y = 0.3;
+    angel.add(ah);
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.01, 4, 14), new THREE.MeshBasicMaterial({ color: 0xffd93d }));
+    halo.position.y = 0.38;
+    halo.rotation.x = Math.PI / 2;
+    angel.add(halo);
+    for (const sx of [-1, 1]) {
+      const wing = new THREE.Mesh(new THREE.CircleGeometry(0.1, 10).scale(0.7, 1.3, 1), glowM);
+      wing.position.set(sx * 0.09, 0.2, -0.02);
+      wing.rotation.z = sx * -0.4;
+      wing.name = "wing";
+      angel.add(wing);
+    }
+    angel.position.set(0.2, 1.5, 0.05);
+    dan.add(angel);
+    // a sandy floor for this story (the sea waves are hidden while it plays)
+    const floorD = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.12, 0.3), std(0xd9b77a, 1, { flatShading: true }));
+    floorD.position.set(0, 1.22, 0);
+    dan.add(floorD);
+    dan.visible = false;
+    stage.add(dan);
+  }
   const SHOW = 17;
-  let story = 0, plays = 0;                 // 0 = Noah's Ark, 1 = Jonah and the big fish
+  let story = 0, plays = 0;                 // 0 = Noah's Ark, 1 = Jonah and the big fish, 2 = Daniel and the lions
   const sceneAt = (s: number) => s < 1 ? 0 : s < 4.5 ? 1 : s < 9 ? 2 : s < 12 ? 3 : 4;
   const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
   w.anim.push((t, dt) => {
@@ -1388,7 +1482,9 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     // curtains open at the start and close at the end
     const open = s < 0 ? 0 : Math.min(1, s / 1, (SHOW - s) / 1.2);
     curtains.forEach((c, i) => { c.scale.x = 1 - open * 0.8; c.position.x = (i ? 1 : -1) * 0.95; });
-    const noah = s >= 0 && story === 0, jon = s >= 0 && story === 1;
+    const noah = s >= 0 && story === 0, jon = s >= 0 && story === 1, dani = s >= 0 && story === 2;
+    dan.visible = dani;
+    for (const wv of waves) wv.visible = !dani;
     ark.visible = noah;
     dove.visible = noah && s > 9 && s < 15.5;
     bow.visible = noah;
@@ -1421,6 +1517,40 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
       bow.scale.setScalar(Math.max(0.01, Math.min(1, (s - 12) / 1.5)));
       return;
     }
+    if (dani) {
+      // 1: praying at the window · 2: into the den, the lions pad in · 3: the angel, the lions sleep · 4: out, safe
+      const win = dan.getObjectByName("window")!;
+      win.visible = s < 4.8;
+      den.visible = s > 4.2;
+      den.scale.setScalar(Math.max(0.01, clamp01((s - 4.2) / 0.5)));
+      if (s < 4.6) {
+        daniel.position.set(-0.45, 1.27, 0.03);
+        daniel.rotation.z = 0;
+        daniel.scale.set(1, 0.8 + Math.sin(t * 3) * 0.03, 1); // kneeling, bowing gently
+      } else if (s < 12.4) {
+        const k = clamp01((s - 4.6) / 0.8);
+        daniel.position.set(-0.45 + k * 0.65, 1.27 - k * 0.04, 0.06);
+        daniel.scale.set(1, 1, 1);
+      } else {
+        // lifted out: a happy hop back to the left
+        const k = clamp01((s - 12.4) / 0.8);
+        daniel.position.set(0.2 - k * 0.6, 1.27 + Math.sin(k * Math.PI) * 0.3 + (k >= 1 ? Math.abs(Math.sin(t * 6)) * 0.04 : 0), 0.06);
+      }
+      lions.forEach((l, i) => {
+        const sx = i ? 1 : -1;
+        l.visible = s > 5.6;
+        const walk = clamp01((s - 5.6) / 1.2);
+        const asleep = clamp01((s - 9.6) / 0.8);
+        l.position.set(0.2 + sx * (0.9 - walk * 0.48), 1.28 - asleep * 0.04, 0.08);
+        l.rotation.z = sx * asleep * 0.25;
+        l.scale.set(1, 1 - asleep * 0.25 + (asleep < 1 ? Math.abs(Math.sin(t * 7)) * 0.05 : 0), 1);
+      });
+      angel.visible = s > 9 && s < 15.8;
+      const ak = clamp01((s - 9) / 0.8);
+      angel.position.set(0.2, 1.95 - ak * 0.45 + Math.sin(t * 2) * 0.02, 0.09);
+      angel.children.forEach((c) => { if (c.name === "wing") c.rotation.y = Math.sin(t * 6) * 0.4; });
+      return;
+    }
     // Jonah: the boat tossed by the storm; overboard; swallowed; praying inside; out onto the sand
     const bx = -1.6 + clamp01((s - 1) / 2.5) * 1.3 + clamp01((s - 5.5) / 3) * 2.0;
     jBoat.position.set(bx, 1.27 + Math.sin(t * 5) * 0.04, -0.06);
@@ -1443,20 +1573,20 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
         const k = clamp01((s - 12.3) / 0.7);
         jonah.visible = true;
         jonah.rotation.z = (1 - k) * 2.5;
-        jonah.position.set(0.25 + k * 0.5, 1.35 + Math.sin(k * Math.PI) * 0.35 + k * 0.05, 0.05);
+        jonah.position.set(0.12 + k * 0.42, 1.42 + Math.sin(k * Math.PI) * 0.35 + k * 0.03, 0.05);
       }
     }
     // the fish rises under Jonah, gulps, and floats; it swims over to the beach to let him out
     const rise = clamp01((s - 5.0) / 0.9);
     const toShore = clamp01((s - 11.2) / 1.0);
-    whale.position.set(-0.35 + toShore * 0.45, 0.95 + rise * 0.33 + Math.sin(t * 2) * 0.02, -0.02);
+    whale.position.set(-0.4 + toShore * 0.25, 1.0 + rise * 0.42 + Math.sin(t * 2) * 0.02, -0.02);
     whale.rotation.z = Math.sin(t * 1.5) * 0.06 + (s > 9 && s < 12 ? Math.sin(t * 3) * 0.04 : 0);
     sun.position.y = 1.3 + clamp01((s - 12) / 2) * 0.6;
     sun.rotation.z = t * 0.4;
   });
   const theatre = {
     pos: new THREE.Vector3(wx(PX, PZ + 1.6), base, wz(PX, PZ + 1.6)),
-    play: () => { if (showT >= 0) return false; story = plays % 2; plays++; showT = 0; return true; },
+    play: () => { if (showT >= 0) return false; story = plays % 3; plays++; showT = 0; return true; },
     scene: () => (showT < 0 ? -1 : sceneAt(showT)),
     story: () => story,
   };
@@ -1495,13 +1625,15 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
       head.position.y = 1;
       stem.add(head);
       const petalM = std(cols[i], 0.6, { side: THREE.DoubleSide, emissive: new THREE.Color(cols[i]).multiplyScalar(0.12) });
-      const petals: THREE.Mesh[] = [];
-      for (let k = 0; k < 7; k++) {
-        const pt = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 5).scale(0.55, 0.18, 1).translate(0, 0, 0.11), petalM);
-        pt.rotation.y = (k / 7) * Math.PI * 2;
-        head.add(pt);
-        petals.push(pt);
-      }
+      // seven petals in one piece (open); a closed bud sits on top until it's watered
+      const petalGeo = mergeGeometries(Array.from({ length: 7 }, (_, k) =>
+        new THREE.SphereGeometry(0.11, 8, 5).scale(0.55, 0.18, 1).translate(0, 0, 0.11).rotateY((k / 7) * Math.PI * 2)))!;
+      const open = new THREE.Mesh(petalGeo, petalM);
+      head.add(open);
+      const bud = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6).scale(0.8, 1.4, 0.8), std(cols[i], 0.6));
+      bud.position.y = 0.06;
+      head.add(bud);
+      const petals = [open, bud];
       const mid = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), std(0xffb02e, 0.6));
       mid.position.y = 0.02;
       head.add(mid);
@@ -1542,7 +1674,7 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
   const drops: THREE.Mesh[] = [];
   {
     const dm = new THREE.MeshBasicMaterial({ color: 0x9fd8ff });
-    for (let i = 0; i < 6; i++) { const d = new THREE.Mesh(new THREE.SphereGeometry(0.025, 4, 3), dm); d.visible = false; g.add(d); drops.push(d); }
+    for (let i = 0; i < 6; i++) { const d = new THREE.Mesh(new THREE.SphereGeometry(0.025, 4, 3), dm); d.visible = false; d.userData.keep = true; g.add(d); drops.push(d); }
   }
   w.anim.push((t, dt) => {
     let open = 0;
@@ -1552,8 +1684,10 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
       if (k >= 1) open++;
       b.stem.scale.set(1, 0.45 + k * 0.55, 1);
       b.stem.rotation.z = Math.sin(t * 1.5 + i) * 0.05;
-      // petals fold up into a bud, then spread wide, a little bigger, and the head nods
-      for (const pt of b.petals) pt.rotation.x = -1.3 * (1 - k);
+      // the bud shrinks away as the open flower grows out of it
+      const [petals, bud] = b.petals;
+      petals.scale.set(0.05 + k * 0.95, 0.3 + k * 0.7, 0.05 + k * 0.95);
+      bud.scale.setScalar(Math.max(0.01, 1 - k * 1.2));
       b.head.scale.setScalar(0.6 + k * 0.9);
     });
     // the watering can flies over, tips, and drips, then goes home
@@ -1755,6 +1889,7 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
   g.add(sc);
   const wave = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.18, 4.5), new THREE.MeshStandardMaterial({ color: 0x8fd3ff, transparent: true, opacity: 0.75, roughness: 0.2 }));
   wave.visible = false;
+  wave.userData.keep = true;
   g.add(wave);
   let scStage = 0, washT = -1;
   {
@@ -1805,6 +1940,20 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     build: () => { if (washT >= 0 || scStage >= 4) return -1; scStage++; return scStage; },
     wash: () => { if (washT < 0 && scStage > 0) washT = 0; },
   };
+
+  // everything built since the first pass: join the still parts again (the moving ones are kept)
+  mergeByMaterial(g);
+  for (const part of [bouncy, booth, cat, raft]) mergeByMaterial(part);
+  // shadows only from things big enough to see them: tiny parts, feathers and puppets skip the shadow pass
+  g.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || !m.castShadow) return;
+    if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
+    const r = m.geometry.boundingSphere!.radius * Math.max(m.scale.x, m.scale.y, m.scale.z);
+    if (r < 0.15) m.castShadow = false;
+  });
+  stage.traverse((o) => { o.castShadow = false; });
+  for (const p of pea) for (const f of p.feathers) f.traverse((o) => { o.castShadow = false; });
 
   const kz = -S + T / 2 + 2.2 + 1.6;
   const thx = -2.5 - 1.6, thz = kz + 2.2 + 1.2;
@@ -1864,6 +2013,40 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
   }
 }
 
+/** A peacock feather painted on a card: a green blade with a gold-and-blue eye near the tip. */
+let featherTex: THREE.CanvasTexture | null = null;
+function featherTexture(): THREE.CanvasTexture {
+  if (featherTex) return featherTex;
+  const c = document.createElement("canvas");
+  c.width = 64;
+  c.height = 256;
+  const x = c.getContext("2d")!;
+  // the blade: a long soft leaf shape with a darker stem
+  x.fillStyle = "#2f9e5a";
+  x.beginPath();
+  x.moveTo(32, 256);
+  x.bezierCurveTo(8, 190, 2, 60, 32, 4);
+  x.bezierCurveTo(62, 60, 56, 190, 32, 256);
+  x.fill();
+  x.strokeStyle = "#1f6e3c";
+  x.lineWidth = 3;
+  x.beginPath();
+  x.moveTo(32, 256);
+  x.lineTo(32, 40);
+  x.stroke();
+  // the eye: green ring, gold, deep blue
+  const ey = 256 * 0.12;
+  for (const [r, col] of [[28, "#2fb37a"], [18, "#e8b830"], [11, "#1747a6"]] as const) {
+    x.fillStyle = col;
+    x.beginPath();
+    x.ellipse(32, ey, r, r * 1.05, 0, 0, Math.PI * 2);
+    x.fill();
+  }
+  featherTex = new THREE.CanvasTexture(c);
+  featherTex.colorSpace = THREE.SRGBColorSpace;
+  return featherTex;
+}
+
 /**
  * A slide's chute: a half-pipe following the curve (the curve runs along its bottom), open at the top.
  */
@@ -1898,7 +2081,7 @@ function mergeByMaterial(g: THREE.Group): void {
   const byMat = new Map<THREE.Material, THREE.Mesh[]>();
   for (const o of g.children) {
     const m = o as THREE.Mesh;
-    if (!m.isMesh || m.userData.keep || Array.isArray(m.material)) continue;
+    if (!m.isMesh || m.userData.keep || !m.visible || Array.isArray(m.material)) continue;
     (byMat.get(m.material) ?? byMat.set(m.material, []).get(m.material)!).push(m);
   }
   for (const [mat, list] of byMat) {

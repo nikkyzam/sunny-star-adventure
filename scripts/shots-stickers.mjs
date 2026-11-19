@@ -44,6 +44,11 @@ try {
   const unfilm = () => page.evaluate(() => { window.__filmCam = undefined; });
   const toast = () => page.evaluate(() => document.body.innerText);
 
+  // ── the daily surprise: the first play today paid a gift and saved the day ──
+  const daily = await page.evaluate(() => JSON.parse(localStorage.getItem("game.daily") || "null"));
+  check(daily && daily.streak === 1, "a daily surprise the first time today", JSON.stringify(daily));
+  check(/Daily surprise! \+10 coins/.test(await toast()), "the gift message with a verse");
+
   // ── the sticker pill shows on Adventure Island (it has the castle) ──
   const pill = () => page.evaluate(() => { const e = document.getElementById("hud-castle"); return { shown: e.style.display !== "none", text: e.textContent }; });
   let p = await pill();
@@ -82,7 +87,11 @@ try {
   await page.click("#sticker-close");
   await page.waitForTimeout(200);
   check(await page.evaluate(() => document.getElementById("sticker-book").style.display === "none"), "the book closes");
-  // it's remembered on reload
+  // it's remembered on reload (and pretend the last visit was yesterday, two days running)
+  await page.evaluate(() => {
+    const d = new Date(); const y = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
+    localStorage.setItem("game.daily", JSON.stringify({ last: `${y.getFullYear()}-${y.getMonth() + 1}-${y.getDate()}`, streak: 2 }));
+  });
   await page.reload({ waitUntil: "load" });
   await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 90000 });
   await page.click("[data-action=play]");
@@ -90,6 +99,8 @@ try {
   await page.waitForTimeout(1000);
   p = await pill();
   check(p.text === "🏰 1/20", "the sticker is remembered", p.text);
+  await page.waitForTimeout(600);
+  check(/3 days in a row/.test(await toast()) && /\+18 coins/.test(await toast()), "a streak bonus the next day", (await toast()).slice(0, 0));
   // Read to me toggles (and is remembered)
   await page.click("#btn-read");
   await page.waitForTimeout(200);
@@ -97,6 +108,20 @@ try {
   check(/Read to me|reading voice/.test(await toast()), "it says so");
   await page.click("#btn-read");
   check(await page.evaluate(() => !document.getElementById("btn-read").classList.contains("on")), "and off again");
+  // ── the grown-ups' progress summary (behind the sum) ──
+  const gp = page;
+  await gp.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
+  await gp.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 90000 });
+  await gp.click("[data-action=teach]");
+  const q = await gp.evaluate(() => document.querySelector("#gate-question").textContent);
+  const [a, b] = q.split("×").map((n) => Number(n.trim()));
+  await gp.fill("#gate-answer", String(a * b));
+  await gp.click("[data-action=gate-ok]");
+  await gp.waitForTimeout(300);
+  await gp.evaluate(() => { document.getElementById("teach-progress-box").open = true; });
+  const prog = await gp.evaluate(() => document.getElementById("teach-progress").innerText);
+  check(/Sunny Castle stickers: 1 of 20/.test(prog) && /Days in a row: 3/.test(prog) && /Worlds visited/.test(prog), "a progress summary for grown-ups", prog.replace(/\n/g, " | ").slice(0, 160));
+  await gp.screenshot({ path: shot("progress") });
   check(errors.length === 0, "no page errors", errors[0] ?? "");
 } finally {
   await browser.close();
