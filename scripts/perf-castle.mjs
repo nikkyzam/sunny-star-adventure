@@ -48,7 +48,18 @@ const tally = await page.evaluate(() => {
     }
     out.push(["  castle loose meshes", loose, ""]);
   }
-  return out.sort((a, b) => b[1] - a[1]).slice(0, 40);
+  // the biggest groups anywhere: what are they made of?
+  const big = [];
+  S.traverse((o) => { if (o.isGroup && o.children.length > 4) { let n = 0; let shad = 0; o.children.forEach((c) => { if (c.isMesh) { n++; if (c.castShadow) shad++; } }); if (n > 12) big.push([`  direct meshes ${o.name || "group"} @${o.getWorldPosition(new o.position.constructor()).toArray().map((v) => +v.toFixed(0))}`, n, `shadow ${shad}`]); } });
+  big.sort((a, b) => b[1] - a[1]);
+  out.push(...big.slice(0, 15));
+  // materials: how many distinct, and meshes per material
+  let meshes = 0; const mats = new Set();
+  S.traverseVisible((o) => { if (o.isMesh) { meshes++; mats.add(o.material); } });
+  out.push(["  visible meshes / distinct materials", meshes, mats.size]);
+  return out.sort((a, b) => b[1] - a[1]).slice(0, 45);
 });
 for (const t of tally) console.log(t.join("  "));
+// PROBE: node scripts/perf-castle.mjs dist probe.js
+if (process.argv[3]) { await page.evaluate(() => { window.__filmCam = (cam, scene) => { window.__S = scene; }; }); await page.waitForTimeout(300); const { readFileSync } = await import("node:fs"); console.log(await page.evaluate(readFileSync(process.argv[3], "utf8"))); }
 await browser.close(); server.close();

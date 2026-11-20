@@ -407,7 +407,8 @@ const BONES = ["thigh_l", "calf_l", "foot_l", "thigh_r", "calf_r", "foot_r", "ne
 type BoneName = (typeof BONES)[number];
 
 /** On an animal's back: how fast it goes and where in its stride it is (0–1), for the rider's hands. */
-export interface Saddle { speed: number; phase: number }
+/** Riding pose: speed and stride phase; `bar` = hands on a handlebar (further forward, wider, higher). */
+export interface Saddle { speed: number; phase: number; bar?: boolean }
 
 export class Human {
   readonly root: THREE.Group;
@@ -819,10 +820,11 @@ export class Human {
     for (const [side, up, low, hand] of [[1, b.upperarm_l, b.lowerarm_l, b.hand_l], [-1, b.upperarm_r, b.lowerarm_r, b.hand_r]] as const) {
       if (!up || !low || !hand) continue;
       const lag = side > 0 ? 0 : 0.35; // the hands don't move quite together
+      const bar = s.bar ? 1 : 0;
       const t = V5.set(
-        hip.x + side * 0.2 * u,
-        hip.y + (0.4 + breathe + Math.cos(ph - lag) * 0.06 * a) * u,
-        hip.z + (0.4 + a * 0.06 + Math.sin(ph - lag) * 0.07 * a) * u,
+        hip.x + side * (0.2 + bar * 0.45) * u,
+        hip.y + (0.4 + bar * 0.35 + breathe + Math.cos(ph - lag) * 0.06 * a) * u,
+        hip.z + (0.4 + bar * 0.75 + a * 0.06 + Math.sin(ph - lag) * 0.07 * a) * u,
       ).applyMatrix4(this.root.matrixWorld);
       this.guard.mark(up);
       this.guard.mark(low);

@@ -18,7 +18,7 @@ const ALBUM_MAX = 8;
 const UNLOCK_MS = 10 * 60 * 1000; // after the maths question, saving stays open for 10 minutes
 
 /** Short verses that read well under a photo (picked at random for each postcard). */
-const SHORT: Verse[] = LIBRARY.filter((v) => v.text.length <= 110);
+const SHORT: Verse[] = LIBRARY.filter((v) => v.text.length <= 110 && v.ref !== "John 11:35"); // (not "Jesus wept" on a happy postcard)
 /** In Bethlehem the postcard carries a Christmas verse. */
 const CHRISTMAS: Verse[] = LIBRARY.filter((v) => ["Luke 2:10", "Luke 2:11", "Luke 2:14", "Matthew 2:2", "Matthew 1:21"].includes(v.ref) && v.text.length <= 130);
 
@@ -120,12 +120,27 @@ export class PhotoMode {
     this.flashEl.classList.add("go");
     const pool = place === "Bethlehem" && CHRISTMAS.length ? CHRISTMAS : SHORT;
     const verse = pool[Math.floor(Math.random() * pool.length)] ?? LIBRARY[0];
+    this.root.querySelector("h2")!.textContent = "Say cheese! 📸";
     const url = postcard(frame, place, verse).toDataURL("image/jpeg", 0.9);
     this.album.unshift(url);
     if (this.album.length > ALBUM_MAX) this.album.length = ALBUM_MAX;
     this.show(0);
     this.gateBox.style.display = "none";
     this.status.textContent = this.album.length > 1 ? "Tap a little picture to see your other photos." : "";
+    this.root.style.display = "";
+    this.open = true;
+    this.hooks.sfx("star");
+    this.hooks.opened();
+  }
+
+  /** Put a ready-made card (the Royal Explorer certificate) in the album and open it. */
+  showCard(card: HTMLCanvasElement, note: string): void {
+    this.root.querySelector("h2")!.textContent = "Well done! 🏆";
+    this.album.unshift(card.toDataURL("image/png"));
+    if (this.album.length > ALBUM_MAX) this.album.length = ALBUM_MAX;
+    this.show(0);
+    this.gateBox.style.display = "none";
+    this.status.textContent = note;
     this.root.style.display = "";
     this.open = true;
     this.hooks.sfx("star");

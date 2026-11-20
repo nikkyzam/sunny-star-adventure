@@ -64,6 +64,8 @@ export class Hud {
   private stickerPop = el("sticker-pop");
   private stickerTimer: number | null = null;
   private stickerList: { icon: string; name: string; got: boolean }[] = [];
+  /** Set by boot: show the Royal Explorer certificate. */
+  onCertificate: (() => void) | null = null;
   private reading = false;
   private carMode: string | null = null;
   private talkBtn = el("btn-talk");
@@ -284,8 +286,11 @@ export class Hud {
     el("dialog-name").textContent = name;
     el("dialog-text").textContent = text;
     this.dialog.classList.add("show");
+    if (this.reading) this.say(text);
     if (this.dialogTimer !== null) clearTimeout(this.dialogTimer);
-    this.dialogTimer = window.setTimeout(() => this.dialog.classList.remove("show"), ms);
+    // long lines (a scroll's verse) stay up long enough to read
+    const stay = Math.max(ms, Math.min(10000, 900 + text.length * 70));
+    this.dialogTimer = window.setTimeout(() => this.dialog.classList.remove("show"), stay);
   }
 
   /** Sticker buttons (built once from the preset list). */
@@ -455,6 +460,19 @@ export class Hud {
       d.title = x.name;
       return d;
     }));
+    // every sticker: a button for the certificate
+    if (got === this.stickerList.length && this.onCertificate) {
+      const b = document.createElement("button");
+      b.className = "big-btn primary sticker-cert";
+      b.textContent = "🏆 Show my certificate";
+      b.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        el("sticker-book").style.display = "none";
+        this.onCertificate?.();
+      });
+      grid.append(b);
+    }
     el("sticker-book").style.display = "";
   }
 

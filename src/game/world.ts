@@ -32,7 +32,8 @@ import type { JobId } from "./jobs";
 import type { TrafficLoop } from "./traffic";
 import type { HerdDef } from "./critters";
 import { buildBethlehem, type BethlehemDef } from "./bethlehem";
-import { buildCastle, type CastleDef, type CastleInfo } from "./castle";
+import { buildCastle, mergeByMaterial, type CastleDef, type CastleInfo } from "./castle";
+import { currentSeason } from "./seasons";
 import { Dragon } from "./dragon";
 import { KnightRings } from "./tilt";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -190,6 +191,10 @@ export interface LevelDef {
   station?: [number, number];
   /** More cars to drive, parked here: x, y, z, heading. */
   extraCars?: [number, number, number, number][];
+  /** Kick scooters to ride: x, z, heading (they sit on the ground there). */
+  scooters?: [number, number, number][];
+  /** Sightseeing photo spots: the sight's name, where to stand (x, z) and the point to frame behind the kid. */
+  photoSpots?: { name: string; at: [number, number]; look: [number, number, number] }[];
   /** A playground (slide, swings, roundabout, seesaw, sandbox): x, z of its middle. */
   playground?: [number, number];
   /** Beach umbrellas, each with a sun lounger: x, y, z, color. */
@@ -733,6 +738,83 @@ LEVELS.push(
   },
 );
 
+/**
+ * Ground patterns drawn in code: soft blotches and specks of lighter and darker tone, plus little
+ * grass blades or sand grains. Values sit around white, so the material colour still sets the hue.
+ */
+const groundTex = new Map<string, THREE.CanvasTexture>();
+function groundTexture(kind: "grass" | "sand" | "dirt" | "plain"): THREE.CanvasTexture {
+  const hit = groundTex.get(kind);
+  if (hit) return hit;
+  const N = 256;
+  const c = document.createElement("canvas");
+  c.width = c.height = N;
+  const g = c.getContext("2d")!;
+  let seed = kind.length * 977 + 13;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  g.fillStyle = kind === "plain" ? "#f4f4f4" : "#e6e6e6";
+  g.fillRect(0, 0, N, N);
+  // wrap-around drawing so the tile repeats without seams
+  const dot = (x: number, y: number, r: number, col: string) => {
+    g.fillStyle = col;
+    for (const ox of [-N, 0, N]) for (const oy of [-N, 0, N]) {
+      g.beginPath();
+      g.arc(x + ox, y + oy, r, 0, Math.PI * 2);
+      g.fill();
+    }
+  };
+  const blobs = kind === "plain" ? 30 : 90;
+  for (let i = 0; i < blobs; i++) {
+    const v = 0.78 + rnd() * 0.32;
+    const k = Math.round(Math.min(1, v) * 255);
+    dot(rnd() * N, rnd() * N, 8 + rnd() * 26, `rgba(${k},${k},${k},0.35)`);
+  }
+  if (kind === "grass") {
+    // short blades, light and dark
+    g.lineWidth = 1.4;
+    for (let i = 0; i < 2200; i++) {
+      const x = rnd() * N, y = rnd() * N, h = 3 + rnd() * 6, lean = (rnd() - 0.5) * 3;
+      const k = Math.round((0.62 + rnd() * 0.5) * 255);
+      g.strokeStyle = `rgba(${Math.min(255, k)},${Math.min(255, k + 12)},${Math.min(255, k - 8)},0.55)`;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + lean, y - h);
+      g.stroke();
+    }
+  } else if (kind === "sand" || kind === "dirt") {
+    for (let i = 0; i < (kind === "sand" ? 5000 : 2600); i++) {
+      const k = Math.round((0.6 + rnd() * 0.55) * 255);
+      g.fillStyle = `rgba(${Math.min(255, k)},${Math.min(255, k)},${Math.min(255, k)},0.5)`;
+      const sz = kind === "sand" ? 1 + rnd() * 1.2 : 1 + rnd() * 2.5;
+      g.fillRect(rnd() * N, rnd() * N, sz, sz);
+    }
+    if (kind === "dirt") for (let i = 0; i < 40; i++) dot(rnd() * N, rnd() * N, 2 + rnd() * 4, "rgba(120,120,120,0.5)"); // pebbles
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  groundTex.set(kind, t);
+  return t;
+}
+
+/** The texture darkens a little on average, so grass gets a touch brighter and a bit less neon. */
+function grassTone(hex: number): THREE.Color {
+  const c = new THREE.Color(hex);
+  const hsl = { h: 0, s: 0, l: 0 };
+  c.getHSL(hsl);
+  return c.setHSL(hsl.h, Math.min(1, hsl.s * 0.82), Math.min(1, hsl.l * 1.08));
+}
+
+/** Guard Gus tells kids what the castle is dressed up for this time of year. */
+function seasonGusLines(): string[] {
+  const s = currentSeason();
+  if (s === "harvest") return ["It's harvest time! Come to the thanksgiving table by the gate and say thank you to God."];
+  if (s === "christmas") return ["Merry Christmas! There's a tree in the courtyard waiting for someone to light it."];
+  if (s === "easter") return ["Happy Easter! Five painted eggs are hidden round the castle. Can you find them all?"];
+  return [];
+}
+
 /** `n` points on a circle (for coin trails around the big island's beach). */
 function ring(n: number, r: number, cx: number, cz: number, y: number, phase = 0): [number, number, number][] {
   return Array.from({ length: n }, (_, i) => {
@@ -777,6 +859,17 @@ const ADVENTURE_ISLAND: LevelDef = {
   playground: [8, -1],
   station: [-2.8, 16.4],
   extraCars: [[38, 0, -62, 0]],
+  // kick scooters: by the spawn, by the castle gate, at Coconut Cove and in the village
+  scooters: [[3, 13, Math.PI / 2], [-15, 33, 0], [46, -57.5, 0], [12, -15, Math.PI]],
+  // sightseeing: stand on the footprints and take a photo with the sight behind you
+  photoSpots: [
+    { name: "Sunny Castle", at: [-9.5, 24], look: [-27, 5.5, 22] },
+    { name: "the Village Church", at: [12, -29.5], look: [12, 3.2, -37.5] },
+    { name: "the view from Lookout Hill", at: [-12, -29.6], look: [12, 2, -14] },
+    { name: "the Lighthouse", at: [6, -73.6], look: [6, 6, -78] },
+    { name: "Sunset Island's pink tower", at: [59.5, 19.5], look: [64, 3.5, 16] },
+    { name: "the Rocket on Pine Island", at: [-70, -34.5], look: [-70, 3.2, -40.5] },
+  ],
   heliSpawn: [13, 0, 10, Math.PI],
   jetSpawn: [-31, 0, -12, Math.PI],
   rocket: [-70, 0, -40.5],
@@ -991,6 +1084,7 @@ const ADVENTURE_ISLAND: LevelDef = {
         "Have a go on the rope swing by the slide. Up, up, up into the sky!",
         "Down on the beach there's a fishing jetty. There are five kinds of fish to catch, and we always let them go!",
         "Build a sandcastle on the beach! But watch out for the waves…",
+        ...seasonGusLines(),
       ],
     },
     {
@@ -1972,6 +2066,8 @@ export class World {
   dragon: Dragon | null = null;
   /** Castle bells a kid can ring. */
   bells: { pos: THREE.Vector3; ring: () => void }[] = [];
+  /** Sightseeing photo spots on this level. */
+  photoSpots: { name: string; at: THREE.Vector3; look: THREE.Vector3 }[] = [];
   /** Castle thrones a kid can sit on. */
   thrones: { seat: THREE.Vector3; facing: number }[] = [];
   /** Castle helter-skelters: where to get on, and the path down. */
@@ -2002,12 +2098,17 @@ export class World {
   fishings: CastleInfo["fishing"][] = [];
   /** Castle beach sandcastles. */
   sandcastles: CastleInfo["sandcastle"][] = [];
+  /** Castle seasonal dressing (harvest, Christmas, Easter). */
+  seasonals: CastleInfo["seasonal"][] = [];
   /** The knight's ring course, if this level has one. */
   tilt: KnightRings | null = null;
   /** How fast the Ferris wheel turns (1 = its normal slow turn; boot speeds it up to bring a rider down). */
   ferrisSpin = 1;
   private oceanY = -7;
   private waveAmp = 0.1;
+  /** Surf along the beaches (one mesh for every island), and a frame counter for the water's normals. */
+  private surf: THREE.Mesh | null = null;
+  private waterTick = 0;
   private time = 0;
 
   /** Height of the sea's surface above its resting level at world (x, z) — the boat rides this. */
@@ -2089,6 +2190,40 @@ export class World {
    * furnished room. The outside is one group (`shell`) so it can be hidden while a kid is inside;
    * the room's own walls face inward only, so the ones between the camera and the kid vanish.
    */
+  /** A sightseeing spot: painted footprints to stand on and a little camera sign facing the kid. */
+  private buildPhotoSpot(ps: { name: string; at: [number, number]; look: [number, number, number] }): void {
+    const [x, z] = ps.at;
+    const y = this.groundAt(x, z, 8)?.y ?? 0;
+    const g = new THREE.Group();
+    g.position.set(x, y, z);
+    // face away from the sight (the way the kid stands for the photo)
+    g.rotation.y = Math.atan2(x - ps.look[0], z - ps.look[2]);
+    const paint = new THREE.MeshBasicMaterial({ color: 0xffd93d, transparent: true, opacity: 0.9, depthWrite: false });
+    const foot = new THREE.CircleGeometry(0.09, 12).scale(1, 1.9, 1).rotateX(-Math.PI / 2);
+    for (const sx of [-1, 1]) {
+      const f = new THREE.Mesh(foot, paint);
+      f.position.set(sx * 0.13, 0.03, 0);
+      f.userData.hideInPhoto = true;
+      g.add(f);
+    }
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.62, 32).rotateX(-Math.PI / 2), paint);
+    ring.position.y = 0.025;
+    ring.userData.hideInPhoto = true;
+    g.add(ring);
+    // a post with a camera sign, off to one side so it's not in the picture
+    const wood = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.9 });
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.3, 8), wood);
+    post.position.set(1.1, 0.65, 0.5);
+    post.castShadow = true;
+    post.userData.hideInPhoto = true;
+    g.add(post);
+    const sign = makeTextSprite("📸 Photo spot", { bg: "rgba(255,217,61,0.95)", fg: "#6b4300", size: 40, height: 0.42 });
+    sign.position.set(1.1, 1.45, 0.5);
+    g.add(sign);
+    this.group.add(g);
+    this.photoSpots.push({ name: ps.name, at: new THREE.Vector3(x, y, z), look: new THREE.Vector3(...ps.look) });
+  }
+
   private buildHouse(b: BuildingDef, index: number, trimMat: THREE.Material, doorMat: THREE.Material, winMat: THREE.Material): void {
     const floorY = this.groundAt(b.x, b.z, 2)?.y ?? 0;
     const hw = b.w / 2, hd = b.d / 2;
@@ -2097,7 +2232,9 @@ export class World {
     const g = new THREE.Group();
     const shell = new THREE.Group();
     const room = new THREE.Group();
-    const flat = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85 });
+    // one material per colour in this house, so its still parts can be joined into a few draws
+    const flats = new Map<number, THREE.MeshStandardMaterial>();
+    const flat = (color: number) => flats.get(color) ?? flats.set(color, new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85 })).get(color)!;
     const box = (parent: THREE.Object3D, mat: THREE.Material, w: number, h: number, d: number, x: number, y: number, z: number, shadow = true) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
       m.position.set(x, y, z);
@@ -2273,6 +2410,9 @@ export class World {
       this.solids.push(blocked);
       this.locks.set(b.lock, { gate, sign, solid: blocked });
     }
+    // join the still parts (the shell hides as a whole when a kid walks in; the for-sale boards are their own group)
+    mergeByMaterial(shell);
+    mergeByMaterial(room);
     this.houses.push({
       shell,
       minX: b.x - hw + WALL - 0.05, maxX: b.x + hw - WALL + 0.05,
@@ -2338,6 +2478,7 @@ export class World {
     this.swings = [];
     this.fishings = [];
     this.sandcastles = [];
+    this.seasonals = [];
     this.tilt = null;
     for (const l of this.locks.values()) disposeSprite(l.sign);
     this.locks.clear();
@@ -2353,6 +2494,10 @@ export class World {
 
     const grassMat = new THREE.MeshStandardMaterial({ color: def.grass, flatShading: true, roughness: 0.9 });
     const dirtMat = new THREE.MeshStandardMaterial({ color: def.dirt, flatShading: true, roughness: 1 });
+    const dirtMap = groundTexture("dirt").clone();
+    dirtMap.needsUpdate = true;
+    dirtMap.repeat.set(10, 2);
+    const dirtSideMat = new THREE.MeshStandardMaterial({ color: def.dirt, map: dirtMap, roughness: 1 });
     const woodMat = new THREE.MeshStandardMaterial({ color: 0xc98a5b, flatShading: true, roughness: 0.9 });
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, flatShading: true, roughness: 1 });
     const foliageMat = new THREE.MeshStandardMaterial({ color: def.foliage, flatShading: true, roughness: 0.85 });
@@ -2361,9 +2506,16 @@ export class World {
     // ── Islands ────────────────────────────────────────────────────────────
     for (const d of def.discs) {
       const island = new THREE.Group();
-      const topGeo = new THREE.CylinderGeometry(d.r, d.r * 0.96, 0.4, 28);
-      const top = new THREE.Mesh(topGeo, d.color === undefined ? grassMat
-        : new THREE.MeshStandardMaterial({ color: d.color, flatShading: true, roughness: 0.95 }));
+      const topGeo = new THREE.CylinderGeometry(d.r, d.r * 0.96, 0.4, 48);
+      // real-looking ground: a grass or sand pattern repeating about every 3.5 m (it only varies the
+      // brightness, so each world keeps its own colours)
+      const sandy = d.color === SAND;
+      const groundMap = groundTexture(d.color === undefined ? "grass" : sandy ? "sand" : "plain").clone();
+      groundMap.needsUpdate = true;
+      groundMap.repeat.set((d.r * 2) / 3.5, (d.r * 2) / 3.5);
+      const top = new THREE.Mesh(topGeo, d.color === undefined
+        ? new THREE.MeshStandardMaterial({ color: grassTone(def.grass), map: groundMap, roughness: 0.95 })
+        : new THREE.MeshStandardMaterial({ color: d.color, map: groundMap, roughness: 0.95 }));
       top.position.y = -0.2;
       top.receiveShadow = true;
       top.castShadow = true;
@@ -2371,7 +2523,7 @@ export class World {
 
       const depth = 2.4 + d.r * 0.35;
       const botGeo = new THREE.CylinderGeometry(d.r * 0.95, d.r * 0.25, depth, 28);
-      const bot = new THREE.Mesh(botGeo, dirtMat);
+      const bot = new THREE.Mesh(botGeo, dirtSideMat);
       bot.position.y = -0.4 - depth / 2;
       bot.castShadow = true;
       island.add(bot);
@@ -2491,6 +2643,7 @@ export class World {
       this.swings.push(info.swing);
       this.fishings.push(info.fishing);
       this.sandcastles.push(info.sandcastle);
+      this.seasonals.push(info.seasonal);
       if (c.dragon && !this.dragon) {
         const d = new Dragon(info.perch, info.facing, info.centre, c.dragon.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
         this.group.add(d.group);
@@ -2617,20 +2770,36 @@ export class World {
     }
 
     // ── Clouds ──
-    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 1 });
-    const cloudCount = def.space ? 0 : def.buildings ? 10 : 6;
+    // fair-weather clouds: soft, smooth, flat underneath and piled up on top; one piece each
+    const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0xe4e8f0, emissiveIntensity: 0.62 });
+    const cloudCount = def.space ? 0 : def.buildings ? 10 : 8;
     // clouds float above the tallest skyscraper
-    const cloudY = Math.max(14, ...(def.buildings ?? []).map((b) => b.h + 8));
+    const cloudY = Math.max(16, ...(def.buildings ?? []).map((b) => b.h + 8));
     for (let i = 0; i < cloudCount; i++) {
       const cloud = new THREE.Group();
-      const puffs = 3 + Math.floor(rng() * 3);
+      const puffs = 6 + Math.floor(rng() * 5);
+      const span = 2.2 + rng() * 1.6;
+      const parts: THREE.BufferGeometry[] = [];
       for (let j = 0; j < puffs; j++) {
-        const s = 0.9 + rng() * 1.2;
-        const puff = new THREE.Mesh(new THREE.SphereGeometry(s, 10, 8), cloudMat);
-        puff.position.set(j * 1.2 - puffs * 0.6, rng() * 0.5, rng() * 0.8 - 0.4);
-        cloud.add(puff);
+        const k = j / (puffs - 1) - 0.5;                              // -0.5 … 0.5 along the cloud
+        const s = (1.6 + rng() * 1.4) * (1 - Math.abs(k) * 0.9);     // biggest in the middle
+        const g = new THREE.SphereGeometry(s, 16, 12);
+        g.translate(k * span * puffs * 0.55, s * 0.35 + rng() * 0.6, (rng() - 0.5) * 2.2);
+        parts.push(g);
       }
-      cloud.position.set((rng() - 0.5) * 110, cloudY + rng() * 10, -rng() * 70 + 16);
+      const merged = mergeGeometries(parts);
+      for (const pg of parts) pg.dispose();
+      if (merged) {
+        // a flat base, like real clouds sitting on a layer of air
+        const pos = merged.getAttribute("position");
+        for (let v = 0; v < pos.count; v++) if (pos.getY(v) < 0) pos.setY(v, pos.getY(v) * 0.25);
+        merged.computeVertexNormals();
+        const m = new THREE.Mesh(merged, cloudMat);
+        cloud.add(m);
+      }
+      // high in the sky, above Sparky's route and the sky rings
+      cloud.position.set((rng() - 0.5) * 190, cloudY + 22 + rng() * 14, -rng() * 130 + 35);
+      cloud.scale.setScalar(1.6);
       this.group.add(cloud);
       this.clouds.push(cloud);
     }
@@ -2667,14 +2836,32 @@ export class World {
       this.ocean = new THREE.Mesh(
         geo,
         new THREE.MeshStandardMaterial({
-          // smooth enough to mirror the sky: each little wave facet catches the light
-          vertexColors: true, emissive: 0x04263f, roughness: 0.18, metalness: 0.25, flatShading: true,
+          // smooth, glossy water: the swells catch the sky like the real sea
+          vertexColors: true, emissive: 0x04263f, roughness: 0.1, metalness: 0.3,
           transparent: true, opacity: 0.93,
         }),
       );
       this.ocean.position.set(0, this.oceanY, -25);
       this.ocean.receiveShadow = true;
       this.group.add(this.ocean);
+    }
+    // white surf where the sea meets each sandy beach
+    this.surf = null;
+    if (def.sea !== undefined) {
+      const rings: THREE.BufferGeometry[] = [];
+      for (const d of def.discs) {
+        if (d.color !== SAND || d.y > 0.35 || d.r < 2.5) continue;
+        const r = new THREE.RingGeometry(d.r * 0.985, d.r + 0.9, 64, 1).rotateX(-Math.PI / 2);
+        r.translate(d.x, def.sea + 0.06, d.z);
+        rings.push(r);
+      }
+      const merged = rings.length ? mergeGeometries(rings) : null;
+      for (const r of rings) r.dispose();
+      if (merged) {
+        this.surf = new THREE.Mesh(merged, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false }));
+        this.surf.renderOrder = 1;
+        this.group.add(this.surf);
+      }
     }
     if (def.sea !== undefined) {
       // the sandy seabed: an invisible floor so kids wade instead of falling out of the world
@@ -2752,6 +2939,8 @@ export class World {
     if (def.playground) this.buildPlayground(def.playground[0], def.playground[1]);
     this.stationPos = null;
     if (def.station) this.buildStation(def.station[0], def.station[1]);
+    this.photoSpots = [];
+    for (const ps of def.photoSpots ?? []) this.buildPhotoSpot(ps);
 
     // ── Rainbow (big, far, decorative) ──
     if (def.rainbow) {
@@ -3430,6 +3619,13 @@ export class World {
       }
       attr.needsUpdate = true;
       col.needsUpdate = true;
+      // smooth shading needs fresh normals as the swells roll (every other frame is plenty)
+      if ((this.waterTick++ & 1) === 0) this.ocean.geometry.computeVertexNormals();
+    }
+    if (this.surf) {
+      // the surf breathes in and out as the waves lap the sand
+      (this.surf.material as THREE.MeshBasicMaterial).opacity = 0.32 + 0.22 * Math.sin(t * 1.3);
+      this.surf.position.y = Math.sin(t * 1.3 + 1) * 0.04;
     }
     if (this.snow) {
       const attr = this.snow.geometry.getAttribute("position") as THREE.BufferAttribute;

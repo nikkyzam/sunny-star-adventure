@@ -39,6 +39,9 @@ function makeVillager(def: NpcDef): { p: Player; tag: THREE.Sprite } {
   // job givers wear a briefcase on their name tag
   const tag = makeTextSprite(def.job ? `💼 ${def.name}` : def.name, { bg: def.job ? "rgba(41,98,255,0.92)" : "rgba(255,169,77,0.92)", fg: "#ffffff", size: 44, height: 0.4 });
   tag.position.y = 2.3;
+  // hidden behind walls and trees like everything else (not drawn through them)
+  (tag.material as THREE.SpriteMaterial).depthTest = true;
+  tag.scale.multiplyScalar(0.8);
   p.group.add(tag);
   return { p, tag };
 }
@@ -135,6 +138,10 @@ export class Npcs {
       n.p.near = d2 < 45 * 45; // far-away villagers animate less often
       n.p.group.visible = d2 < 70 * 70; // and very far ones (a speck on screen) aren't drawn at all
       if (!n.p.group.visible) continue;
+      // the name shows when you're close enough to say hello (fading in from 11 m to 8 m), like a real meeting
+      const show = Math.min(1, Math.max(0, (11 - Math.sqrt(d2)) / 3));
+      n.tag.visible = show > 0.02;
+      (n.tag.material as THREE.SpriteMaterial).opacity = show;
       if (dx * dx + dz * dz < 64) {
         let d = Math.atan2(dx, dz) - n.p.facing;
         while (d > Math.PI) d -= Math.PI * 2;

@@ -146,6 +146,26 @@ try {
   }
   await unfilm();
   check(danSeen, "Daniel 6:22");
+
+  // and the fourth is David the shepherd boy
+  await page.evaluate(([x, z]) => window.__gameDebug().warp(x, z, 1), [t[0], t[2]]);
+  await page.waitForTimeout(700);
+  await page.keyboard.press("KeyE");
+  await page.waitForTimeout(300);
+  check((await fun()).theatre.story === 3, "the fourth show is David");
+  await page.evaluate(([x, z]) => window.__gameDebug().warp(x + 0.6, z + 1.8, 1), [t[0], t[2]]);
+  await film([t[0] - 1.6, 1.75, t[2]], [3.4, 0.6, 0.5]);
+  const vshots = [[3.4, "david-sheep"], [6.5, "david-harp"], [10.6, "david-lamb"], [14.2, "david-crown"]];
+  const t3 = Date.now();
+  let vk = 0, davSeen = false;
+  while (Date.now() - t3 < 18000) {
+    const el = (Date.now() - t3) / 1000;
+    if (vk < vshots.length && el > vshots[vk][0]) { await page.screenshot({ path: shot(vshots[vk][1]) }); vk++; }
+    if (/Psalm 23:1/.test(await toast())) davSeen = true;
+    await page.waitForTimeout(150);
+  }
+  await unfilm();
+  check(davSeen, "Psalm 23:1");
   check(errors.length === 0, "no page errors", errors[0] ?? "");
 } finally {
   await browser.close();

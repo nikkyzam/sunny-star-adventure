@@ -197,7 +197,7 @@ export class Player {
   /** Set by the car: while riding, the controller physics is skipped and boot places the kid. */
   riding = false;
   /** On an animal's back (set by the herd): its speed and stride, so the hands hold the reins. */
-  saddle: { speed: number; phase: number } | null = null;
+  saddle: { speed: number; phase: number; bar?: boolean } | null = null;
   /** Seconds of balloon float left (0 = not floating). */
   floatT = 0;
   /** Seconds of dance left. */
@@ -239,6 +239,8 @@ export class Player {
   private hatIndex = 0;
   /** Sitting down (on a throne): the riding flag keeps physics off, this picks the sitting pose. */
   seated = false;
+  /** Riding standing up (a scooter): keep the standing pose instead of sitting. */
+  standRide = false;
   private groundPlat: Platform | null = null;
   private coyote = 0;
   private jumpBuffer = 0;
@@ -698,7 +700,7 @@ export class Player {
       this.danceT = Math.max(0, this.danceT - dt);
       move = "dance";
     } else if (this.riding) {
-      move = this.seated ? "sit" : "drive";
+      move = this.seated ? "sit" : this.standRide ? "idle" : "drive";
     } else if (!this.onGround) {
       move = this.glideActive || this.floatT > 0 ? "float" : this.vel.y > 2 && h.move !== "fall" ? "jump" : "fall";
     } else {
@@ -757,7 +759,7 @@ export class Player {
       return;
     }
 
-    if (this.riding) {
+    if (this.riding && !this.standRide) {
       // sitting pose in the car
       this.legL.rotation.x = -1.4;
       this.legR.rotation.x = -1.4;

@@ -42,7 +42,11 @@ const BOAT_STEER = 1.7;
 
 const SKY_LIMIT = 48;      // how high aircraft can climb
 
-export type RideKind = "car" | "boat" | "heli" | "jet";
+export type RideKind = "car" | "boat" | "heli" | "jet" | "scooter";
+
+/** Kick scooters: nippy but gentle, one rider standing on the deck. */
+const SCOOTER_MAX = 8;
+const SCOOTER_REVERSE = 2.5;
 
 /** Per-aircraft handling. */
 const FLIGHT = {
@@ -91,6 +95,11 @@ export class Car {
       this.seatZ = 0.5;
       this.seatY = 0.55;
       this.buildJet();
+    } else if (kind === "scooter") {
+      this.seatZ = -0.22;
+      this.seatY = 0.21;
+      this.buildScooter();
+      this.group.scale.setScalar(1.25); // sized for the kids' height: the T-bar comes up to their hands
     } else {
       this.seatZ = 0.35;
       this.seatY = 0.62;
@@ -336,6 +345,41 @@ export class Car {
     add(new THREE.CylinderGeometry(0.16, 0.16, 0.12, 10), dark, 0, 0.16, 1.6).rotation.z = Math.PI / 2;
   }
 
+  /** A kick scooter: a deck with grip tape, two little wheels, the stem and a T-bar with grips. */
+  private buildScooter(): void {
+    const paint = new THREE.MeshStandardMaterial({ color: this.paintColor, roughness: 0.35, metalness: 0.3 });
+    const metal = new THREE.MeshStandardMaterial({ color: 0xc9ced6, roughness: 0.25, metalness: 0.8 });
+    const grip = new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 0.95 });
+    const tyre = new THREE.MeshStandardMaterial({ color: 0x1c1c22, roughness: 0.8 });
+    const hub = new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 0.4 });
+    const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = this.group) => {
+      const mesh = new THREE.Mesh(geo, m);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      parent.add(mesh);
+      return mesh;
+    };
+    add(new THREE.BoxGeometry(0.2, 0.05, 0.75), paint, 0, 0.13, -0.05);          // deck
+    add(new THREE.BoxGeometry(0.17, 0.008, 0.62), grip, 0, 0.158, -0.08);       // grip tape
+    add(new THREE.BoxGeometry(0.16, 0.03, 0.18), metal, 0, 0.16, -0.48).rotation.x = 0.35; // rear brake guard
+    for (const z of [0.36, -0.44]) {
+      const w = add(new THREE.CylinderGeometry(0.1, 0.1, 0.045, 18), tyre, 0, 0.1, z);
+      w.rotation.z = Math.PI / 2;
+      const h = add(new THREE.CylinderGeometry(0.05, 0.05, 0.05, 12), hub, 0, 0, 0, w);
+      h.rotation.z = 0;
+      this.wheels.push(w);
+    }
+    // the front fork and stem, leaning back a little, with the T-bar on top
+    const stem = new THREE.Group();
+    stem.position.set(0, 0.12, 0.36);
+    stem.rotation.x = -0.12;
+    this.group.add(stem);
+    add(new THREE.CylinderGeometry(0.022, 0.026, 0.86, 10), metal, 0, 0.47, 0, stem);
+    add(new THREE.CylinderGeometry(0.035, 0.035, 0.12, 10), paint, 0, 0.1, 0, stem);
+    add(new THREE.CylinderGeometry(0.018, 0.018, 0.5, 10), metal, 0, 0.9, 0, stem).rotation.z = Math.PI / 2;
+    for (const sx of [-1, 1]) add(new THREE.CylinderGeometry(0.026, 0.026, 0.12, 10), grip, sx * 0.21, 0.9, 0, stem).rotation.z = Math.PI / 2;
+  }
+
   get flies(): boolean {
     return this.kind === "heli" || this.kind === "jet";
   }
@@ -397,7 +441,7 @@ export class Car {
 
   /** Hop / ramp launch. Only the car, and only from the ground. Returns whether it took off. */
   jump(v: number): boolean {
-    if (this.kind !== "car" || this.vy !== 0) return false;
+    if ((this.kind !== "car" && this.kind !== "scooter") || this.vy !== 0) return false;
     this.vy = v;
     this.pos.y += 0.06; // lift off the ground so the fall branch takes over
     return true;
@@ -412,9 +456,10 @@ export class Car {
     if (!this.driver) {
       this.driver = p;
       p.riding = true;
+      p.standRide = this.kind === "scooter";
       return "driver";
     }
-    if (!this.passenger) {
+    if (!this.passenger && this.kind !== "scooter") {
       this.passenger = p;
       p.riding = true;
       return "passenger";
@@ -428,6 +473,8 @@ export class Car {
     else if (this.passenger === p) this.passenger = null;
     else return;
     p.riding = false;
+    if (p.standRide) p.saddle = null;
+    p.standRide = false;
     const side = Math.sign(Math.random() - 0.5) || 1;
     p.pos.set(
       this.pos.x + Math.cos(this.heading) * 1.6 * side,
@@ -456,10 +503,11 @@ export class Car {
     }
     // speed toward target
     if (this.boostT > 0) this.boostT -= dt;
-    const max = this.boostT > 0 ? BOOST_SPEED : MAX_SPEED;
+    const scoot = this.kind === "scooter";
+    const max = this.boostT > 0 ? BOOST_SPEED : scoot ? SCOOTER_MAX : MAX_SPEED;
     if (axZ > 0.1) {
-      if (this.speed < max) this.speed = Math.min(max, this.speed + ACCEL * axZ * dt);
-    } else if (axZ < -0.1) this.speed = Math.max(-MAX_REVERSE, this.speed - ACCEL * 0.8 * dt);
+      if (this.speed < max) this.speed = Math.min(max, this.speed + ACCEL * (scoot ? 0.6 : 1) * axZ * dt);
+    } else if (axZ < -0.1) this.speed = Math.max(scoot ? -SCOOTER_REVERSE : -MAX_REVERSE, this.speed - ACCEL * 0.8 * dt);
     else {
       const slow = DRAG * dt;
       if (Math.abs(this.speed) <= slow) this.speed = 0;
@@ -468,8 +516,10 @@ export class Car {
     if (this.speed > max) this.speed = Math.max(max, this.speed - 25 * dt); // ease out of a boost
     // steering (only meaningful while moving)
     const steerAuthority = Math.min(1, Math.abs(this.speed) / 4) * Math.sign(this.speed || 1);
-    this.heading -= axX * STEER * steerAuthority * dt;
-    this.group.rotation.y = this.heading;
+    this.heading -= axX * STEER * (scoot ? 1.25 : 1) * steerAuthority * dt;
+    // a scooter leans into its turns
+    if (scoot) this.group.rotation.set(0, this.heading, -axX * 0.22 * Math.min(1, Math.abs(this.speed) / 5), "YXZ");
+    else this.group.rotation.y = this.heading;
 
     // move
     const px = this.pos.x, pz = this.pos.z;
@@ -486,7 +536,7 @@ export class Car {
 
     // bump walls
     const bx = this.pos.x, bz = this.pos.z;
-    world.resolveSolids(this.pos, 0.95);
+    world.resolveSolids(this.pos, scoot ? 0.45 : 0.95);
     if (Math.abs(this.pos.x - bx) + Math.abs(this.pos.z - bz) > 0.001) this.speed *= 0.55;
 
     // ground follow / fall
@@ -501,7 +551,7 @@ export class Car {
     if (this.pos.y < KILL_Y) this.fellOff = true;
 
     // wheels
-    const roll = (this.speed * dt) / 0.32;
+    const roll = (this.speed * dt) / (scoot ? 0.125 : 0.32);
     for (const w of this.wheels) w.rotation.x += roll;
 
     this.seat(this.driver, this.seatZ);
@@ -605,6 +655,8 @@ export class Car {
     p.vel.set(0, 0, 0);
     p.facing = this.heading;
     p.group.rotation.y = this.heading;
+    // on a scooter the hands reach forward to the T-bar (the same arm pose as holding reins)
+    if (this.kind === "scooter") p.saddle = { speed: Math.abs(this.speed), phase: 0, bar: true };
   }
 }
 

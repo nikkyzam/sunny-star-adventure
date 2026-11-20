@@ -108,6 +108,23 @@ try {
   check(/Read to me|reading voice/.test(await toast()), "it says so");
   await page.click("#btn-read");
   check(await page.evaluate(() => !document.getElementById("btn-read").classList.contains("on")), "and off again");
+  // ── every sticker: the Royal Explorer certificate ──
+  await page.evaluate(() => localStorage.setItem("game.castleStickers", JSON.stringify(["throne","feast","bell","rings","dragon","slide","fireworks","helmet","song","treasure","peacock","bouncy","catapult","bread","puppets","garden","swing","fish","fish5","sandcastle"])));
+  await page.reload({ waitUntil: "load" });
+  await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 90000 });
+  await page.click("[data-action=play]");
+  await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 30000 });
+  await page.waitForTimeout(1000);
+  check((await pill()).text === "🏰 20/20", "all twenty stickers", (await pill()).text);
+  await page.click("#hud-castle");
+  await page.waitForTimeout(300);
+  check(/Royal Explorer/.test(await page.evaluate(() => document.getElementById("sticker-count").textContent)), "the book says Royal Explorer");
+  await page.click(".sticker-cert");
+  await page.waitForTimeout(500);
+  const cert = await page.evaluate(() => ({ shown: document.getElementById("ov-photo").style.display !== "none", png: document.querySelector("#ov-photo .photo-card").src.startsWith("data:image/png") }));
+  check(cert.shown && cert.png, "the certificate opens in the album", JSON.stringify(cert));
+  await page.screenshot({ path: shot("certificate") });
+
   // ── the grown-ups' progress summary (behind the sum) ──
   const gp = page;
   await gp.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load" });
@@ -120,7 +137,7 @@ try {
   await gp.waitForTimeout(300);
   await gp.evaluate(() => { document.getElementById("teach-progress-box").open = true; });
   const prog = await gp.evaluate(() => document.getElementById("teach-progress").innerText);
-  check(/Sunny Castle stickers: 1 of 20/.test(prog) && /Days in a row: 3/.test(prog) && /Worlds visited/.test(prog), "a progress summary for grown-ups", prog.replace(/\n/g, " | ").slice(0, 160));
+  check(/Sunny Castle stickers: 20 of 20/.test(prog) && /Days in a row: 3/.test(prog) && /Worlds visited/.test(prog), "a progress summary for grown-ups", prog.replace(/\n/g, " | ").slice(0, 160));
   await gp.screenshot({ path: shot("progress") });
   check(errors.length === 0, "no page errors", errors[0] ?? "");
 } finally {

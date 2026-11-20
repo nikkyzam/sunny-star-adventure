@@ -50,6 +50,8 @@ import { Particles } from "./particles";
 import { Hud, type HudAction } from "./hud";
 import { storage, highScore } from "./storage";
 import { StickerBook, CASTLE_STICKERS, type StickerId } from "./stickers";
+import { royalCertificate } from "./certificate";
+import { isDusk } from "./seasons";
 import {
   OUTFITS, HATS, SKINS, PETS, HAIR_COLORS, HAIR_STYLES, GLASSES, CLOTHES, BODIES, loadProfile, saveProfile, rerollName, nameText,
   lookOf, safeLook, safeName, safeHat, safePet,
@@ -132,7 +134,7 @@ declare global {
       /** Sparky: where he is and what he's doing (null if this level has no dragon). */
       dragon: () => { state: string; x: number; y: number; z: number; perch: number[]; bells: number[][] } | null;
       /** The castle's fun: thrones, the ring course, and what the kid wears and does. */
-      castleFun: () => { thrones: { seat: number[]; facing: number }[]; rings: number[][]; passed: number; hat: number; seated: boolean; big: number; facing: number; horse: number[] | null; slides: { board: number[]; end: number[]; len: number }[]; sliding: number | null; fireworks: number[][]; armour: number[][]; stones: number[][]; songAt: number; keys: number[][]; found: number; chest: number[] | null; opened: boolean; peacocks: number[][]; bouncy: { min: number[]; max: number[] }[]; catapults: { pos: number[]; raft: number[]; aim: number[] }[]; catHits: number; bounces: number; oven: { pos: number[]; baking: boolean; ready: boolean } | null; buds: number[][]; bloomed: number; swing: { pivot: number[]; rope: number } | null; swinging: boolean; fishing: { pos: number[]; state: string; kinds: number } | null; sandcastle: { pos: number[]; stage: number; washing: boolean } | null; guide: string | null; theatre: { pos: number[]; scene: number; story: number } | null };
+      castleFun: () => { thrones: { seat: number[]; facing: number }[]; rings: number[][]; passed: number; hat: number; seated: boolean; big: number; facing: number; horse: number[] | null; slides: { board: number[]; end: number[]; len: number }[]; sliding: number | null; fireworks: number[][]; armour: number[][]; stones: number[][]; songAt: number; keys: number[][]; found: number; chest: number[] | null; opened: boolean; peacocks: number[][]; bouncy: { min: number[]; max: number[] }[]; catapults: { pos: number[]; raft: number[]; aim: number[] }[]; catHits: number; bounces: number; oven: { pos: number[]; baking: boolean; ready: boolean } | null; buds: number[][]; bloomed: number; swing: { pivot: number[]; rope: number } | null; swinging: boolean; fishing: { pos: number[]; state: string; kinds: number } | null; sandcastle: { pos: number[]; stage: number; washing: boolean } | null; guide: string | null; season: { kind: string; spot: number[] | null; eggs: number[][]; found: number; lit: boolean } | null; theatre: { pos: number[]; scene: number; story: number } | null };
       /** Onto the highest ground at (x, z), or the floor just below y when given (inside a house). */
       warp: (x: number, z: number, y?: number) => void;
       /** Test hook: park the car somewhere else. */
@@ -263,8 +265,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const heli = new Car("heli");
   const jet = new Car("jet");
   const spareCars = [new Car("car", 0x2f80ed), new Car("car", 0xffd93d)]; // more cars parked around the bigger worlds
-  const rides = [car, boat, heli, jet, ...spareCars];
-  const RIDE_ICON: Record<RideKind, string> = { car: "🚗", boat: "⛵", heli: "🚁", jet: "✈️" };
+  const scooters = [new Car("scooter", 0xff6bb5), new Car("scooter", 0x2fc4c4), new Car("scooter", 0x8e5be8), new Car("scooter", 0xffa62b)]; // kick scooters parked round the island
+  const rides = [car, boat, heli, jet, ...spareCars, ...scooters];
+  const RIDE_ICON: Record<RideKind, string> = { car: "🚗", boat: "⛵", heli: "🚁", jet: "✈️", scooter: "🛴" };
   const rocket = makeRocket();
   rocket.visible = false;
   const rocketBase = new THREE.Vector3();
@@ -296,6 +299,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
   });
   /** A selfie in progress: seconds since 📸 was pressed; `snap` = grab the next rendered frame. */
   let selfie: { t: number; snap: boolean } | null = null;
+  /** A sightseeing photo in progress: the sight to frame behind the kid. */
+  let sightsee: { name: string; at: THREE.Vector3; look: THREE.Vector3 } | null = null;
+  /** Sights photographed on this device (the sightseeing passport). */
+  const sights = new Set<string>(storage.get<string[]>("sights", []));
   const SELFIE_BEAT = 0.6; // seconds per countdown number
   const input = new Input(canvas);
   const sm = new GameStateMachine();
@@ -314,6 +321,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const spots = new Spots();
   scene.add(jobs.group, traffic.group, scrolls.group, herds.group, quests.group);
   scene.add(...spareCars.map((c) => c.group));
+  scene.add(...scooters.map((c) => c.group));
   scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, boat.group, heli.group, jet.group, rocket, rings.group, foods.group, fleet.group, props.group, npcs.group, pet.group, particles.points);
 
   // ── Run state ────────────────────────────────────────────────────────────
@@ -453,7 +461,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     let bestD = Infinity;
     for (const v of rides) {
       if (!v.group.visible) continue;
-      const reach = v.kind === "car" ? 2.4 : 3.6;
+      const reach = v.kind === "car" ? 2.4 : v.kind === "scooter" ? 1.6 : 3.6;
       for (const p of players) {
         if (p.riding) continue;
         const d2 = v.pos.distanceToSquared(p.pos);
@@ -479,6 +487,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
     sliding.clear();
     chimeOn.clear();
     keysFound.clear();
+    eggsFound.clear();
+    thanked = false;
+    treeLit = false;
+    for (const se of world.seasonals) se.resetEggs();
     chestOpened = false;
     bounceRun.clear();
     bouncedYet = false;
@@ -663,6 +675,14 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
     for (const p of players) {
       if (p.riding) continue;
+      const ps = world.photoSpots.find((o) => Math.hypot(p.pos.x - o.at.x, p.pos.z - o.at.z) < 1.0 && Math.abs(p.pos.y - o.at.y) < 1.2);
+      if (ps && p === players[0]) return { kid: p, icon: "📸", label: "Sightseeing photo", go: () => {
+        sightsee = ps;
+        // turn round to face the camera, with the sight behind
+        p.facing = Math.atan2(p.pos.x - ps.look.x, p.pos.z - ps.look.z);
+        p.group.rotation.y = p.facing;
+        startSelfie();
+      } };
       const fw = world.fireworks.find((f) => Math.hypot(p.pos.x - f.pos.x, p.pos.z - f.pos.z) < 1.7 && Math.abs(p.pos.y - f.pos.y) < 1.2);
       if (fw) return { kid: p, icon: "🎆", label: "Light the fireworks", go: () => {
         if (!fw.launch()) { hud.showToast("🎆 Wait for these ones to finish!"); return; }
@@ -701,6 +721,23 @@ export function startGame(canvas: HTMLCanvasElement): void {
           hud.showToast("💰 The king's treasure! +60 coins! \"Where your treasure is, there will your heart be also.\" (Matthew 6:21)");
         } };
       }
+      const sea = world.seasonals.find((o) => o.spot && Math.hypot(p.pos.x - o.spot.x, p.pos.z - o.spot.z) < 1.5 && Math.abs(p.pos.y - o.spot.y) < 1.2);
+      if (sea?.kind === "harvest") return { kid: p, icon: "🧺", label: "Give thanks", go: () => {
+        audio.sfx("bell");
+        particles.burst(p.pos.x, p.pos.y + 1.6, p.pos.z, 0xf28c28, 16, 2.5, 0.8, 3);
+        cheerNear(p.pos, 14);
+        if (!thanked) { thanked = true; earn(5); hud.setCoins(bank); }
+        hud.showToast("🧺 Thank you, God, for the harvest! \"O give thanks unto the LORD; for he is good.\" (Psalm 107:1)");
+      } };
+      if (sea?.kind === "christmas" && !treeLit) return { kid: p, icon: "🎄", label: "Light the tree", go: () => {
+        treeLit = true;
+        sea.lightTree();
+        audio.sfx("bell");
+        audio.sfx("win");
+        cheerNear(p.pos, 20);
+        if (sea.spot) particles.burst(sea.spot.x, sea.spot.y + 2.8, sea.spot.z, 0xffd93d, 30, 3, 1, 3);
+        hud.showToast("🎄 The tree is lit! \"For unto you is born this day ... a Saviour, which is Christ the Lord.\" (Luke 2:11)");
+      } };
       const fsh = world.fishings.find((o) => Math.hypot(p.pos.x - o.pos.x, p.pos.z - o.pos.z) < 1.3 && Math.abs(p.pos.y - o.pos.y) < 1);
       if (fsh) {
         const st = fsh.state();
@@ -884,10 +921,26 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   /** The king's golden keys: walk into one to pick it up. Peacocks fan their tails at kids nearby. */
   const keysFound = new Set<number>();
+  const eggsFound = new Set<number>();
+  let thanked = false, treeLit = false;
   let chestOpened = false;
   function updateTreasure(): void {
     const pk = world.peacocks[0];
     if (pk) pk.pos.forEach((q, i) => { if (players.some((p) => Math.hypot(p.pos.x - q.x, p.pos.z - q.z) < 2.6)) pk.show(i); });
+    const se = world.seasonals[0];
+    if (se?.kind === "easter") for (const p of players) se.eggs.forEach((e, i) => {
+      if (eggsFound.has(i) || Math.hypot(p.pos.x - e.x, p.pos.z - e.z) > 1.0 || Math.abs(p.pos.y + 0.3 - e.y) > 1.0) return;
+      eggsFound.add(i);
+      se.takeEgg(i);
+      audio.sfx("coin");
+      particles.burst(e.x, e.y + 0.3, e.z, 0xff9ecf, 16, 2.5, 0.7, 3);
+      if (eggsFound.size < se.eggs.length) { earn(5); hud.setCoins(bank); hud.showToast(`🥚 A painted Easter egg! ${eggsFound.size} of ${se.eggs.length}. +5 coins`); return; }
+      earn(20);
+      hud.setCoins(bank);
+      audio.sfx("win");
+      cheerNear(p.pos, 20);
+      hud.showToast("🐣 All five Easter eggs! +20 coins. He is risen! \"I am the resurrection, and the life.\" (John 11:25)");
+    });
     const tr = world.treasures[0];
     if (!tr) return;
     for (const p of players) tr.keys.forEach((k, i) => {
@@ -934,6 +987,10 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   /** The castle sticker book: one sticker for each thing to do at Sunny Castle. */
   const book = new StickerBook();
+  function showCertificate(): void {
+    photo.showCard(royalCertificate(CASTLE_STICKERS.map((x) => x.icon)), "Your Royal Explorer certificate! A grown-up can save it to print, then write your name on the line.");
+  }
+  hud.onCertificate = () => { if (sm.is("playing")) showCertificate(); };
   function showStickers(): void {
     hud.setCastleStickers(world.thrones.length ? CASTLE_STICKERS.map((x) => ({ icon: x.icon, name: x.name, got: book.has(x.id) })) : null);
   }
@@ -950,6 +1007,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
         audio.sfx("win");
         hud.showToast("🏆 Every castle sticker! You're a Royal Explorer of Sunny Castle! +50 coins");
       }, 3600);
+      window.setTimeout(() => { if (sm.is("playing")) showCertificate(); }, 6500);
     }
   }
 
@@ -1023,6 +1081,12 @@ export function startGame(canvas: HTMLCanvasElement): void {
     "🦁 So Daniel was put into a den of lions!",
     "👼 God sent an angel, and the lions just lay down and went to sleep!",
     "☀️ In the morning Daniel was safe! \"My God hath sent his angel.\" (Daniel 6:22)",
+  ], [
+    "🎭 The puppet show is starting: David the Shepherd Boy!",
+    "🐑 David looked after his father's sheep on the hills.",
+    "🎵 He played his harp and sang songs to God.",
+    "🐑 A little lamb got lost, so David went and found it and brought it home!",
+    "👑 God chose David to be king one day! \"The LORD is my shepherd.\" (Psalm 23:1)",
   ]];
   function updateBakery(): void {
     const ov = world.ovens[0];
@@ -1067,7 +1131,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (sc >= 0) {
       const story = th.story();
       hud.showToast(SHOW_LINES[story][sc]);
-      if (sc === 2) audio.sfx(story === 0 ? "baa" : story === 1 ? "splash" : "roar");
+      if (sc === 2) audio.sfx(story === 0 ? "baa" : story === 1 ? "splash" : story === 2 ? "roar" : "bell");
+      if (sc === 3 && story === 3) audio.sfx("baa");
     } else if (showScene === 4) {
       audio.sfx("win");
       cheerNear(th.pos, 20);
@@ -1364,6 +1429,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   function loadLevel(i: number): void {
     levelIdx = i;
     selfie = null;
+    sightsee = null;
     photo.reset();
     world.owned = owned;
     world.buildLevel(i, scene);
@@ -1381,6 +1447,18 @@ export function startGame(canvas: HTMLCanvasElement): void {
         new THREE.Color(d.grass).multiplyScalar(0.55).getHex(),
       );
       scene.environmentIntensity = dark ? 0.4 : 0.55;
+      // evening where the kid is: Adventure Island turns golden (still bright enough to play)
+      sun.intensity = 1.7;
+      if (d.name === HUB && !dark && isDusk()) {
+        sun.color.setHex(0xffb27a);
+        sun.intensity = 1.35;
+        hemi.color.setHex(0xffd2b8);
+        hemi.groundColor.setHex(0x7a6a88);
+        scene.background = new THREE.Color(0xf6a98a);
+        if (scene.fog instanceof THREE.Fog) scene.fog.color.setHex(0xf3b9a0);
+        makeSkyLight(0x7d6bc4, 0xffb08a, new THREE.Color(d.grass).multiplyScalar(0.45).getHex());
+        scene.environmentIntensity = 0.45;
+      }
     }
     traffic.build(world.def.traffic ?? []);
     herds.build(world.def.herds ?? []);
@@ -1435,6 +1513,12 @@ export function startGame(canvas: HTMLCanvasElement): void {
       c.group.visible = at !== undefined;
       c.shoreY = car.shoreY;
       if (at) c.place(at[0], at[1], at[2], at[3]);
+    });
+    scooters.forEach((c, k) => {
+      const at = world.def.scooters?.[k];
+      c.group.visible = at !== undefined;
+      c.shoreY = car.shoreY;
+      if (at) c.place(at[0], world.groundAt(at[0], at[1], 6)?.y ?? 0, at[1], at[2]);
     });
     stationArmed = false; // (walk away from the gate you arrived at before it opens again)
     if (world.def.carSpawn) {
@@ -1498,6 +1582,24 @@ export function startGame(canvas: HTMLCanvasElement): void {
     audio.sfx("ui");
     if (onTouch()) hud.showToast("👈 Left thumb moves · JUMP is on the right 👉");
     dailyGift();
+  }
+
+  /** A sight photographed: a stamp in the sightseeing passport (coins the first time). */
+  function sawSight(name: string): void {
+    if (sights.has(name)) return;
+    sights.add(name);
+    storage.set("sights", [...sights]);
+    const total = world.photoSpots.length;
+    earn(5);
+    hud.setCoins(bank);
+    window.setTimeout(() => {
+      audio.sfx("star");
+      if (sights.size >= total && total > 0) {
+        earn(25);
+        hud.setCoins(bank);
+        hud.showToast(`🌍 You've photographed every sight on the island! +25 coins. "The earth is the LORD's, and the fulness thereof." (Psalm 24:1)`);
+      } else hud.showToast(`📸 A new sight for your passport: ${name}! (${sights.size} of ${total}) +5 coins`);
+    }, 300);
   }
 
   /** The first play of each new day: a little gift of coins and a verse for the day (kept on this device). */
@@ -1929,6 +2031,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       [`🗺️ Worlds visited: ${places.size} of ${LEVELS.length}`, [...places].slice(0, 14).join(", ")],
       [`🏰 Sunny Castle stickers: ${book.count} of ${book.total}`, CASTLE_STICKERS.filter((x) => book.has(x.id)).map((x) => x.icon).join(" ") || "none yet"],
       [`📜 Bible scrolls found: ${scrollsFound.size}`, ""],
+      [`📸 Sights photographed: ${sights.size}`, [...sights].join(", ")],
       [`🧰 Helper jobs done: ${jobsDone}`, ""],
       [`🎁 Days in a row: ${daily.streak || 0}`, daily.last ? `last played ${daily.last}` : ""],
       [`◉ Coins saved: ${bank}`, ""],
@@ -2218,6 +2321,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
       audio.sfx("powerup");
       audio.sfx("splash");
       hud.showToast(onTouch() ? "⛵ Stick sails · JUMP fires the cannon at pirate ships!" : "⛵ Move keys sail · Space fires the cannon at pirate ships · E hops out");
+    } else if (seat === "driver" && near.ride.kind === "scooter") {
+      audio.sfx("whee");
+      hud.showToast(onTouch() ? "🛴 Push the stick to scoot · JUMP hops · 🛴 hops off" : "🛴 Move keys to scoot · Space hops · E hops off");
     } else if (seat === "driver") {
       audio.sfx("honk");
       audio.engineStart();
@@ -2236,7 +2342,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   function honk(): void {
     const v = rides.find((r) => r.group.visible && r.driver);
     if (!sm.is("playing") || !v) return;
-    audio.sfx("honk");
+    audio.sfx(v.kind === "scooter" ? "bell" : "honk"); // a scooter rings its bell
     particles.burst(v.pos.x, v.pos.y + 1.4, v.pos.z, 0xffe27a, 8, 2.5, 0.5, 3);
     cheerNear(v.pos, 14);
     net?.send({ t: "hk", L: levelIdx });
@@ -2412,6 +2518,16 @@ export function startGame(canvas: HTMLCanvasElement): void {
   /** The selfie camera: in front of the kid, a little to one side, looking back at them. */
   function selfieCamera(): void {
     const kid = players[0];
+    if (sightsee) {
+      // a tourist photo: the camera stands in front of the kid, the sight rises up behind them
+      const L = sightsee.look;
+      const dx = kid.pos.x - L.x, dz = kid.pos.z - L.z, len = Math.hypot(dx, dz) || 1;
+      const ux = dx / len, uz = dz / len;
+      const back = 4.2 + Math.min(4, len * 0.12);
+      camDesired.set(kid.pos.x + ux * back - uz * 0.8, kid.pos.y + 1.7, kid.pos.z + uz * back + ux * 0.8);
+      camTarget.set(kid.pos.x + (L.x - kid.pos.x) * 0.3, kid.pos.y + 1.2 + (L.y - kid.pos.y) * 0.3, kid.pos.z + (L.z - kid.pos.z) * 0.3);
+      return;
+    }
     const ride = rideOf(kid);
     const d = ride ? (ride.flies ? 9 : 6) : kid.riding ? 4.6 : 2.9; // (riding a horse: rideOf is null)
     const a = kid.facing + 0.4;
@@ -3490,11 +3606,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
         // draw it once more without the floating name tags and signs (they're sprites)
         selfie = null;
         const tags: THREE.Object3D[] = [];
-        scene.traverse((o) => { if ((o as THREE.Sprite).isSprite && o.visible && !o.userData.keepInPhoto) tags.push(o); });
+        scene.traverse((o) => { if (o.visible && (((o as THREE.Sprite).isSprite && !o.userData.keepInPhoto) || o.userData.hideInPhoto)) tags.push(o); });
         for (const o of tags) o.visible = false;
         renderer.render(scene, camera);
-        photo.take(renderer.domElement, world.def.name);
+        photo.take(renderer.domElement, sightsee ? sightsee.name.replace(/^the /, "The ") : world.def.name);
         for (const o of tags) o.visible = true;
+        if (sightsee) sawSight(sightsee.name);
+        sightsee = null;
       }
       // first rendered frame with the models in = the page is playable
       if (modelsSettled && !window.__GAME_READY__) {
@@ -3581,6 +3699,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
     quest: quests.label(),
     use: useInReach()?.label ?? null,
     canMount: mountInReach()?.what ?? null,
+    sights: world.photoSpots.map((o) => ({ name: o.name, x: o.at.x, y: o.at.y, z: o.at.z })),
+    sightsSeen: [...sights],
+    scooters: scooters.filter((c) => c.group.visible).map((c) => ({ x: c.pos.x, y: c.pos.y, z: c.pos.z, speed: c.speed, ridden: c.driver !== null })),
     questHome: quests.homeCount,
     questTargets: () => quests.debugTargets(),
     questHomeSpot: quests.homeSpot,
@@ -3672,6 +3793,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       swing: world.swings[0] ? { pivot: world.swings[0].pivot.toArray(), rope: world.swings[0].rope } : null,
       swinging: swinging.has(players[0]),
       guide: guideId,
+      season: world.seasonals[0] ? { kind: world.seasonals[0].kind, spot: world.seasonals[0].spot?.toArray() ?? null, eggs: world.seasonals[0].eggs.map((e) => e.toArray()), found: eggsFound.size, lit: treeLit } : null,
       fishing: world.fishings[0] ? { pos: world.fishings[0].pos.toArray(), state: world.fishings[0].state(), kinds: fishKinds.size } : null,
       sandcastle: world.sandcastles[0] ? { pos: world.sandcastles[0].pos.toArray(), stage: world.sandcastles[0].stage(), washing: world.sandcastles[0].washing() } : null,
       theatre: world.theatres[0] ? { pos: world.theatres[0].pos.toArray(), scene: world.theatres[0].scene(), story: world.theatres[0].story() } : null,

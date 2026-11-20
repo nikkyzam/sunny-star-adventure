@@ -3,6 +3,37 @@
 A running record of what was added to Sunny Star Adventure, and why, for the decisions made
 without stopping to ask. Newest first. Live game: https://nikkyzam.github.io/sunny-star-adventure/
 
+## 2026-11-19 (evening): sightseeing, scooters, and a more real look (the user asked for these)
+
+**Sightseeing photo spots 📸**
+- There are six sights, each with painted footprints and a "📸 Photo spot" sign:
+  - Sunny Castle
+  - the Village Church
+  - the view from Lookout Hill
+  - the Lighthouse (by boat)
+  - Sunset Island's pink tower (by boat)
+  - the Rocket on Pine Island
+- Stand on the footprints and press E. The kid turns round, the camera steps back so the sight rises up behind them, and a 3-2-1 countdown takes a postcard captioned with the sight's name.
+- Each new sight gets a stamp in the passport (+5 coins). All six pays +25, with Psalm 24:1.
+- The sign, ring and footprints hide during the photo so the picture is clean.
+- The grown-ups' progress page lists the sights photographed.
+
+**Kick scooters 🛴**
+- Four colourful scooters are parked around Adventure Island: by the start, by the castle gate, at Coconut Cove and in the village.
+- The kid stands on the deck (not seated), the scooter leans into turns, Space hops, and the 📣 button rings a bell instead of a horn.
+- It's gentler than the car: a top speed of 8 m/s, against 13 for the car.
+- **Decided:** scooters are single-rider, and you have to stand close (1.6 m) to hop on, so you don't board one by accident.
+
+**A more real look**
+- **Ground:** code-drawn grass and sand textures on every island, with blades, patches and grains, repeating about every 3.5 m, plus soil on the island sides. Grass colour is a touch softer and less neon.
+- **Name tags:** villagers' name tags now show only when you're within about 10 m (they fade in), are hidden behind walls like real objects, and are a little smaller. Before, every name floated over everything, through walls, from any distance.
+- **Castle:** all castle materials now use smooth shading instead of faceted low-poly.
+- **Clouds:** soft, smooth fair-weather clouds with flat bottoms and piled-up tops, bigger and higher. Each cloud is one piece instead of 3 to 5 faceted balls.
+- **Sea:** smooth, glossy water that catches the sky (before, it was faceted triangles), with white surf gently lapping round every sandy beach.
+- **Scooter riders:** they hold the handlebar grips, leaning slightly forward, and the scooter is sized to the kids' height.
+- **Postcards:** they no longer pick "Jesus wept" as their verse.
+- **Kept stylised on purpose:** collectables (coins, stars, sky rings). They are game pieces kids need to spot.
+
 ## Ideas to improve the whole game (ranked, 2026-11-19)
 
 Most useful first. ✅ = done, 🔨 = being built now.
@@ -17,23 +48,27 @@ Most useful first. ✅ = done, 🔨 = being built now.
    - Getting all 20 makes you a "Royal Explorer" and pays +50 coins.
    - Stickers are kept on the device only.
 4. ✅ **"What can I do here?" sparkle.** Gold sparkles float over the nearest activity, within about 20 m, that this kid has no sticker for yet. Once the sticker is earned, the sparkles move on to the next thing.
-5. ✅ (castle part) **Smoother on iPads.** Measured with `scripts/perf-castle.mjs`. Inside the castle, draw calls went from about 1,650 to about 1,470.
-   - Still parts are joined in a second pass.
-   - Peacock feathers are painted cards, so 15 draws per tail instead of 60.
-   - Each flower's petals are one piece.
-   - Tiny parts skip the shadow pass.
-   - **Still to do:** the rest of the island is about 1,000 more draws. Joining its trees, houses and fences is a bigger job for later.
-6. ✅ **More puppet shows.** The theatre now takes turns between three shows:
+5. ✅ **Smoother on iPads.** Measured with `scripts/perf-castle.mjs`. In the castle courtyard, draw calls went from about 1,650 to about 1,230 (−25%); at the gate, from about 1,690 to about 1,320.
+   - **Castle:** still parts joined in a second pass, peacock feathers as painted cards, one-piece petals, and no shadows from tiny parts.
+   - **Village houses:** each house's walls, roof and furniture are joined by colour. The dollhouse shell still hides as a whole when you walk in.
+   - **Quest footprint trails:** a whole trail is one piece instead of up to 130.
+   - **Left alone on purpose:** trees and plants are already instanced. Coins and stars move and get collected, so instancing them is riskier and they stay as they are.
+6. ✅ **More puppet shows.** The theatre now takes turns between four shows:
    - **Noah's Ark** (Genesis 9:13)
-   - **Jonah and the Big Fish** (Jonah 2:10, "God gives second chances")
-   - **Daniel and the Lions** (Daniel 6:22). This is the gentle version: Daniel prays at his window, the lions pad in, and an angel comes and the lions lie down and fall asleep. In the morning he hops out safe.
+   - **Jonah and the Big Fish** (Jonah 2:10)
+   - **Daniel and the Lions** (Daniel 6:22), the gentle version, where an angel makes the lions fall asleep
+   - **David the Shepherd Boy** (Psalm 23:1): his sheep, his harp, a lost lamb found, and a crown "one day"
 
-   David the shepherd boy is the next candidate.
+   David's story is told through the shepherd side, not Goliath, to keep it gentle. Each Bible world already has its own David and Goliath job.
 7. ✅ **A daily surprise.** The first play of each new day gives +10 coins and a "verse for today", which rotates through the verse library.
    - Days in a row earn +4 more each day, up to +30.
    - It's kept on the device only (no account), so it's safe and private.
    - The coins arrive at once, and the message comes a moment later so the controls tip doesn't hide it.
-8. **Seasonal events.** An Easter egg hunt round the castle, a harvest festival and a Christmas lantern parade, which give news to share.
+8. ✅ **Seasonal events.** The castle dresses up by the calendar, with no download or update needed. `?season=` in the address can force one.
+   - **Harvest** (15 September to 30 November): pumpkins and wheat sheaves along the gate path, and a thanksgiving table. "Give thanks" shows Psalm 107:1 (+5 coins once per visit).
+   - **Christmas** (1 December to 6 January): a tree by the well with presents, and fairy lights all round the battlements. "Light the tree" makes it glow, with Luke 2:11.
+   - **Easter** (Palm Sunday to a week after Easter Sunday, worked out for each year): five painted eggs hidden round the castle (+5 each, +20 for all), with John 11:25.
+   - It's harvest time right now, so players see the harvest dressing today.
 9. ✅ **Grown-ups' progress page.** It's at the top of the parents' screen, behind the grown-up sum, under "📈 Progress on this device". It shows:
    - verses typed from memory, and which ones
    - worlds visited
@@ -44,7 +79,14 @@ Most useful first. ✅ = done, 🔨 = being built now.
    - coins saved
 
    It's built only from what the device already remembers, and nothing is sent anywhere. It helps parents and teachers see the value, which matters for selling the game.
-10. **Day and night.** A gentle evening with lanterns and stars over the castle.
+12. ✅ **Royal Explorer certificate.** Collecting all 20 castle stickers opens a printable certificate in the photo album: a crown, the 20 stickers, the date, and Matthew 25:21. The sticker book also gets a "🏆 Show my certificate" button.
+   - **No name on it:** it has a blank line to write the child's name on once printed, so the game never asks for or stores a name.
+   - **Saving is for grown-ups:** saving or printing goes through the same grown-up question as photos.
+   - **Why:** it's something parents can print and show off, which helps word of mouth.
+10. ✅ (gentle version) **Day and night.** Between 5:30 and 9 pm on the player's own clock, Adventure Island turns to a golden evening: a pink and lavender sky, a warm low sun, and rosy fog. `?time=dusk|day` can force it.
+    - **No real darkness**, on purpose: small children must still see where they're going, and night-time already has its own world (Starlight Peak).
+13. ✅ **Read to me covers villagers too.** What villagers say in their speech bubbles is read aloud, and long lines, such as a scroll's verse, stay up long enough to read (up to 10 seconds).
+14. ✅ **Guard Gus knows the season.** He mentions the harvest table, the Christmas tree or the Easter eggs, depending on the time of year.
 11. **Real-iPad test.** Still not done; it needs a real device.
 
 **Why these first:**

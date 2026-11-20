@@ -16,6 +16,7 @@
  */
 
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 export type FindModel = "lamb" | "sheep" | "kitten" | "dove" | "crate" | "coin" | "gift";
 export type SearchLook = "bush" | "crate" | "mound" | "dust" | "tree" | "hay";
@@ -620,16 +621,22 @@ export class Quests {
     const ux = dx / len, uz = dz / len;
     const stop = p.t === "reach" && (p.refY ?? 0) > 5 ? 3.5 : 1.8;
     const step = model === "dove" ? 1.4 : 0.55;
+    // every print in one mesh: a long trail is a single draw
+    const prints: THREE.BufferGeometry[] = [];
+    const at = new THREE.Object3D();
     for (let s = 0; s < len - stop; s += step) {
       const side = (Math.floor(s / step) % 2 ? 1 : -1) * 0.09;
       for (const half of model === "lamb" || model === "sheep" ? [-0.06, 0.06] : [0]) {
         const x = fx + ux * s - uz * side + ux * half, z = fz + uz * s + ux * side + uz * half;
-        const m = new THREE.Mesh(geo, mat);
-        m.position.set(x, this.ground(x, z, 3) + 0.025, z);
-        m.rotation.y = Math.atan2(ux, uz) + (model === "dove" ? s : 0);
-        this.group.add(m);
+        at.position.set(x, this.ground(x, z, 3) + 0.025, z);
+        at.rotation.set(0, Math.atan2(ux, uz) + (model === "dove" ? s : 0), 0);
+        at.updateMatrix();
+        prints.push(geo.clone().applyMatrix4(at.matrix));
       }
     }
+    const all = prints.length ? mergeGeometries(prints) : null;
+    for (const pg of prints) pg.dispose();
+    if (all) this.group.add(new THREE.Mesh(all, mat));
   }
 
   /** An old stone well with a roof, a crank and a bucket on a rope. */

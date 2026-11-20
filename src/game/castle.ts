@@ -13,6 +13,7 @@ import * as THREE from "three";
 import type { Platform } from "./world";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { textTexture } from "./bethlehem";
+import { currentSeason, type Season } from "./seasons";
 
 export interface CastleDef {
   x: number; z: number;
@@ -69,6 +70,8 @@ export interface CastleInfo {
   fishing: { pos: THREE.Vector3; state: () => "idle" | "wait" | "bite" | "catch"; cast: () => boolean; reel: () => number; gotAway: () => boolean };
   /** The sandcastle on the beach: where to stand, how built it is (0-4), building the next bit, and the wave. */
   sandcastle: { pos: THREE.Vector3; stage: () => number; washing: () => boolean; build: () => number; wash: () => void };
+  /** The season's dressing: what it is, the spot to give thanks / light the tree, and Easter eggs to find. */
+  seasonal: { kind: Season; spot: THREE.Vector3 | null; lightTree: () => void; eggs: THREE.Vector3[]; takeEgg: (i: number) => void; resetEggs: () => void };
   catapult: { pos: THREE.Vector3; raft: THREE.Vector3; aim: THREE.Vector3; fire: () => boolean; onLand: ((hit: boolean, close: boolean, at: THREE.Vector3) => void) | null };
 }
 
@@ -170,7 +173,8 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
   const std = (color: number | THREE.Color, rough = 0.9, extra: THREE.MeshStandardMaterialParameters = {}) => {
     const key = JSON.stringify([color instanceof THREE.Color ? color.getHex() : color, rough, extra], (_k, v) => (v && v.isTexture ? v.uuid : v && v.isColor ? v.getHex() : v));
     let m = mats.get(key);
-    if (!m) { m = new THREE.MeshStandardMaterial({ color, roughness: rough, ...extra }); mats.set(key, m); }
+    // smooth shading everywhere: faceted low-poly surfaces read as toy-like rather than real
+    if (!m) { m = new THREE.MeshStandardMaterial({ color, roughness: rough, ...extra, flatShading: false }); mats.set(key, m); }
     return m;
   };
   const stone = std(c.stone ?? 0xd9d2c3, 0.95, { map: stoneTexture() });
@@ -1470,8 +1474,107 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     dan.visible = false;
     stage.add(dan);
   }
+  // David the shepherd boy: green hills, his sheep, his harp, a lost lamb found, and a crown for one day
+  const dav = new THREE.Group(), david = new THREE.Group(), flock: THREE.Group[] = [], notes: THREE.Mesh[] = [];
+  const lamb = new THREE.Group(), harp = new THREE.Group(), crown = new THREE.Group();
+  {
+    const hillM = std(0x6cc24a, 0.9, { flatShading: true });
+    const hill = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.12, 0.3), hillM);
+    hill.position.set(0, 1.22, 0);
+    dav.add(hill);
+    const bump = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1.4, 0.45, 0.3), hillM);
+    bump.position.set(0.4, 1.27, -0.18);
+    dav.add(bump);
+    // David: a green tunic, a brown belt, curly hair, and a shepherd's crook
+    const tunic = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.2, 8), std(0x3fa34d, 0.8));
+    tunic.position.y = 0.1;
+    david.add(tunic);
+    const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.02, 8), std(0x6b4a2b, 0.9));
+    belt.position.y = 0.12;
+    david.add(belt);
+    const hd = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), std(0xe0b48a, 0.8));
+    hd.position.y = 0.24;
+    david.add(hd);
+    const hair = new THREE.Mesh(new THREE.IcosahedronGeometry(0.048, 0), std(0xb5651d, 0.9));
+    hair.position.set(0, 0.265, -0.01);
+    david.add(hair);
+    const crook = new THREE.Group();
+    const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.36, 4), std(0x8a5a2e, 0.9));
+    staff.position.y = 0.18;
+    crook.add(staff);
+    const hook = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.008, 4, 8, Math.PI), std(0x8a5a2e, 0.9));
+    hook.position.set(0.03, 0.36, 0);
+    crook.add(hook);
+    crook.position.set(0.08, 0, 0.02);
+    crook.name = "crook";
+    david.add(crook);
+    // his harp: a golden frame with strings
+    const goldH = std(0xe8b830, 0.4, { metalness: 0.5 });
+    const frame = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.008, 4, 10, Math.PI * 1.3), goldH);
+    frame.rotation.z = -0.4;
+    harp.add(frame);
+    for (let k = 0; k < 4; k++) {
+      const str = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 0.08 - k * 0.012, 3), std(0xffffff, 0.5));
+      str.position.set(-0.03 + k * 0.02, -0.005, 0.005);
+      harp.add(str);
+    }
+    harp.position.set(-0.07, 0.15, 0.04);
+    harp.visible = false;
+    david.add(harp);
+    dav.add(david);
+    // fluffy sheep, and one little lamb that wanders off
+    const wool = std(0xfdfdf8, 0.95, { flatShading: true }), face = std(0x3a3030, 0.8);
+    const sheep = (size: number) => {
+      const sh = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.08 * size, 1), wool);
+      body.scale.set(1.3, 1, 0.9);
+      body.position.y = 0.09 * size;
+      sh.add(body);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.035 * size, 6, 5), face);
+      head.position.set(0.1 * size, 0.11 * size, 0.01);
+      sh.add(head);
+      return sh;
+    };
+    for (let k = 0; k < 3; k++) {
+      const sh = sheep(1);
+      sh.position.set(-0.15 + k * 0.22, 1.28, 0.02 + (k % 2) * 0.05);
+      dav.add(sh);
+      flock.push(sh);
+    }
+    lamb.add(sheep(0.65));
+    dav.add(lamb);
+    // music notes that float up while he plays
+    const noteM = new THREE.MeshBasicMaterial({ color: 0x2b2b6b });
+    for (let k = 0; k < 4; k++) {
+      const n = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 4).scale(1.3, 1, 1), noteM);
+      const stem = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.06, 0.006), noteM);
+      stem.position.set(0.024, 0.03, 0);
+      n.add(stem);
+      dav.add(n);
+      notes.push(n);
+    }
+    // the crown (and stars coming out in the sky)
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.04, 12, 1, true), std(0xffd23e, 0.3, { metalness: 0.6, side: THREE.DoubleSide, emissive: 0x6a4a00 }));
+    crown.add(ring);
+    for (let k = 0; k < 5; k++) {
+      const pt = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.04, 4), std(0xffd23e, 0.3, { metalness: 0.6, emissive: 0x6a4a00 }));
+      const a = (k / 5) * Math.PI * 2;
+      pt.position.set(Math.cos(a) * 0.06, 0.04, Math.sin(a) * 0.06);
+      crown.add(pt);
+    }
+    dav.add(crown);
+    const starM = new THREE.MeshBasicMaterial({ color: 0xfff3a0 });
+    for (let k = 0; k < 6; k++) {
+      const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.025), starM);
+      st.position.set(-0.8 + k * 0.32, 1.9 + (k % 2) * 0.12, -0.26);
+      st.name = "star";
+      dav.add(st);
+    }
+    dav.visible = false;
+    stage.add(dav);
+  }
   const SHOW = 17;
-  let story = 0, plays = 0;                 // 0 = Noah's Ark, 1 = Jonah and the big fish, 2 = Daniel and the lions
+  let story = 0, plays = 0;                 // 0 = Noah's Ark, 1 = Jonah, 2 = Daniel and the lions, 3 = David the shepherd boy
   const sceneAt = (s: number) => s < 1 ? 0 : s < 4.5 ? 1 : s < 9 ? 2 : s < 12 ? 3 : 4;
   const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
   w.anim.push((t, dt) => {
@@ -1482,9 +1585,10 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     // curtains open at the start and close at the end
     const open = s < 0 ? 0 : Math.min(1, s / 1, (SHOW - s) / 1.2);
     curtains.forEach((c, i) => { c.scale.x = 1 - open * 0.8; c.position.x = (i ? 1 : -1) * 0.95; });
-    const noah = s >= 0 && story === 0, jon = s >= 0 && story === 1, dani = s >= 0 && story === 2;
+    const noah = s >= 0 && story === 0, jon = s >= 0 && story === 1, dani = s >= 0 && story === 2, davi = s >= 0 && story === 3;
     dan.visible = dani;
-    for (const wv of waves) wv.visible = !dani;
+    dav.visible = davi;
+    for (const wv of waves) wv.visible = !dani && !davi;
     ark.visible = noah;
     dove.visible = noah && s > 9 && s < 15.5;
     bow.visible = noah;
@@ -1515,6 +1619,36 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
         dove.children.forEach((c) => { if (c.name === "wing") c.rotation.x = Math.sign(c.position.z) * (0.4 + Math.sin(t * 20) * 0.5); });
       }
       bow.scale.setScalar(Math.max(0.01, Math.min(1, (s - 12) / 1.5)));
+      return;
+    }
+    if (davi) {
+      // 1: David and his sheep · 2: playing the harp, notes float up · 3: a lost lamb found · 4: a crown, stars out
+      const walkIn = clamp01((s - 1) / 2);
+      david.position.set(-1.2 + walkIn * 0.95, 1.28 + (walkIn < 1 ? Math.abs(Math.sin(t * 8)) * 0.02 : 0), 0.06);
+      flock.forEach((sh, k) => {
+        sh.visible = s > 1.4 + k * 0.4;
+        sh.position.y = 1.28 + Math.abs(Math.sin(t * 3 + k * 1.7)) * 0.02;
+        sh.rotation.y = Math.sin(t * 0.7 + k) * 0.3;
+      });
+      const playing = s > 4.5 && s < 9;
+      const crook = david.getObjectByName("crook")!;
+      harp.visible = playing;
+      crook.visible = !playing;
+      notes.forEach((n, k) => {
+        n.visible = playing;
+        const ph = ((s - 4.5) * 0.5 + k / 4) % 1;
+        n.position.set(-0.2 + Math.sin(ph * 6 + k) * 0.08 + k * 0.03, 1.55 + ph * 0.5, 0.08);
+      });
+      // the lamb: wanders off to the far right, then trots back beside David (riding in his arms the last bit)
+      lamb.visible = s > 1.4;
+      const away = clamp01((s - 6) / 2.5), back = clamp01((s - 9.5) / 2);
+      lamb.position.set(0.15 + away * 0.6 - back * 0.55, 1.28 + (back > 0 && back < 1 ? Math.abs(Math.sin(t * 9)) * 0.03 : 0), 0.08);
+      lamb.rotation.y = back > 0 ? Math.PI : 0;
+      crown.visible = s > 12;
+      const ck = clamp01((s - 12) / 1);
+      crown.position.set(-0.25, 1.9 - ck * 0.3 + Math.sin(t * 2) * 0.02, 0.08);
+      crown.rotation.y = t * 1.2;
+      dav.children.forEach((c) => { if (c.name === "star") { c.visible = s > 12.5; c.rotation.y = t * 2; } });
       return;
     }
     if (dani) {
@@ -1586,7 +1720,7 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
   });
   const theatre = {
     pos: new THREE.Vector3(wx(PX, PZ + 1.6), base, wz(PX, PZ + 1.6)),
-    play: () => { if (showT >= 0) return false; story = plays % 3; plays++; showT = 0; return true; },
+    play: () => { if (showT >= 0) return false; story = plays % 4; plays++; showT = 0; return true; },
     scene: () => (showT < 0 ? -1 : sceneAt(showT)),
     story: () => story,
   };
@@ -1941,6 +2075,127 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     wash: () => { if (washT < 0 && scStage > 0) washT = 0; },
   };
 
+  // ── the season: harvest pumpkins and a thanksgiving table, a Christmas tree and lights, or Easter eggs ──
+  const season = currentSeason();
+  const seasonal = {
+    kind: season,
+    /** Where to stand to give thanks (harvest) or light the tree (Christmas). */
+    spot: null as THREE.Vector3 | null,
+    lightTree: () => {},
+    eggs: [] as THREE.Vector3[],
+    takeEgg: (_i: number) => {},
+    resetEggs: () => {},
+  };
+  if (season === "harvest") {
+    const pumpkinM = std(0xf28c28, 0.7, { flatShading: true }), stemM = std(0x4f7a2a, 0.9);
+    const pumpkin = (x: number, z: number, sz: number) => {
+      const p = mesh(new THREE.SphereGeometry(0.32 * sz, 12, 8).scale(1.15, 0.8, 1.15), pumpkinM, x, 0.24 * sz, z);
+      p.rotation.y = x * 3.1;
+      mesh(new THREE.CylinderGeometry(0.03 * sz, 0.04 * sz, 0.12 * sz, 5), stemM, x, 0.5 * sz, z);
+    };
+    for (const [x, z, sz] of [[-2.5, 11, 1], [-2.6, 12.6, 0.8], [-2.4, 14.2, 1.1], [2.5, 14.8, 0.9], [2.4, 16, 0.7], [-2.5, 15.6, 0.75]] as const) pumpkin(x, z, sz);
+    // wheat sheaves tied with string
+    const wheat = std(0xe8c35a, 1, { flatShading: true }), tie = std(0xa0522d, 0.9);
+    for (const sx of [-1, 1]) {
+      const x = sx * 2.5, z = 9.9 + (sx > 0 ? 3.6 : 7.2);
+      mesh(new THREE.CylinderGeometry(0.28, 0.16, 0.9, 10), wheat, x, 0.45, z);
+      mesh(new THREE.ConeGeometry(0.34, 0.45, 10), wheat, x, 1.1, z);
+      mesh(new THREE.TorusGeometry(0.2, 0.03, 4, 12).rotateX(Math.PI / 2), tie, x, 0.6, z);
+    }
+    // the thanksgiving table: a cloth, a basket of apples, a loaf, grapes and a pumpkin pie
+    const tx = -4.6, tz = 12.2;
+    mesh(new THREE.BoxGeometry(1.0, 0.07, 1.9), wood, tx, 0.78, tz);
+    for (const dx of [-1, 1]) for (const dz of [-1, 1]) mesh(new THREE.BoxGeometry(0.08, 0.78, 0.08), wood, tx + dx * 0.42, 0.39, tz + dz * 0.85);
+    mesh(new THREE.BoxGeometry(1.06, 0.02, 1.96), std(0xfff3dc, 0.9), tx, 0.825, tz);
+    mesh(new THREE.CylinderGeometry(0.24, 0.18, 0.18, 12, 1, true), std(0xb8864b, 1, { side: THREE.DoubleSide }), tx, 0.93, tz - 0.5);
+    for (let k = 0; k < 5; k++) mesh(new THREE.SphereGeometry(0.08, 8, 6), std(k % 2 ? 0xd93a3a : 0x7cc04a, 0.6), tx + Math.cos(k * 1.3) * 0.1, 1.02 + (k > 2 ? 0.06 : 0), tz - 0.5 + Math.sin(k * 1.3) * 0.1);
+    mesh(new THREE.SphereGeometry(0.2, 10, 8).scale(1.3, 0.6, 0.8), std(0xd9973f, 0.8, { flatShading: true }), tx, 0.9, tz + 0.1);
+    for (let k = 0; k < 7; k++) mesh(new THREE.SphereGeometry(0.045, 6, 4), std(0x7b3fa0, 0.5), tx + (k % 3 - 1) * 0.07, 0.88 + Math.floor(k / 3) * 0.06, tz + 0.55 + (k % 2) * 0.05);
+    mesh(new THREE.CylinderGeometry(0.2, 0.18, 0.06, 14), std(0xd7792b, 0.8), tx + 0.2, 0.87, tz + 0.6);
+    solid(tx, tz, 0.5, 0.95, 0.9);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.42), new THREE.MeshBasicMaterial({ map: textTexture("Harvest Thanks!", "#c2410c", "#fff3dc") }));
+    sign.position.set(tx - 0.55, 1.55, tz);
+    sign.rotation.y = Math.PI / 2;
+    g.add(sign);
+    mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.4, 6), wood, tx - 0.56, 0.7, tz - 0.6);
+    mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.4, 6), wood, tx - 0.56, 0.7, tz + 0.6);
+    seasonal.spot = new THREE.Vector3(wx(tx + 1.0, tz), base, wz(tx + 1.0, tz));
+  } else if (season === "christmas") {
+    // a tall tree in the courtyard's front corner, ornaments, presents and a star to light up
+    const tx = -4.7, tz = 6.2;
+    mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.5, 8), wood, tx, 0.25, tz);
+    const pine = std(0x1f7a3a, 0.8, { flatShading: true });
+    for (const [y, r, h] of [[0.9, 1.0, 1.2], [1.6, 0.8, 1.0], [2.25, 0.55, 0.85]] as const) mesh(new THREE.ConeGeometry(r, h, 10), pine, tx, y, tz);
+    const starTop = new THREE.Mesh(new THREE.OctahedronGeometry(0.2), new THREE.MeshStandardMaterial({ color: 0xffd93d, emissive: 0x6a5000, roughness: 0.3 }));
+    starTop.position.set(tx, 2.8, tz);
+    starTop.userData.keep = true;
+    g.add(starTop);
+    const bulbCols = [0xff4757, 0xffd93d, 0x2f80ed, 0x3fbf6b, 0xff9ecf];
+    // each bulb keeps its own colour (instance colour × material colour): dim until the tree is lit
+    const bulbM = new THREE.MeshBasicMaterial({ color: 0x555555 });
+    const treeBulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.07, 8, 6), bulbM, 26);
+    const mtx = new THREE.Matrix4();
+    for (let k = 0; k < 26; k++) {
+      const y = 0.55 + (k / 26) * 1.9, r = 0.95 * (1 - (y - 0.4) / 2.4) + 0.05;
+      const a = k * 2.4;
+      mtx.makeTranslation(tx + Math.cos(a) * r, y, tz + Math.sin(a) * r);
+      treeBulbs.setMatrixAt(k, mtx);
+      treeBulbs.setColorAt(k, new THREE.Color(bulbCols[k % bulbCols.length]));
+    }
+    treeBulbs.userData.keep = true;
+    g.add(treeBulbs);
+    for (const [dx, dz, c] of [[0.75, -0.3, 0xff4757], [0.55, 0.45, 0x2f80ed], [0.85, 0.1, 0xffd93d]] as const) {
+      mesh(new THREE.BoxGeometry(0.34, 0.28, 0.34), std(c, 0.6), tx + dx, 0.14, tz + dz);
+      mesh(new THREE.BoxGeometry(0.36, 0.06, 0.08), std(0xffffff, 0.5), tx + dx, 0.29, tz + dz);
+    }
+    solid(tx, tz, 0.55, 0.55, 2.9);
+    // fairy lights all along the inside of the walkway
+    const along: THREE.Vector3[] = [];
+    for (let k = 0; k <= 14; k++) {
+      const v = -S + 0.8 + (k / 14) * (2 * S - 1.6);
+      along.push(new THREE.Vector3(v, H + 0.12, -S + T / 2 + 0.05), new THREE.Vector3(v, H + 0.12, S - T / 2 - 0.05), new THREE.Vector3(-S + T / 2 + 0.05, H + 0.12, v), new THREE.Vector3(S - T / 2 - 0.05, H + 0.12, v));
+    }
+    const wallBulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), along.length);
+    along.forEach((p, k) => {
+      mtx.makeTranslation(p.x, p.y, p.z);
+      wallBulbs.setMatrixAt(k, mtx);
+      wallBulbs.setColorAt(k, new THREE.Color(bulbCols[k % bulbCols.length]));
+    });
+    wallBulbs.userData.keep = true;
+    g.add(wallBulbs);
+    let lit = 0;
+    const treeGlow = new THREE.PointLight(0xffe6a0, 0, 6);
+    treeGlow.position.set(tx, 1.6, tz + 0.8);
+    g.add(treeGlow);
+    w.anim.push((t, dt) => {
+      if (lit > 0) lit = Math.min(1, lit + dt * 1.5);
+      bulbM.color.setScalar(0.33 + lit * (0.62 + Math.sin(t * 4) * 0.05));
+      (starTop.material as THREE.MeshStandardMaterial).emissiveIntensity = 1 + lit * 2.5;
+      starTop.rotation.y = t * 0.8;
+      treeGlow.intensity = lit * 2.2;
+    });
+    seasonal.spot = new THREE.Vector3(wx(tx + 1.2, tz - 0.4), base, wz(tx + 1.2, tz - 0.4));
+    seasonal.lightTree = () => { if (lit === 0) lit = 0.01; };
+  } else if (season === "easter") {
+    // five painted eggs hidden round the castle
+    const spots: [number, number, number][] = [[3.5, 0.25, 11.0], [-1.8, 0.25, -12.4], [12.8, 0.25, 7.6], [6.8, 0.25, 3.5], [4.6, 0.25, -4.8]];
+    const cols = [[0xff9ecf, 0xffffff], [0x7fc8ff, 0xffd93d], [0xb197fc, 0x7ee08a], [0xffd93d, 0xff6b9d], [0x7ee08a, 0x2f80ed]];
+    const eggs = spots.map(([x, y, z], i) => {
+      const e = new THREE.Group();
+      const shell = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10).scale(1, 1.3, 1), std(cols[i][0], 0.5));
+      e.add(shell);
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.025, 6, 16).rotateX(Math.PI / 2), std(cols[i][1], 0.5));
+      e.add(band);
+      e.position.set(x, y, z);
+      g.add(e);
+      return e;
+    });
+    w.anim.push((t) => eggs.forEach((e, i) => { if (e.visible) { e.rotation.y = t + i; e.position.y = spots[i][1] + Math.abs(Math.sin(t * 2 + i)) * 0.06; } }));
+    seasonal.eggs = spots.map(([x, y, z]) => new THREE.Vector3(wx(x, z), base + y, wz(x, z)));
+    seasonal.takeEgg = (i) => { if (eggs[i]) eggs[i].visible = false; };
+    seasonal.resetEggs = () => { for (const e of eggs) e.visible = true; };
+  }
+
   // everything built since the first pass: join the still parts again (the moving ones are kept)
   mergeByMaterial(g);
   for (const part of [bouncy, booth, cat, raft]) mergeByMaterial(part);
@@ -1992,6 +2247,7 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
     swing: ropeSwing,
     fishing,
     sandcastle,
+    seasonal,
     chimes: {
       stones: chimeStones.map((c) => new THREE.Vector3(wx(c.m.position.x, chimeZ), base + 0.1, wz(c.m.position.x, chimeZ))),
       press: (i) => { if (chimeStones[i]) chimeStones[i].dip = 1; },
@@ -2077,7 +2333,7 @@ function troughGeometry(curve: THREE.Curve<THREE.Vector3>, segments: number, hal
 }
 
 /** Hundreds of stones, merlons and planks: one mesh per material, so the castle draws quickly. */
-function mergeByMaterial(g: THREE.Group): void {
+export function mergeByMaterial(g: THREE.Group): void {
   const byMat = new Map<THREE.Material, THREE.Mesh[]>();
   for (const o of g.children) {
     const m = o as THREE.Mesh;
