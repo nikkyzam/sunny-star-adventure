@@ -181,7 +181,7 @@ export class Adult {
     const hips = at("Hips"), neck = at("Neck"), head = at("Head"), knee = at("LowerLegL"), shL = at("UpperArmL"), shR = at("UpperArmR");
     if (!hips || !neck || !head || !knee || !shL || !shR) return;
     const mat = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) => {
-      const m = new THREE.MeshStandardMaterial({ color, roughness: 0.85, flatShading: true, side: THREE.DoubleSide, ...extra });
+      const m = new THREE.MeshStandardMaterial({ color, roughness: 0.85, side: THREE.DoubleSide, ...extra });
       this.owned.push(m);
       return m;
     };

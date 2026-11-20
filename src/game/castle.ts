@@ -2089,18 +2089,42 @@ export function buildCastle(w: CastleWorld, c: CastleDef, base: number): CastleI
   if (season === "harvest") {
     const pumpkinM = std(0xf28c28, 0.7, { flatShading: true }), stemM = std(0x4f7a2a, 0.9);
     const pumpkin = (x: number, z: number, sz: number) => {
-      const p = mesh(new THREE.SphereGeometry(0.32 * sz, 12, 8).scale(1.15, 0.8, 1.15), pumpkinM, x, 0.24 * sz, z);
+      // a real pumpkin has deep ribs: pull every vertex in along eight grooves round the middle
+      const pg = new THREE.SphereGeometry(0.32 * sz, 32, 16);
+      const pp = pg.getAttribute("position");
+      for (let i = 0; i < pp.count; i++) {
+        const vx = pp.getX(i), vy = pp.getY(i), vz = pp.getZ(i);
+        const groove = 1 - 0.1 * Math.pow(1 - Math.abs(Math.sin(Math.atan2(vz, vx) * 4)), 2);
+        pp.setXYZ(i, vx * groove * 1.15, vy * 0.8 * (vy < 0 ? 0.9 : 1), vz * groove * 1.15);
+      }
+      pg.computeVertexNormals();
+      const p = mesh(pg, pumpkinM, x, 0.24 * sz, z);
       p.rotation.y = x * 3.1;
       mesh(new THREE.CylinderGeometry(0.03 * sz, 0.04 * sz, 0.12 * sz, 5), stemM, x, 0.5 * sz, z);
     };
     for (const [x, z, sz] of [[-2.5, 11, 1], [-2.6, 12.6, 0.8], [-2.4, 14.2, 1.1], [2.5, 14.8, 0.9], [2.4, 16, 0.7], [-2.5, 15.6, 0.75]] as const) pumpkin(x, z, sz);
     // wheat sheaves tied with string
-    const wheat = std(0xe8c35a, 1, { flatShading: true }), tie = std(0xa0522d, 0.9);
+    const wheat = std(0xd8b25a, 0.9), tie = std(0xa0522d, 0.9);
     for (const sx of [-1, 1]) {
       const x = sx * 2.5, z = 9.9 + (sx > 0 ? 3.6 : 7.2);
-      mesh(new THREE.CylinderGeometry(0.28, 0.16, 0.9, 10), wheat, x, 0.45, z);
-      mesh(new THREE.ConeGeometry(0.34, 0.45, 10), wheat, x, 1.1, z);
-      mesh(new THREE.TorusGeometry(0.2, 0.03, 4, 12).rotateX(Math.PI / 2), tie, x, 0.6, z);
+      // a real sheaf: dozens of stalks pinched in at the string, splaying out to the feet and the ears
+      const stalks: THREE.BufferGeometry[] = [];
+      for (let k = 0; k < 46; k++) {
+        const a = k * 2.399, r = 0.05 + Math.sqrt(k / 46) * 0.11;
+        const ox = Math.cos(a) * r, oz = Math.sin(a) * r;
+        const lower = new THREE.CylinderGeometry(0.008, 0.008, 0.62, 3);
+        lower.translate(0, -0.31, 0).rotateZ(-ox * 1.6).rotateX(oz * 1.6).translate(ox * 0.6, 0.62, oz * 0.6);
+        const upper = new THREE.CylinderGeometry(0.008, 0.008, 0.5, 3);
+        upper.translate(0, 0.25, 0).rotateZ(-ox * 2.4).rotateX(oz * 2.4).translate(ox * 0.6, 0.62, oz * 0.6);
+        const ear = new THREE.SphereGeometry(0.022, 5, 4).scale(1, 3.2, 1);
+        ear.translate(0, 0.55, 0).rotateZ(-ox * 2.4).rotateX(oz * 2.4).translate(ox * 0.6, 0.62, oz * 0.6);
+        stalks.push(lower.toNonIndexed(), upper.toNonIndexed(), ear.toNonIndexed());
+        lower.dispose(); upper.dispose(); ear.dispose();
+      }
+      const sheaf = mergeGeometries(stalks);
+      stalks.forEach((sg) => sg.dispose());
+      mesh(sheaf, wheat, x, 0, z);
+      mesh(new THREE.TorusGeometry(0.085, 0.018, 6, 16).rotateX(Math.PI / 2), tie, x, 0.62, z);
     }
     // the thanksgiving table: a cloth, a basket of apples, a loaf, grapes and a pumpkin pie
     const tx = -4.6, tz = 12.2;

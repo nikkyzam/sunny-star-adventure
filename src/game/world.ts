@@ -741,6 +741,121 @@ LEVELS.push(
 );
 
 /**
+ * Window glass drawn in code: the sky reflected (bright at the top, darker room behind lower down),
+ * with two soft diagonal glints, so a pane reads as glass rather than a flat blue card.
+ */
+let glassTex: THREE.CanvasTexture | null = null;
+function glassTexture(): THREE.CanvasTexture {
+  if (glassTex) return glassTex;
+  const N = 128;
+  const c = document.createElement("canvas");
+  c.width = c.height = N;
+  const g = c.getContext("2d")!;
+  const sky = g.createLinearGradient(0, 0, 0, N);
+  sky.addColorStop(0, "#e8f6ff");
+  sky.addColorStop(0.45, "#9cc8e6");
+  sky.addColorStop(1, "#3e5a70");
+  g.fillStyle = sky;
+  g.fillRect(0, 0, N, N);
+  g.fillStyle = "rgba(255,255,255,0.35)";
+  for (const [x0, w] of [[18, 26], [62, 10]] as const) {
+    g.beginPath();
+    g.moveTo(x0, N);
+    g.lineTo(x0 + w, N);
+    g.lineTo(x0 + w + 60, 0);
+    g.lineTo(x0 + 60, 0);
+    g.closePath();
+    g.fill();
+  }
+  glassTex = new THREE.CanvasTexture(c);
+  glassTex.colorSpace = THREE.SRGBColorSpace;
+  return glassTex;
+}
+
+/**
+ * Stained glass drawn in code: jewel-coloured pieces between dark lead lines, with a gold cross in
+ * the middle; `round` draws a rose window (petals round a centre) instead of a tall arched one.
+ */
+const stainedTex = new Map<string, THREE.CanvasTexture>();
+function stainedGlassTexture(round: boolean): THREE.CanvasTexture {
+  const key = round ? "rose" : "lancet";
+  const hit = stainedTex.get(key);
+  if (hit) return hit;
+  const W = 128, H = round ? 128 : 256;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const g = c.getContext("2d")!;
+  const cols = ["#d7263d", "#1b4fc4", "#f6b93b", "#2a9d5c", "#7b3fbf", "#3fa7d6", "#e8743b"];
+  let seed = round ? 71 : 37;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  g.fillStyle = "#1d1a22";
+  g.fillRect(0, 0, W, H);
+  g.strokeStyle = "#1d1a22";
+  g.lineWidth = 3;
+  if (round) {
+    const cx = W / 2, cy = H / 2;
+    for (let ring = 3; ring >= 1; ring--) {
+      const n = ring * 6;
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * Math.PI * 2, a1 = ((i + 1) / n) * Math.PI * 2;
+        g.fillStyle = cols[(i + ring * 2) % cols.length];
+        g.beginPath();
+        g.moveTo(cx, cy);
+        g.arc(cx, cy, ring * 21, a0, a1);
+        g.closePath();
+        g.fill();
+        g.stroke();
+      }
+    }
+    g.fillStyle = "#ffd75e";
+    g.beginPath();
+    g.arc(cx, cy, 12, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+  } else {
+    // a grid of irregular panes
+    const rows = 9, colsN = 4;
+    for (let r = 0; r < rows; r++) for (let k = 0; k < colsN; k++) {
+      const x = (k / colsN) * W, y = (r / rows) * H;
+      g.fillStyle = cols[Math.floor(rnd() * cols.length)];
+      g.fillRect(x + 1.5, y + 1.5, W / colsN - 3, H / rows - 3);
+    }
+    // a gold cross
+    g.fillStyle = "#ffd75e";
+    g.fillRect(W / 2 - 9, H * 0.2, 18, H * 0.55);
+    g.fillRect(W / 2 - 34, H * 0.34, 68, 16);
+    g.strokeRect(W / 2 - 9, H * 0.2, 18, H * 0.55);
+  }
+  // soft light shining through: brighter in the middle
+  const glow = g.createRadialGradient(W / 2, H / 2, 4, W / 2, H / 2, Math.max(W, H) * 0.7);
+  glow.addColorStop(0, "rgba(255,255,255,0.25)");
+  glow.addColorStop(1, "rgba(0,0,0,0.15)");
+  g.fillStyle = glow;
+  g.fillRect(0, 0, W, H);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  stainedTex.set(key, t);
+  return t;
+}
+
+/** A tall window with a round top (a church lancet), standing on its bottom edge at y = 0. */
+function archGeometry(w: number, h: number, segs = 12): THREE.BufferGeometry {
+  const r = w / 2;
+  const s = new THREE.Shape();
+  s.moveTo(-r, 0);
+  s.lineTo(r, 0);
+  s.lineTo(r, h - r);
+  s.absarc(0, h - r, r, 0, Math.PI, false);
+  s.lineTo(-r, 0);
+  const geo = new THREE.ShapeGeometry(s, segs);
+  // UVs from 0..1 over the window
+  const pos = geo.getAttribute("position"), uv = geo.getAttribute("uv");
+  for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) + r) / w, pos.getY(i) / h);
+  return geo;
+}
+
+/**
  * Ground patterns drawn in code: soft blotches and specks of lighter and darker tone, plus little
  * grass blades or sand grains. Values sit around white, so the material colour still sets the hue.
  */
@@ -805,7 +920,7 @@ function grassTone(hex: number): THREE.Color {
   const c = new THREE.Color(hex);
   const hsl = { h: 0, s: 0, l: 0 };
   c.getHSL(hsl);
-  return c.setHSL(hsl.h, Math.min(1, hsl.s * 0.82), Math.min(1, hsl.l * 1.08));
+  return c.setHSL(hsl.h - 0.012, Math.min(1, hsl.s * 0.7), Math.min(1, hsl.l * 1.04));
 }
 
 /** Guard Gus tells kids what the castle is dressed up for this time of year. */
@@ -2271,7 +2386,6 @@ export class World {
     box(shell, trimMat, b.w + 0.3, 0.25, b.d + 0.3, 0, b.h + 0.12, 0);
     for (const sx of [-1, 1]) {
       box(shell, doorMat, 0.14, doorTop, 0.12, (DOORWAY / 2 + 0.07) * sx, doorTop / 2, hd + 0.03, false); // door frame
-      if (side > 0.9) box(shell, winMat, Math.min(0.8, side - 0.3), 0.7, 0.06, (DOORWAY / 2 + side / 2) * sx, floorY + 1.45, hd + 0.03, false);
     }
     box(shell, doorMat, DOORWAY + 0.28, 0.14, 0.12, 0, doorTop + 0.07, hd + 0.03, false);
     if (b.church) {
@@ -2279,16 +2393,14 @@ export class World {
       const white = flat(0xfdf6ec), gold = new THREE.MeshStandardMaterial({ color: 0xffc93c, emissive: 0x6a4a00, metalness: 0.5, roughness: 0.35 });
       const tz = hd - 1.1;
       box(shell, white, 1.8, 2.6, 1.8, 0, b.h + 1.3, tz);
-      const spire = new THREE.Mesh(new THREE.ConeGeometry(1.45, 2.6, 4).rotateY(Math.PI / 4), flat(0x8a5a33));
-      spire.position.set(0, b.h + 3.9, tz);
+      // a slate spire, with a moulded band where it meets the tower
+      const spire = new THREE.Mesh(new THREE.ConeGeometry(1.2, 3.0, 8).rotateY(Math.PI / 8), new THREE.MeshStandardMaterial({ color: 0x55606c, roughness: 0.55, metalness: 0.1 }));
+      spire.position.set(0, b.h + 4.1, tz);
       spire.castShadow = true;
       shell.add(spire);
-      box(shell, gold, 0.16, 1.3, 0.16, 0, b.h + 5.7, tz);
-      box(shell, gold, 0.8, 0.16, 0.16, 0, b.h + 5.9, tz);
-      // a round window over the door
-      const rose = new THREE.Mesh(new THREE.CircleGeometry(0.5, 20), new THREE.MeshBasicMaterial({ color: 0x9fd8ff }));
-      rose.position.set(0, doorTop + 0.9, hd + 0.02);
-      shell.add(rose);
+      box(shell, white, 2.05, 0.2, 2.05, 0, b.h + 2.65, tz);
+      box(shell, gold, 0.12, 1.1, 0.12, 0, b.h + 6.05, tz);
+      box(shell, gold, 0.6, 0.12, 0.12, 0, b.h + 6.25, tz);
     }
 
     // ── inside ──
@@ -2980,11 +3092,15 @@ export class World {
     const mats: Record<string, () => THREE.Material> = {
       white: () => new THREE.MeshStandardMaterial({ color: 0xfdf6ec, roughness: 0.8 }),
       stone: () => new THREE.MeshStandardMaterial({ color: 0x9a9690, roughness: 1, flatShading: true }),
-      glass: () => new THREE.MeshStandardMaterial({ color: 0x9fd0f0, roughness: 0.08, metalness: 0.5 }),
+      glass: () => new THREE.MeshStandardMaterial({ color: 0xffffff, map: glassTexture(), roughness: 0.06, metalness: 0.2 }),
+      stained: () => new THREE.MeshStandardMaterial({ color: 0xffffff, map: stainedGlassTexture(false), emissive: 0xffffff, emissiveMap: stainedGlassTexture(false), emissiveIntensity: 0.35, roughness: 0.2, side: THREE.DoubleSide }),
+      rose: () => new THREE.MeshStandardMaterial({ color: 0xffffff, map: stainedGlassTexture(true), emissive: 0xffffff, emissiveMap: stainedGlassTexture(true), emissiveIntensity: 0.35, roughness: 0.2 }),
+      surround: () => new THREE.MeshStandardMaterial({ color: 0xd8d0c2, roughness: 0.95 }),
+      louvre: () => new THREE.MeshStandardMaterial({ color: 0x2a2622, roughness: 1 }),
       accent: () => new THREE.MeshStandardMaterial({ color: accent, roughness: 0.8 }),
       wood: () => new THREE.MeshStandardMaterial({ color: 0x7a4a2b, roughness: 0.9 }),
-      leaf: () => new THREE.MeshStandardMaterial({ color: 0x3fa34d, roughness: 0.9, flatShading: true }),
-      bloom: () => new THREE.MeshStandardMaterial({ color: RUG_COLORS[index % RUG_COLORS.length], roughness: 0.8, flatShading: true }),
+      leaf: () => new THREE.MeshStandardMaterial({ color: 0x4a8a3c, roughness: 0.9 }),
+      bloom: () => new THREE.MeshStandardMaterial({ color: RUG_COLORS[index % RUG_COLORS.length], roughness: 0.8 }),
       lamp: () => new THREE.MeshStandardMaterial({ color: 0xfff1c4, emissive: 0xffc861, emissiveIntensity: 0.9 }),
     };
     const add = (key: string, geo: THREE.BufferGeometry, x: number, y: number, z: number, ry = 0, rx = 0) => {
@@ -3007,22 +3123,35 @@ export class World {
       for (const sz of [-1, 1]) boxAt("white", 0.16, b.h, 0.16, sx * hw, b.h / 2, sz * hd);
     }
     // a window: frame, pane, cross bars, sill and two shutters, on a wall facing (nx, nz)
-    const windowAt = (x: number, y: number, z: number, ry: number) => {
+    const windowAt = (x: number, y: number, z: number, ry: number, k = 1) => {
       const fx = Math.sin(ry), fz = Math.cos(ry); // the way the wall faces
       const ax = Math.cos(ry), az = -Math.sin(ry); // along the wall
-      boxAt("white", 1.1, 1.1, 0.08, x + fx * 0.03, y, z + fz * 0.03, ry);
-      boxAt("glass", 0.9, 0.9, 0.06, x + fx * 0.07, y, z + fz * 0.07, ry);
-      boxAt("white", 0.05, 0.9, 0.04, x + fx * 0.1, y, z + fz * 0.1, ry);
-      boxAt("white", 0.9, 0.05, 0.04, x + fx * 0.1, y, z + fz * 0.1, ry);
-      boxAt("white", 1.3, 0.08, 0.2, x + fx * 0.1, y - 0.6, z + fz * 0.1, ry);
-      for (const s of [-1, 1]) boxAt("accent", 0.34, 1.1, 0.05, x + ax * s * 0.74 + fx * 0.04, y, z + az * s * 0.74 + fz * 0.04, ry);
+      if (b.church) {
+        // a tall stained-glass window with a round top, in a stone surround
+        const sur = archGeometry(0.95, 2.05);
+        sur.rotateY(ry);
+        add("surround", sur, x + fx * 0.03, y - 1.0, z + fz * 0.03);
+        boxAt("surround", 1.15, 0.1, 0.18, x + fx * 0.06, y - 1.02, z + fz * 0.06, ry);
+        const pane = archGeometry(0.75, 1.85);
+        pane.rotateY(ry);
+        add("stained", pane, x + fx * 0.05, y - 0.92, z + fz * 0.05);
+        return;
+      }
+      boxAt("white", 1.1 * k, 1.1 * k, 0.08, x + fx * 0.03, y, z + fz * 0.03, ry);
+      boxAt("glass", 0.9 * k, 0.9 * k, 0.06, x + fx * 0.07, y, z + fz * 0.07, ry);
+      boxAt("white", 0.05, 0.9 * k, 0.04, x + fx * 0.1, y, z + fz * 0.1, ry);
+      boxAt("white", 0.9 * k, 0.05, 0.04, x + fx * 0.1, y, z + fz * 0.1, ry);
+      boxAt("white", 1.3 * k, 0.08, 0.2, x + fx * 0.1, y - 0.6 * k, z + fz * 0.1, ry);
+      if (k >= 0.9) for (const s of [-1, 1]) boxAt("accent", 0.34, 1.1, 0.05, x + ax * s * 0.74 + fx * 0.04, y, z + az * s * 0.74 + fz * 0.04, ry);
     };
     const flowerBox = (x: number, y: number, z: number, ry: number) => {
       const fx = Math.sin(ry), fz = Math.cos(ry), ax = Math.cos(ry), az = -Math.sin(ry);
       boxAt("wood", 1.0, 0.2, 0.24, x + fx * 0.16, y, z + fz * 0.16, ry);
-      for (const k of [-0.3, 0, 0.3]) {
-        add("leaf", new THREE.IcosahedronGeometry(0.14, 0), x + fx * 0.16 + ax * k, y + 0.16, z + fz * 0.16 + az * k);
-        add("bloom", new THREE.IcosahedronGeometry(0.09, 0), x + fx * 0.2 + ax * k, y + 0.27, z + fz * 0.2 + az * k);
+      // a bushy row of small leaves with flowers peeping out
+      for (let j = 0; j < 7; j++) {
+        const k = -0.4 + j * (0.8 / 6), up = (j % 2) * 0.04;
+        add("leaf", new THREE.IcosahedronGeometry(0.09 + (j % 3) * 0.015, 1).scale(1, 0.8, 1), x + fx * (0.14 + (j % 2) * 0.05) + ax * k, y + 0.13 + up, z + fz * (0.14 + (j % 2) * 0.05) + az * k);
+        if (j % 2 === 0) add("bloom", new THREE.SphereGeometry(0.05, 8, 6), x + fx * 0.22 + ax * k, y + 0.22 + up, z + fz * 0.22 + az * k);
       }
     };
     const wy = floorY + 1.55;
@@ -3034,12 +3163,38 @@ export class World {
         for (let k = 0; k < n; k++) {
           const z = n === 1 ? 0 : (k - 0.5) * (b.d / 2);
           windowAt(sx * hw, y, z, sx * Math.PI / 2);
-          if (f === 0) flowerBox(sx * hw, y - 0.72, z, sx * Math.PI / 2);
+          if (f === 0 && !b.church) flowerBox(sx * hw, y - 0.72, z, sx * Math.PI / 2);
         }
       }
       const nb = b.w >= 5 ? 2 : 1;
       for (let k = 0; k < nb; k++) windowAt(nb === 1 ? 0 : (k - 0.5) * (b.w / 2), y, -hd, Math.PI);
       if (f > 0) for (const sx of [-1, 1]) if ((b.w - DOORWAY) / 2 > 0.9) windowAt(sx * (DOORWAY / 2 + (b.w - DOORWAY) / 4), y, hd, 0);
+    }
+    // the front windows either side of the door (real glass, or stained glass on a church)
+    {
+      const side = (b.w - DOORWAY) / 2;
+      if (side > 0.9) for (const sx of [-1, 1]) {
+        const fx = sx * (DOORWAY / 2 + side / 2);
+        if (b.church) windowAt(fx, floorY + 1.95, hd, 0);
+        else windowAt(fx, floorY + 1.45, hd, 0, Math.min(0.8, side - 0.3) / 0.9);
+      }
+    }
+    if (b.church) {
+      // a stone arch over the doorway, a stained-glass rose window above it, and a belfry with
+      // arched openings on every side of the steeple
+      add("surround", new THREE.RingGeometry(0.9, 1.08, 20, 1, 0, Math.PI), 0, floorY + 2.1, hd + 0.04);
+      add("wood", new THREE.CircleGeometry(0.9, 20, 0, Math.PI), 0, floorY + 2.1, hd + 0.02);
+      add("surround", new THREE.CircleGeometry(0.62, 28), 0, floorY + 3.55, hd + 0.03);
+      add("rose", new THREE.CircleGeometry(0.52, 28), 0, floorY + 3.55, hd + 0.05);
+      const tz = hd - 1.1;
+      for (let f = 0; f < 4; f++) {
+        const ry = (f * Math.PI) / 2;
+        const ox = Math.sin(ry) * 0.92, oz = Math.cos(ry) * 0.92;
+        const op = archGeometry(0.7, 1.3);
+        op.rotateY(ry);
+        add("louvre", op, ox, b.h + 0.7, tz + oz);
+        for (let l = 0; l < 4; l++) boxAt("white", 0.66, 0.05, 0.05, ox + Math.sin(ry) * 0.02, b.h + 0.85 + l * 0.22, tz + oz + Math.cos(ry) * 0.02, ry);
+      }
     }
     // by the door: a striped awning, a lamp, and flower boxes under the front windows
     if (!b.church) {
@@ -3461,7 +3616,7 @@ export class World {
         if (models) {
           const kinds: [string, number][] = [
             ["Flower_3_Group", 0.28], ["Fern_1", 0.45], ["Plant_1", 0.5], ["Clover_1", 0.45],
-            ["Flower_3_Group", 0.28], ["Bush_Common", 0.38], ["Mushroom_Common", 0.9],
+            ["Flower_3_Group", 0.28], ["Bush_Common", 0.38], ["Mushroom_Common", 0.38],
           ];
           const [name, sc] = kinds[Math.min(kinds.length - 1, Math.floor(d.v * kinds.length))];
           placer.add(name, d.x, d.y, d.z, { rotY: d.rot, scale: sc * (big ? 1.3 : 1), shadow: false, tint: frost, tintOnly: /Leaf|Leaves/ });
@@ -4132,6 +4287,60 @@ function cartoonBuilding(b: BuildingDef): THREE.Group {
  * A tree. `kind` picks the shape: 0 = pine (stacked cones), 1 = leafy (round crown on a forked
  * trunk), 2 = palm (curved trunk, drooping fronds, coconuts).
  */
+/** Shared palm-tree pieces: built once, used by every palm. */
+let palmCache: { trunk: THREE.BufferGeometry; frond: THREE.BufferGeometry; top: THREE.Vector3; bark: THREE.Material; leaf: THREE.Material; nut: THREE.Material } | null = null;
+function palmParts() {
+  if (palmCache) return palmCache;
+  // trunk: 11 short flared rings following a gentle curve (like a real coconut palm's ringed bark)
+  const rings: THREE.BufferGeometry[] = [];
+  const at = (t: number) => new THREE.Vector3(Math.pow(t, 1.6) * 0.55, t * 2.3, 0);
+  const N = 11;
+  for (let k = 0; k < N; k++) {
+    const t0 = k / N, t1 = (k + 1) / N;
+    const p0 = at(t0), p1 = at(t1);
+    const len = p0.distanceTo(p1);
+    const r = 0.13 - t0 * 0.045;
+    const ring = new THREE.CylinderGeometry(r * 0.92, r * 1.06, len, 10, 1);
+    const dir = p1.clone().sub(p0).normalize();
+    ring.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir));
+    const mid = p0.clone().add(p1).multiplyScalar(0.5);
+    ring.translate(mid.x, mid.y, mid.z);
+    rings.push(ring);
+  }
+  const trunk = mergeGeometries(rings);
+  rings.forEach((r) => r.dispose());
+  // frond: a long feathery leaf (leaflets along a central rib), folded into a shallow V and drooping
+  const L = 1.5, sh = new THREE.Shape();
+  const n = 14;
+  sh.moveTo(0, 0);
+  for (let i = 1; i <= n; i++) {
+    const t = i / n, w = 0.26 * Math.pow(Math.sin(Math.PI * Math.min(1, t * 1.05)), 0.7);
+    sh.lineTo(L * (t - 0.6 / n), w);
+    sh.lineTo(L * t, 0.03 * (1 - t));
+  }
+  for (let i = n; i >= 1; i--) {
+    const t = i / n, w = 0.26 * Math.pow(Math.sin(Math.PI * Math.min(1, t * 1.05)), 0.7);
+    sh.lineTo(L * t, -0.03 * (1 - t));
+    sh.lineTo(L * (t - 0.6 / n), -w);
+  }
+  sh.lineTo(0, 0);
+  const frond = new THREE.ShapeGeometry(sh);
+  frond.rotateX(-Math.PI / 2);
+  const fp = frond.getAttribute("position");
+  for (let i = 0; i < fp.count; i++) {
+    const x = fp.getX(i), z = fp.getZ(i), t = x / L;
+    fp.setY(i, 0.35 * t - 0.95 * t * t * t + Math.abs(z) * 0.35);
+  }
+  frond.computeVertexNormals();
+  palmCache = {
+    trunk, frond, top: at(1),
+    bark: new THREE.MeshStandardMaterial({ color: 0x8b6d4f, roughness: 0.95 }),
+    leaf: new THREE.MeshStandardMaterial({ color: 0x4f8f3a, roughness: 0.8, side: THREE.DoubleSide }),
+    nut: new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.9 }),
+  };
+  return palmCache;
+}
+
 function makeTree(trunkMat: THREE.Material, foliageMat: THREE.Material, s: number, kind = 0): THREE.Group {
   const g = new THREE.Group();
   const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number) => {
@@ -4151,22 +4360,23 @@ function makeTree(trunkMat: THREE.Material, foliageMat: THREE.Material, s: numbe
       add(new THREE.IcosahedronGeometry(r * s, 1), foliageMat, x * s, y * s, z * s);
     }
   } else if (kind === 2) {
-    // palm: a trunk in three leaning pieces
-    let x = 0, y = 0;
-    for (let k = 0; k < 3; k++) {
-      const piece = add(new THREE.CylinderGeometry((0.1 - k * 0.012) * s, (0.13 - k * 0.012) * s, 0.75 * s, 7), trunkMat, x + 0.07 * s, y + 0.36 * s, 0);
-      piece.rotation.z = -0.2;
-      x += 0.15 * s;
-      y += 0.72 * s;
+    // palm: a gently curving trunk of stacked bark rings, a crown of drooping feathery fronds, coconuts
+    const pm = palmParts();
+    const trunk = new THREE.Mesh(pm.trunk, pm.bark);
+    trunk.scale.setScalar(s);
+    trunk.castShadow = true;
+    g.add(trunk);
+    const top = pm.top.clone().multiplyScalar(s);
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2 + (k % 2) * 0.2;
+      const frond = new THREE.Mesh(pm.frond, pm.leaf);
+      frond.position.copy(top);
+      frond.scale.setScalar(s * (k % 2 ? 0.85 : 1));
+      frond.rotation.set(0, -a, (k % 2 ? 0.15 : 0.35), "YXZ");
+      frond.castShadow = true;
+      g.add(frond);
     }
-    for (let k = 0; k < 6; k++) {
-      const a = (k / 6) * Math.PI * 2;
-      const frond = add(new THREE.ConeGeometry(0.2 * s, 1.4 * s, 4), foliageMat, x + Math.cos(a) * 0.55 * s, y - 0.12 * s, Math.sin(a) * 0.55 * s);
-      frond.scale.z = 0.3;
-      frond.rotation.set(0, -a, -Math.PI / 2 - 0.35, "YXZ");
-    }
-    const nut = new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.9 });
-    for (const a of [0.5, 2.6, 4.4]) add(new THREE.SphereGeometry(0.1 * s, 8, 6), nut, x + Math.cos(a) * 0.14 * s, y - 0.12 * s, Math.sin(a) * 0.14 * s);
+    for (const a of [0.5, 2.6, 4.4]) add(new THREE.SphereGeometry(0.1 * s, 10, 8), pm.nut, top.x + Math.cos(a) * 0.13 * s, top.y - 0.14 * s, top.z + Math.sin(a) * 0.13 * s);
   } else {
     add(new THREE.CylinderGeometry(0.12 * s, 0.16 * s, 0.8 * s, 8), trunkMat, 0, 0.4 * s, 0);
     add(new THREE.ConeGeometry(0.78 * s, 1.0 * s, 10), foliageMat, 0, 1.1 * s, 0);

@@ -48,7 +48,7 @@ export function buildBethlehem(w: BethlehemWorld, b: BethlehemDef, base: number)
   const g = new THREE.Group();
   w.group.add(g);
   const std = (color: number, rough = 0.9, extra: THREE.MeshStandardMaterialParameters = {}) =>
-    new THREE.MeshStandardMaterial({ color, roughness: rough, flatShading: true, ...extra });
+    new THREE.MeshStandardMaterial({ color, roughness: rough, ...extra });
   const box = (m: THREE.Material, sx: number, sy: number, sz: number, x: number, y: number, z: number, parent: THREE.Object3D = g) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m);
     mesh.position.set(x, y, z);

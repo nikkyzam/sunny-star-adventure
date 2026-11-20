@@ -3,6 +3,32 @@
 A running record of what was added to Sunny Star Adventure, and why, for the decisions made
 without stopping to ask. Newest first. Live game: https://nikkyzam.github.io/sunny-star-adventure/
 
+## 2026-11-20: real windows, a proper village church, real harvest dressing (realism, round 2)
+
+**Windows that look like glass**
+- Every house pane now shows the sky reflected (bright at the top, darker room behind) with two soft glints, instead of flat blue.
+- The pale-yellow cards stuck either side of each front door were replaced by real framed windows with glass and glazing bars, sized to fit the wall.
+- Flower boxes now hold a bushy row of small rounded leaves with flowers peeping out, instead of three faceted green blobs.
+
+**The village church (and Sunshine Chapel) look like real churches**
+- Tall round-topped stained-glass windows in stone surrounds, on the front and both sides. Each window has jewel-coloured panes, lead lines and a gold cross, and glows softly.
+- A stained-glass rose window over the door.
+- A stone arch over the doorway, with a carved wooden half-circle above the door.
+- The steeple has arched belfry openings with louvres on all four sides, a moulded band, a taller eight-sided slate spire, and a gold cross on top.
+- **Decided:** church windows are drawn in code (no image files), so the game stays small and works offline.
+
+**Harvest dressing**
+- The wheat sheaves were yellow cones that looked like giant crayons. Each is now about 46 real stalks pinched in at the string, splaying out at the feet and at the ears of wheat.
+- Pumpkins have eight deep ribs, like real pumpkins.
+
+**Nature**
+- Palm trees were three straight cylinders with cone "leaves". Each is now a gently curving trunk of ringed bark, with a crown of eight long feathery fronds that arch and droop, and coconuts. The pieces are built once and shared, so palms cost no more to draw.
+- Animals (horses, donkeys, cows, dogs, deer and the rest) were faceted "low-poly". Their coats are now smoothed when they load, so they look rounded and soft, and they still walk and gallop the same.
+- Mushrooms were knee-high and grey. They're now a believable size.
+- Bible-time robes and Bethlehem's rounded buildings use smooth shading now, so cloth folds look soft rather than cut from card.
+- Grass is a touch less neon: a little more olive and less saturated, still bright and cheerful.
+- **Kept stylised on purpose:** the rainbow, coins, stars and rings, because they're the game's playful landmarks.
+
 ## 2026-11-19 (evening): sightseeing, scooters, and a more real look (the user asked for these)
 
 **Sightseeing photo spots 📸**

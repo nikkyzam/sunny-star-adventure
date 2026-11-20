@@ -70,6 +70,33 @@ function footSpeed(scene: THREE.Object3D, clip: THREE.AnimationClip | undefined)
 }
 const kits = new Map<AnimalKind, Promise<AnimalKit | null>>();
 
+/**
+ * Give a faceted mesh soft normals: every copy of a corner (same position) gets the average of their
+ * normals. The vertices themselves are left alone, so skinning and colours are untouched.
+ */
+function smoothNormals(geo: THREE.BufferGeometry): void {
+  const pos = geo.getAttribute("position"), nrm = geo.getAttribute("normal");
+  if (!pos || !nrm) return;
+  const key = (i: number) => `${Math.round(pos.getX(i) * 1e4)},${Math.round(pos.getY(i) * 1e4)},${Math.round(pos.getZ(i) * 1e4)}`;
+  const sum = new Map<string, THREE.Vector3>();
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    const k = key(i);
+    v.set(nrm.getX(i), nrm.getY(i), nrm.getZ(i));
+    const s = sum.get(k);
+    if (s) s.add(v); else sum.set(k, v.clone());
+  }
+  const out = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const s = sum.get(key(i))!;
+    v.copy(s);
+    if (v.lengthSq() < 1e-8) v.set(nrm.getX(i), nrm.getY(i), nrm.getZ(i));
+    v.normalize();
+    out[i * 3] = v.x; out[i * 3 + 1] = v.y; out[i * 3 + 2] = v.z;
+  }
+  geo.setAttribute("normal", new THREE.BufferAttribute(out, 3));
+}
+
 /** Load one kind of animal (once). Resolves null if it can't be loaded. */
 export function loadAnimal(kind: AnimalKind): Promise<AnimalKit | null> {
   let p = kits.get(kind);
@@ -85,6 +112,10 @@ export function loadAnimal(kind: AnimalKind): Promise<AnimalKit | null> {
           m.frustumCulled = false; // skinned: the bind-pose bounds don't follow the animation
           const mat = m.material as THREE.MeshStandardMaterial;
           if (mat.isMeshStandardMaterial) { mat.roughness = Math.max(mat.roughness, 0.75); mat.metalness = 0; }
+          // the pack is faceted "low-poly": join each corner's copies and average their normals, so
+          // coats look rounded and soft (skin weights are equal at shared corners, so they still bend)
+          smoothNormals(m.geometry);
+          if (mat.flatShading) { mat.flatShading = false; mat.needsUpdate = true; }
         }
       });
       const scale = HEIGHT[kind] / h;
