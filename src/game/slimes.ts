@@ -34,7 +34,7 @@ export class Slimes {
       const color = BODY_COLORS[i % BODY_COLORS.length];
       const body = new THREE.Mesh(
         new THREE.SphereGeometry(0.5, 16, 12),
-        new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.55 }),
+        new THREE.MeshStandardMaterial({ color, flatShading: false, roughness: 0.55 }),
       );
       body.scale.set(1, 0.72, 1);
       body.position.y = 0.36;

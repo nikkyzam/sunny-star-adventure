@@ -77,6 +77,37 @@ try {
   await page.waitForTimeout(400);
   d = await dbg();
   check(!d.kid.riding && !d.scooters[0].ridden, "hopped off");
+  // ── a bicycle ──
+  d = await dbg();
+  check(d.bikes.length === 3, "three bikes", JSON.stringify(d.bikes.map((b) => [+b.x.toFixed(1), +b.z.toFixed(1)])));
+  const b0 = d.bikes[0];
+  await page.evaluate(([x, z]) => window.__gameDebug().warp(x, z, 1), [b0.x + 0.7, b0.z + 0.5]);
+  await page.waitForTimeout(600);
+  await page.evaluate(([x, y, z]) => { window.__filmCam = (cam) => { cam.position.set(x + 2.0, y + 1.1, z + 1.2); cam.lookAt(x, y + 0.5, z); cam.fov = 45; }; }, [b0.x, b0.y, b0.z]);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: shot("bike-parked") });
+  await page.evaluate(() => { window.__filmCam = undefined; });
+  await page.keyboard.press("KeyE");
+  await page.waitForTimeout(400);
+  d = await dbg();
+  check(d.bikes[0].ridden && d.kid.riding, "on the bike");
+  const bx0 = d.kid.x, bz0 = d.kid.z;
+  await page.keyboard.down("KeyW");
+  let btop = 0;
+  for (let i = 0; i < 20; i++) { await page.waitForTimeout(100); btop = Math.max(btop, (await dbg()).bikes[0].speed); }
+  const rb = (await dbg()).bikes[0];
+  await page.evaluate(([x, y, z]) => { window.__filmCam = (cam) => { cam.position.set(x + 3.0, y + 1.6, z + 2.0); cam.lookAt(x, y + 0.9, z); cam.fov = 45; }; }, [rb.x, rb.y, rb.z]);
+  await page.waitForTimeout(150);
+  await page.screenshot({ path: shot("bike-riding") });
+  await page.keyboard.up("KeyW");
+  await page.evaluate(() => { window.__filmCam = undefined; });
+  d = await dbg();
+  check(Math.hypot(d.kid.x - bx0, d.kid.z - bz0) > 6, "pedalled along");
+  check(btop > 6 && btop <= 10.01, "a bike's top speed", `${btop.toFixed(1)} m/s`);
+  await page.waitForTimeout(1500);
+  await page.keyboard.press("KeyE");
+  await page.waitForTimeout(400);
+  check(!(await dbg()).kid.riding, "off the bike");
   check(errors.length === 0, "no page errors", errors[0] ?? "");
 } finally {
   await browser.close();

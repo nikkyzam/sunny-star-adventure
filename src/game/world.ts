@@ -193,6 +193,8 @@ export interface LevelDef {
   extraCars?: [number, number, number, number][];
   /** Kick scooters to ride: x, z, heading (they sit on the ground there). */
   scooters?: [number, number, number][];
+  /** Bicycles to ride: x, z, heading. */
+  bikes?: [number, number, number][];
   /** Sightseeing photo spots: the sight's name, where to stand (x, z) and the point to frame behind the kid. */
   photoSpots?: { name: string; at: [number, number]; look: [number, number, number] }[];
   /** A playground (slide, swings, roundabout, seesaw, sandbox): x, z of its middle. */
@@ -861,6 +863,8 @@ const ADVENTURE_ISLAND: LevelDef = {
   extraCars: [[38, 0, -62, 0]],
   // kick scooters: by the spawn, by the castle gate, at Coconut Cove and in the village
   scooters: [[3, 13, Math.PI / 2], [-15, 33, 0], [46, -57.5, 0], [12, -15, Math.PI]],
+  // bicycles: by the start, by the church and at the Pine Island cabin
+  bikes: [[4.5, 11.2, Math.PI / 2], [9, -31, 0], [-72, -59, 0]],
   // sightseeing: stand on the footprints and take a photo with the sight behind you
   photoSpots: [
     { name: "Sunny Castle", at: [-9.5, 24], look: [-27, 5.5, 22] },

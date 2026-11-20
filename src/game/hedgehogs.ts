@@ -33,7 +33,7 @@ export class Hedgehogs {
       const g = new THREE.Group();
       const body = new THREE.Mesh(
         new THREE.SphereGeometry(0.42, 14, 10),
-        new THREE.MeshStandardMaterial({ color: 0x9c6b4f, flatShading: true, roughness: 0.9 }),
+        new THREE.MeshStandardMaterial({ color: 0x9c6b4f, flatShading: false, roughness: 0.9 }),
       );
       body.scale.set(1, 0.75, 1.1);
       body.position.y = 0.34;
@@ -42,7 +42,7 @@ export class Hedgehogs {
 
       // spikes
       const spikes = new THREE.Group();
-      const spikeMat = new THREE.MeshStandardMaterial({ color: 0x5b4632, flatShading: true, roughness: 0.8 });
+      const spikeMat = new THREE.MeshStandardMaterial({ color: 0x5b4632, flatShading: false, roughness: 0.8 });
       for (let k = 0; k < 9; k++) {
         const a = (k / 9) * Math.PI * 2;
         const spike = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.4, 6), spikeMat);
@@ -56,7 +56,7 @@ export class Hedgehogs {
       // face
       const snout = new THREE.Mesh(
         new THREE.SphereGeometry(0.14, 8, 8),
-        new THREE.MeshStandardMaterial({ color: 0xc9a06b, flatShading: true, roughness: 0.8 }),
+        new THREE.MeshStandardMaterial({ color: 0xc9a06b, flatShading: false, roughness: 0.8 }),
       );
       snout.position.set(0, 0.28, 0.44);
       g.add(snout);

@@ -68,7 +68,7 @@ export class Props {
     for (const [x, y, z] of defs.cones ?? []) {
       const mesh = new THREE.Mesh(
         new THREE.ConeGeometry(0.28, 0.7, 10),
-        new THREE.MeshStandardMaterial({ color: 0xff7a1a, flatShading: true, roughness: 0.7 }),
+        new THREE.MeshStandardMaterial({ color: 0xff7a1a, flatShading: false, roughness: 0.7 }),
       );
       mesh.castShadow = true;
       this.cones.push({ mesh: add(mesh, x, y + 0.35, z), vel: new THREE.Vector3(), flying: false, done: false });
@@ -77,12 +77,12 @@ export class Props {
     (defs.boxes ?? []).forEach(([x, y, z], i) => {
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(0.9, 0.9, 0.9),
-        new THREE.MeshStandardMaterial({ color: BOX_COLORS[i % BOX_COLORS.length], flatShading: true, roughness: 0.7 }),
+        new THREE.MeshStandardMaterial({ color: BOX_COLORS[i % BOX_COLORS.length], flatShading: false, roughness: 0.7 }),
       );
       mesh.castShadow = true;
       const ribbon = new THREE.Mesh(
         new THREE.BoxGeometry(0.94, 0.94, 0.2),
-        new THREE.MeshStandardMaterial({ color: 0xfff6e5, flatShading: true, roughness: 0.6 }),
+        new THREE.MeshStandardMaterial({ color: 0xfff6e5, flatShading: false, roughness: 0.6 }),
       );
       mesh.add(ribbon);
       this.boxes.push({ mesh: add(mesh, x, y + 0.45, z), smashed: false });
@@ -91,7 +91,7 @@ export class Props {
     (defs.balls ?? []).forEach(([x, y, z], i) => {
       const mesh = new THREE.Mesh(
         new THREE.SphereGeometry(BALL_R, 12, 8),
-        new THREE.MeshStandardMaterial({ color: BALL_COLORS[i % BALL_COLORS.length], flatShading: true, roughness: 0.5 }),
+        new THREE.MeshStandardMaterial({ color: BALL_COLORS[i % BALL_COLORS.length], flatShading: false, roughness: 0.5 }),
       );
       mesh.castShadow = true;
       const band = new THREE.Mesh(
@@ -107,13 +107,13 @@ export class Props {
       const g = new THREE.Group();
       const pad = new THREE.Mesh(
         new THREE.BoxGeometry(2.4, 0.06, 2.4),
-        new THREE.MeshStandardMaterial({ color: 0x29d3a2, emissive: 0x0a6a4a, flatShading: true, roughness: 0.5 }),
+        new THREE.MeshStandardMaterial({ color: 0x29d3a2, emissive: 0x0a6a4a, flatShading: false, roughness: 0.5 }),
       );
       g.add(pad);
       for (const off of [-0.55, 0.25]) {
         const arrow = new THREE.Mesh(
           new THREE.ConeGeometry(0.55, 0.8, 3),
-          new THREE.MeshStandardMaterial({ color: 0xfff6b8, emissive: 0x8a7a20, flatShading: true }),
+          new THREE.MeshStandardMaterial({ color: 0xfff6b8, emissive: 0x8a7a20, flatShading: false }),
         );
         arrow.rotation.x = Math.PI / 2; // point along +Z (the pad's forward)
         arrow.scale.z = 0.15;
@@ -128,7 +128,7 @@ export class Props {
       const g = new THREE.Group();
       const wedge = new THREE.Mesh(
         new THREE.BoxGeometry(2.6, 0.12, 2.2),
-        new THREE.MeshStandardMaterial({ color: 0xffa94d, flatShading: true, roughness: 0.7 }),
+        new THREE.MeshStandardMaterial({ color: 0xffa94d, flatShading: false, roughness: 0.7 }),
       );
       wedge.rotation.x = -0.32; // rises toward +Z
       wedge.position.y = 0.36;
@@ -137,7 +137,7 @@ export class Props {
       for (const sx of [-1, 1]) {
         const stripe = new THREE.Mesh(
           new THREE.BoxGeometry(0.25, 0.14, 2.2),
-          new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true }),
+          new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: false }),
         );
         stripe.rotation.x = -0.32;
         stripe.position.set(0.9 * sx, 0.37, 0);

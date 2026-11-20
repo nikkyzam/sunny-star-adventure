@@ -24,6 +24,11 @@ without stopping to ask. Newest first. Live game: https://nikkyzam.github.io/sun
 - It's gentler than the car: a top speed of 8 m/s, against 13 for the car.
 - **Decided:** scooters are single-rider, and you have to stand close (1.6 m) to hop on, so you don't board one by accident.
 
+**Bicycles 🚲**
+- Three bikes with spoked wheels, turning pedals and a wicker basket: by the start, by the church, and at the Pine Island cabin.
+- The kid sits on the saddle with their hands on the bars. The bike leans into turns, and 📣 rings a bell.
+- Top speed is 10 m/s, between the scooter (8) and the car (13). One rider only.
+
 **A more real look**
 - **Ground:** code-drawn grass and sand textures on every island, with blades, patches and grains, repeating about every 3.5 m, plus soil on the island sides. Grass colour is a touch softer and less neon.
 - **Name tags:** villagers' name tags now show only when you're within about 10 m (they fade in), are hidden behind walls like real objects, and are a little smaller. Before, every name floated over everything, through walls, from any distance.
@@ -32,6 +37,9 @@ without stopping to ask. Newest first. Live game: https://nikkyzam.github.io/sun
 - **Sea:** smooth, glossy water that catches the sky (before, it was faceted triangles), with white surf gently lapping round every sandy beach.
 - **Scooter riders:** they hold the handlebar grips, leaning slightly forward, and the scooter is sized to the kids' height.
 - **Postcards:** they no longer pick "Jesus wept" as their verse.
+- **Creatures and toys:** smooth shading instead of facets for Sparky, pets, buddies, birds, hedgehogs, slimes, balls, pickups, chests, food, vehicles and ships.
+- **Sparky:** rounder, with more detail in his body and head, and rounded joints so his tail bends smoothly.
+- **Left faceted on purpose:** the world's rocks and terrain pieces. Low-detail rocks smooth-shaded look like lumpy potatoes, not stone.
 - **Kept stylised on purpose:** collectables (coins, stars, sky rings). They are game pieces kids need to spot.
 
 ## Ideas to improve the whole game (ranked, 2026-11-19)

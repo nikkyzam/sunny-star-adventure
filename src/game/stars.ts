@@ -41,7 +41,7 @@ export class Stars {
     emissive: 0x9a6b00,
     roughness: 0.35,
     metalness: 0.4,
-    flatShading: true,
+    flatShading: false,
   });
 
   build(spots: [number, number, number][]): void {

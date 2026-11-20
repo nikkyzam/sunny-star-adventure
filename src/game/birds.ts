@@ -27,14 +27,14 @@ export class Birds {
     this.items = defs.map((d, i) => {
       const g = new THREE.Group();
       const color = BODY_COLORS[i % BODY_COLORS.length];
-      const bodyMat = new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.6 });
+      const bodyMat = new THREE.MeshStandardMaterial({ color, flatShading: false, roughness: 0.6 });
       const body = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 10), bodyMat);
       body.scale.set(1, 0.85, 1.2);
       body.castShadow = true;
       g.add(body);
       const beak = new THREE.Mesh(
         new THREE.ConeGeometry(0.09, 0.22, 8),
-        new THREE.MeshStandardMaterial({ color: 0xffd93d, flatShading: true }),
+        new THREE.MeshStandardMaterial({ color: 0xffd93d, flatShading: false }),
       );
       beak.rotation.x = Math.PI / 2;
       beak.position.set(0, 0.02, 0.42);

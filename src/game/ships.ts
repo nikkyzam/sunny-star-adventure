@@ -35,7 +35,7 @@ const AWAY_TIME = 25;
 
 function makePirateShip(): THREE.Group {
   const g = new THREE.Group();
-  const flat = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.8 });
+  const flat = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: false, roughness: 0.8 });
   const wood = flat(0x6b4a2f), dark = flat(0x33323e);
   const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number) => {
     const mesh = new THREE.Mesh(geo, m);

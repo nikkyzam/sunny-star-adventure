@@ -21,8 +21,8 @@ export class Chests {
     this.group.clear();
     this.items = spots.map(([x, y, z]) => {
       const g = new THREE.Group();
-      const woodMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, flatShading: true, roughness: 0.9 });
-      const goldMat = new THREE.MeshStandardMaterial({ color: 0xffc93c, metalness: 0.5, roughness: 0.35, flatShading: true });
+      const woodMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, flatShading: false, roughness: 0.9 });
+      const goldMat = new THREE.MeshStandardMaterial({ color: 0xffc93c, metalness: 0.5, roughness: 0.35, flatShading: false });
 
       const base = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.6), woodMat);
       base.position.y = 0.25;

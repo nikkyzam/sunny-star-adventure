@@ -24,7 +24,7 @@ interface Food {
 const REGROW = 20; // seconds until an eaten snack comes back
 
 function flat(color: number): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.7 });
+  return new THREE.MeshStandardMaterial({ color, flatShading: false, roughness: 0.7 });
 }
 
 function part(g: THREE.Group, geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number): THREE.Mesh {

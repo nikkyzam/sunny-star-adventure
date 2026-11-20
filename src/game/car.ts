@@ -42,11 +42,13 @@ const BOAT_STEER = 1.7;
 
 const SKY_LIMIT = 48;      // how high aircraft can climb
 
-export type RideKind = "car" | "boat" | "heli" | "jet" | "scooter";
+export type RideKind = "car" | "boat" | "heli" | "jet" | "scooter" | "bike";
 
 /** Kick scooters: nippy but gentle, one rider standing on the deck. */
 const SCOOTER_MAX = 8;
 const SCOOTER_REVERSE = 2.5;
+/** Bicycles: a little quicker than a scooter, one rider on the saddle, pedalling. */
+const BIKE_MAX = 10;
 
 /** Per-aircraft handling. */
 const FLIGHT = {
@@ -95,6 +97,10 @@ export class Car {
       this.seatZ = 0.5;
       this.seatY = 0.55;
       this.buildJet();
+    } else if (kind === "bike") {
+      this.seatZ = -0.18;
+      this.seatY = 0.58;
+      this.buildBike();
     } else if (kind === "scooter") {
       this.seatZ = -0.22;
       this.seatY = 0.21;
@@ -228,9 +234,9 @@ export class Car {
   private modelRotor: THREE.Object3D | null = null;
 
   private buildBoat(): void {
-    const wood = new THREE.MeshStandardMaterial({ color: 0xc98a5b, flatShading: true, roughness: 0.85 });
-    const trim = new THREE.MeshStandardMaterial({ color: 0x4a69bd, flatShading: true, roughness: 0.7 });
-    const cloth = new THREE.MeshStandardMaterial({ color: 0xfff6e5, flatShading: true, roughness: 0.9, side: THREE.DoubleSide });
+    const wood = new THREE.MeshStandardMaterial({ color: 0xc98a5b, flatShading: false, roughness: 0.85 });
+    const trim = new THREE.MeshStandardMaterial({ color: 0x4a69bd, flatShading: false, roughness: 0.7 });
+    const cloth = new THREE.MeshStandardMaterial({ color: 0xfff6e5, flatShading: false, roughness: 0.9, side: THREE.DoubleSide });
 
     const hull = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.55, 2.6), wood);
     hull.position.y = 0.1;
@@ -286,7 +292,7 @@ export class Car {
   }
 
   private buildHeli(): void {
-    const flat = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.6 });
+    const flat = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: false, roughness: 0.6 });
     const yellow = flat(0xffc93c), dark = flat(0x33323e), white = flat(0xffffff);
     const glass = new THREE.MeshStandardMaterial({ color: 0xbfefff, roughness: 0.2, transparent: true, opacity: 0.55 });
     const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = this.group) => {
@@ -321,7 +327,7 @@ export class Car {
   }
 
   private buildJet(): void {
-    const flat = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.5 });
+    const flat = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: false, roughness: 0.5 });
     const white = flat(0xf4f6fb), blue = flat(0x4a69bd), red = flat(0xff4757), dark = flat(0x33323e);
     const glass = new THREE.MeshStandardMaterial({ color: 0xbfefff, roughness: 0.2, transparent: true, opacity: 0.55 });
     const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number) => {
@@ -344,6 +350,65 @@ export class Car {
     }
     add(new THREE.CylinderGeometry(0.16, 0.16, 0.12, 10), dark, 0, 0.16, 1.6).rotation.z = Math.PI / 2;
   }
+
+  /** A bicycle: two spoked wheels, a diamond frame, a saddle, pedals that turn, and a basket. */
+  private buildBike(): void {
+    const paint = new THREE.MeshStandardMaterial({ color: this.paintColor, roughness: 0.3, metalness: 0.4 });
+    const metal = new THREE.MeshStandardMaterial({ color: 0xc9ced6, roughness: 0.25, metalness: 0.85 });
+    const black = new THREE.MeshStandardMaterial({ color: 0x1c1c22, roughness: 0.8 });
+    const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = this.group) => {
+      const mesh = new THREE.Mesh(geo, m);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      parent.add(mesh);
+      return mesh;
+    };
+    const R = 0.34;
+    for (const z of [0.52, -0.52]) {
+      const w = new THREE.Group();
+      w.position.set(0, R, z);
+      this.group.add(w);
+      add(new THREE.TorusGeometry(R - 0.02, 0.025, 8, 28).rotateY(Math.PI / 2), black, 0, 0, 0, w);
+      add(new THREE.TorusGeometry(R - 0.05, 0.008, 4, 28).rotateY(Math.PI / 2), metal, 0, 0, 0, w);
+      for (let k = 0; k < 8; k++) {
+        const sp = add(new THREE.CylinderGeometry(0.004, 0.004, (R - 0.05) * 2, 3), metal, 0, 0, 0, w);
+        sp.rotation.x = (k / 8) * Math.PI;
+      }
+      add(new THREE.CylinderGeometry(0.03, 0.03, 0.06, 10).rotateZ(Math.PI / 2), metal, 0, 0, 0, w);
+      this.wheels.push(w as unknown as THREE.Mesh);
+    }
+    // the frame: a tube from each joint to the next
+    const tube = (a: THREE.Vector3, b: THREE.Vector3, r = 0.022, m: THREE.Material = paint) => {
+      const len = a.distanceTo(b);
+      const t = add(new THREE.CylinderGeometry(r, r, len, 8), m, (a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+      t.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+      return t;
+    };
+    const V = (y: number, z: number) => new THREE.Vector3(0, y, z);
+    const crank = V(0.36, -0.05), seat = V(0.72, -0.2), head = V(0.78, 0.36), rearAx = V(R, -0.52), frontAx = V(R, 0.52);
+    tube(crank, seat); tube(seat, head); tube(crank, head, 0.026); tube(crank, rearAx, 0.016); tube(seat, rearAx, 0.016);
+    tube(head, frontAx, 0.02, metal);                                       // the fork
+    tube(head, V(0.98, 0.32), 0.018, metal);                                // the stem
+    add(new THREE.CylinderGeometry(0.016, 0.016, 0.52, 8), metal, 0, 0.98, 0.32).rotation.z = Math.PI / 2; // handlebar
+    for (const sx of [-1, 1]) add(new THREE.CylinderGeometry(0.024, 0.024, 0.1, 8), black, sx * 0.24, 0.98, 0.32).rotation.z = Math.PI / 2;
+    tube(seat, V(0.8, -0.24), 0.014, metal);                                // seat post
+    const saddle = add(new THREE.SphereGeometry(0.09, 12, 8), black, 0, 0.83, -0.22);
+    saddle.scale.set(0.8, 0.35, 1.5);
+    // pedals on a crank that turns
+    const pedals = new THREE.Group();
+    pedals.position.copy(crank);
+    this.group.add(pedals);
+    add(new THREE.CylinderGeometry(0.06, 0.06, 0.03, 14).rotateZ(Math.PI / 2), metal, 0.04, 0, 0, pedals);
+    for (const sx of [-1, 1]) {
+      const arm = add(new THREE.BoxGeometry(0.02, 0.17, 0.025), metal, sx * 0.09, sx * 0.07, 0, pedals);
+      arm.position.y = sx * 0.07;
+      add(new THREE.BoxGeometry(0.1, 0.02, 0.06), black, sx * 0.14, sx * 0.15, 0, pedals);
+    }
+    this.pedals = pedals;
+    // a wicker basket on the front
+    add(new THREE.CylinderGeometry(0.15, 0.12, 0.16, 12, 1, true), new THREE.MeshStandardMaterial({ color: 0xc9a26b, roughness: 1, side: THREE.DoubleSide }), 0, 0.92, 0.5);
+  }
+  private pedals: THREE.Object3D | null = null;
 
   /** A kick scooter: a deck with grip tape, two little wheels, the stem and a T-bar with grips. */
   private buildScooter(): void {
@@ -441,7 +506,7 @@ export class Car {
 
   /** Hop / ramp launch. Only the car, and only from the ground. Returns whether it took off. */
   jump(v: number): boolean {
-    if ((this.kind !== "car" && this.kind !== "scooter") || this.vy !== 0) return false;
+    if ((this.kind !== "car" && this.kind !== "scooter" && this.kind !== "bike") || this.vy !== 0) return false;
     this.vy = v;
     this.pos.y += 0.06; // lift off the ground so the fall branch takes over
     return true;
@@ -459,7 +524,7 @@ export class Car {
       p.standRide = this.kind === "scooter";
       return "driver";
     }
-    if (!this.passenger && this.kind !== "scooter") {
+    if (!this.passenger && this.kind !== "scooter" && this.kind !== "bike") {
       this.passenger = p;
       p.riding = true;
       return "passenger";
@@ -473,7 +538,7 @@ export class Car {
     else if (this.passenger === p) this.passenger = null;
     else return;
     p.riding = false;
-    if (p.standRide) p.saddle = null;
+    if (p.standRide || this.kind === "bike") p.saddle = null;
     p.standRide = false;
     const side = Math.sign(Math.random() - 0.5) || 1;
     p.pos.set(
@@ -503,8 +568,8 @@ export class Car {
     }
     // speed toward target
     if (this.boostT > 0) this.boostT -= dt;
-    const scoot = this.kind === "scooter";
-    const max = this.boostT > 0 ? BOOST_SPEED : scoot ? SCOOTER_MAX : MAX_SPEED;
+    const scoot = this.kind === "scooter" || this.kind === "bike";
+    const max = this.boostT > 0 ? BOOST_SPEED : this.kind === "bike" ? BIKE_MAX : scoot ? SCOOTER_MAX : MAX_SPEED;
     if (axZ > 0.1) {
       if (this.speed < max) this.speed = Math.min(max, this.speed + ACCEL * (scoot ? 0.6 : 1) * axZ * dt);
     } else if (axZ < -0.1) this.speed = Math.max(scoot ? -SCOOTER_REVERSE : -MAX_REVERSE, this.speed - ACCEL * 0.8 * dt);
@@ -551,7 +616,8 @@ export class Car {
     if (this.pos.y < KILL_Y) this.fellOff = true;
 
     // wheels
-    const roll = (this.speed * dt) / (scoot ? 0.125 : 0.32);
+    const roll = (this.speed * dt) / (this.kind === "bike" ? 0.34 : scoot ? 0.125 : 0.32);
+    if (this.pedals) this.pedals.rotation.x += roll * 0.5;
     for (const w of this.wheels) w.rotation.x += roll;
 
     this.seat(this.driver, this.seatZ);
@@ -656,14 +722,14 @@ export class Car {
     p.facing = this.heading;
     p.group.rotation.y = this.heading;
     // on a scooter the hands reach forward to the T-bar (the same arm pose as holding reins)
-    if (this.kind === "scooter") p.saddle = { speed: Math.abs(this.speed), phase: 0, bar: true };
+    if (this.kind === "scooter" || this.kind === "bike") p.saddle = { speed: Math.abs(this.speed), phase: 0, bar: true };
   }
 }
 
 /** The rocket (a model only — boot.ts handles boarding and blast-off). Stands 5 tall on its fins. */
 export function makeRocket(): THREE.Group {
   const g = new THREE.Group();
-  const flat = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.5 });
+  const flat = (color: number) => new THREE.MeshStandardMaterial({ color, flatShading: false, roughness: 0.5 });
   const white = flat(0xf4f6fb), red = flat(0xff4757), dark = flat(0x33323e);
   const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number) => {
     const mesh = new THREE.Mesh(geo, m);

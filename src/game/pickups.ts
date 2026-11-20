@@ -35,11 +35,11 @@ export class Pickups {
   coinsTaken = 0;
 
   private coinGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.08, 18);
-  private coinMat = new THREE.MeshStandardMaterial({ color: 0xffc93c, emissive: 0x7a5a00, metalness: 0.5, roughness: 0.3, flatShading: true });
+  private coinMat = new THREE.MeshStandardMaterial({ color: 0xffc93c, emissive: 0x7a5a00, metalness: 0.5, roughness: 0.3, flatShading: false });
   private heartGeo = makeHeartGeometry();
-  private heartMat = new THREE.MeshStandardMaterial({ color: 0xff4d6d, emissive: 0x7a1030, roughness: 0.4, flatShading: true });
+  private heartMat = new THREE.MeshStandardMaterial({ color: 0xff4d6d, emissive: 0x7a1030, roughness: 0.4, flatShading: false });
   private magnetGeo = new THREE.TorusGeometry(0.32, 0.13, 10, 18, Math.PI);
-  private magnetMat = new THREE.MeshStandardMaterial({ color: 0xff4757, emissive: 0x5a0a12, roughness: 0.5, flatShading: true });
+  private magnetMat = new THREE.MeshStandardMaterial({ color: 0xff4757, emissive: 0x5a0a12, roughness: 0.5, flatShading: false });
   private balloonGeo = new THREE.SphereGeometry(0.42, 14, 10);
   private balloonMats = [0xff6b9d, 0x5cb8ff, 0xffd93d].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.35 }));
 

@@ -11,7 +11,7 @@ import { loadAnimal, makeAnimal, type AnimalKind, type AnimalModel } from "./cri
 const REAL: Partial<Record<number, AnimalKind>> = { 1: "shibainu", 5: "husky" };
 
 function mat(color: number): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.8 });
+  return new THREE.MeshStandardMaterial({ color, flatShading: false, roughness: 0.8 });
 }
 
 function part(parent: THREE.Object3D, geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number): THREE.Mesh {

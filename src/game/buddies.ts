@@ -36,7 +36,7 @@ function makeBuddyMesh(type: BuddyType): THREE.Group {
   const dark = new THREE.MeshStandardMaterial({ color: 0x33323e, roughness: 0.4 });
 
   if (type === "bunny") {
-    const cream = new THREE.MeshStandardMaterial({ color: 0xfff1dc, flatShading: true, roughness: 0.8 });
+    const cream = new THREE.MeshStandardMaterial({ color: 0xfff1dc, flatShading: false, roughness: 0.8 });
     const pink = new THREE.MeshStandardMaterial({ color: 0xffb3c6, roughness: 0.7 });
     const body = add(new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10), cream));
     body.position.y = 0.26;
@@ -53,15 +53,15 @@ function makeBuddyMesh(type: BuddyType): THREE.Group {
       eye.position.set(0.07 * sx, 0.55, 0.22);
     }
     const tail = add(new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true })));
+      new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: false })));
     tail.position.set(0, 0.28, -0.24);
   } else if (type === "birdie") {
-    const blue = new THREE.MeshStandardMaterial({ color: 0x5cb8ff, flatShading: true, roughness: 0.7 });
+    const blue = new THREE.MeshStandardMaterial({ color: 0x5cb8ff, flatShading: false, roughness: 0.7 });
     const body = add(new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), blue));
     body.scale.set(1, 0.9, 1.15);
     body.position.y = 0.28;
     const beak = add(new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.14, 8),
-      new THREE.MeshStandardMaterial({ color: 0xffa94d, flatShading: true })));
+      new THREE.MeshStandardMaterial({ color: 0xffa94d, flatShading: false })));
     beak.rotation.x = Math.PI / 2;
     beak.position.set(0, 0.3, 0.26);
     for (const sx of [-1, 1]) {
@@ -72,11 +72,11 @@ function makeBuddyMesh(type: BuddyType): THREE.Group {
       eye.position.set(0.08 * sx, 0.36, 0.2);
     }
     const tuft = add(new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.12, 6),
-      new THREE.MeshStandardMaterial({ color: 0x4a9ae0, flatShading: true })));
+      new THREE.MeshStandardMaterial({ color: 0x4a9ae0, flatShading: false })));
     tuft.position.set(0, 0.48, 0.02);
   } else {
-    const green = new THREE.MeshStandardMaterial({ color: 0x66d94e, flatShading: true, roughness: 0.7 });
-    const shellMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, flatShading: true, roughness: 0.9 });
+    const green = new THREE.MeshStandardMaterial({ color: 0x66d94e, flatShading: false, roughness: 0.7 });
+    const shellMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, flatShading: false, roughness: 0.9 });
     const shell = add(new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), shellMat));
     shell.position.y = 0.18;
     const belly = add(new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.26, 0.12, 12), green));

@@ -192,7 +192,7 @@ export class Dragon {
 
   private build(): void {
     const m = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) =>
-      new THREE.MeshStandardMaterial({ color, roughness: 0.75, flatShading: true, ...extra });
+      new THREE.MeshStandardMaterial({ color, roughness: 0.75, flatShading: false, ...extra });
     const green = m(0x3fbf7f), belly = m(0xffe3a0), spike = m(0xff9f43), horn = m(0xffd166),
       wingM = m(0x9b6bff, { side: THREE.DoubleSide }), white = m(0xffffff, { roughness: 0.3 }),
       black = m(0x1a1a24, { roughness: 0.2 }), saddle = m(0xd8343f), gold = m(0xf2c14e, { metalness: 0.4 }), pink = m(0xff8fb1);
@@ -206,8 +206,8 @@ export class Dragon {
     this.group.add(this.body);
 
     // a round body, a pale tummy, a saddle on top
-    add(new THREE.SphereGeometry(0.7, 12, 9), green, 0, 1.0, 0).scale.set(0.78, 0.8, 1.45);
-    add(new THREE.SphereGeometry(0.62, 12, 9), belly, 0, 0.88, 0.12).scale.set(0.72, 0.7, 1.35);
+    add(new THREE.SphereGeometry(0.7, 24, 16), green, 0, 1.0, 0).scale.set(0.78, 0.8, 1.45);
+    add(new THREE.SphereGeometry(0.62, 24, 16), belly, 0, 0.88, 0.12).scale.set(0.72, 0.7, 1.35);
     add(new THREE.BoxGeometry(0.62, 0.1, 0.6), saddle, 0, 1.53, -0.05).rotation.x = 0.04;
     add(new THREE.BoxGeometry(0.66, 0.03, 0.64), gold, 0, 1.49, -0.05);
     add(new THREE.BoxGeometry(0.2, 0.18, 0.08), saddle, 0, 1.62, 0.24);
@@ -219,21 +219,21 @@ export class Dragon {
     // neck and head, on one pivot so the whole thing turns
     this.head.position.set(0, 1.25, 0.8);
     this.body.add(this.head);
-    const neck = add(new THREE.CylinderGeometry(0.2, 0.3, 0.9, 8), green, 0, 0.4, 0.28, this.head);
+    const neck = add(new THREE.CylinderGeometry(0.2, 0.3, 0.9, 16), green, 0, 0.4, 0.28, this.head);
     neck.rotation.x = 0.65;
     add(new THREE.ConeGeometry(0.08, 0.2, 5), spike, 0, 0.62, 0.12, this.head).rotation.x = -0.5;
     const skull = new THREE.Group();
     skull.position.set(0, 0.9, 0.62);
     this.head.add(skull);
-    add(new THREE.SphereGeometry(0.36, 12, 9), green, 0, 0, 0, skull).scale.set(1, 0.92, 1);
-    add(new THREE.SphereGeometry(0.26, 10, 8), green, 0, -0.1, 0.32, skull).scale.set(1, 0.75, 1.1);
-    add(new THREE.SphereGeometry(0.2, 10, 8), belly, 0, -0.17, 0.36, skull).scale.set(1.05, 0.5, 1.05);
+    add(new THREE.SphereGeometry(0.36, 22, 16), green, 0, 0, 0, skull).scale.set(1, 0.92, 1);
+    add(new THREE.SphereGeometry(0.26, 18, 12), green, 0, -0.1, 0.32, skull).scale.set(1, 0.75, 1.1);
+    add(new THREE.SphereGeometry(0.2, 18, 12), belly, 0, -0.17, 0.36, skull).scale.set(1.05, 0.5, 1.05);
     for (const sx of [-1, 1]) {
       add(new THREE.SphereGeometry(0.035, 6, 5), black, sx * 0.08, -0.04, 0.6, skull); // nostrils
       const eye = new THREE.Group();
       eye.position.set(sx * 0.17, 0.1, 0.24);
       skull.add(eye);
-      add(new THREE.SphereGeometry(0.12, 10, 8), white, 0, 0, 0, eye);
+      add(new THREE.SphereGeometry(0.12, 16, 12), white, 0, 0, 0, eye);
       add(new THREE.SphereGeometry(0.068, 8, 6), black, sx * 0.01, 0.01, 0.08, eye);
       add(new THREE.SphereGeometry(0.022, 6, 4), white, sx * 0.03, 0.04, 0.135, eye); // the shine
       this.eyes.push(eye);
@@ -252,8 +252,9 @@ export class Dragon {
       seg.position.set(0, py, pz);
       parent.add(seg);
       const r = 0.3 * (1 - i / 7);
-      const piece = add(new THREE.CylinderGeometry(r * 0.8, r, 0.42, 7), green, 0, -0.03, -0.2, seg);
+      const piece = add(new THREE.CylinderGeometry(r * 0.8, r, 0.46, 16), green, 0, -0.03, -0.2, seg);
       piece.rotation.x = Math.PI / 2 + 0.2;
+      add(new THREE.SphereGeometry(r * 0.98, 16, 12), green, 0, 0, 0, seg); // a rounded joint, so the tail bends smoothly
       if (i % 2 === 0) add(new THREE.ConeGeometry(r * 0.35, r * 0.9, 4), spike, 0, r * 0.8, -0.2, seg).rotation.x = -0.4;
       this.tail.push(seg);
       parent = seg;
@@ -269,8 +270,8 @@ export class Dragon {
       const leg = new THREE.Group();
       leg.position.set(x, 0.62, z);
       this.body.add(leg);
-      add(new THREE.CylinderGeometry(0.13, 0.15, 0.5, 7), green, 0, -0.3, 0, leg);
-      add(new THREE.SphereGeometry(0.17, 8, 6), belly, 0, -0.56, 0.06, leg).scale.set(1, 0.55, 1.3);
+      add(new THREE.CylinderGeometry(0.13, 0.15, 0.5, 14), green, 0, -0.3, 0, leg);
+      add(new THREE.SphereGeometry(0.17, 14, 10), belly, 0, -0.56, 0.06, leg).scale.set(1, 0.55, 1.3);
       this.legs.push(leg);
     }
 
@@ -291,7 +292,7 @@ export class Dragon {
       w.scale.x = side;
       this.body.add(w);
       add(skin, wingM, 0, 0, 0, w);
-      const arm = add(new THREE.CylinderGeometry(0.05, 0.07, 1.95, 6), green, 0.95, 0.02, 0.33, w);
+      const arm = add(new THREE.CylinderGeometry(0.05, 0.07, 1.95, 10), green, 0.95, 0.02, 0.33, w);
       arm.rotation.z = Math.PI / 2;
       arm.rotation.y = 0.1;
       add(new THREE.ConeGeometry(0.05, 0.16, 5), horn, 1.95, 0.02, 0.3, w).rotation.z = -Math.PI / 2;

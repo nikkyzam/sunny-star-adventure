@@ -266,8 +266,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const jet = new Car("jet");
   const spareCars = [new Car("car", 0x2f80ed), new Car("car", 0xffd93d)]; // more cars parked around the bigger worlds
   const scooters = [new Car("scooter", 0xff6bb5), new Car("scooter", 0x2fc4c4), new Car("scooter", 0x8e5be8), new Car("scooter", 0xffa62b)]; // kick scooters parked round the island
-  const rides = [car, boat, heli, jet, ...spareCars, ...scooters];
-  const RIDE_ICON: Record<RideKind, string> = { car: "🚗", boat: "⛵", heli: "🚁", jet: "✈️", scooter: "🛴" };
+  const bikes = [new Car("bike", 0x2f80ed), new Car("bike", 0xff4757), new Car("bike", 0x3fbf6b)]; // bicycles with baskets
+  const rides = [car, boat, heli, jet, ...spareCars, ...scooters, ...bikes];
+  const RIDE_ICON: Record<RideKind, string> = { car: "🚗", boat: "⛵", heli: "🚁", jet: "✈️", scooter: "🛴", bike: "🚲" };
   const rocket = makeRocket();
   rocket.visible = false;
   const rocketBase = new THREE.Vector3();
@@ -322,6 +323,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   scene.add(jobs.group, traffic.group, scrolls.group, herds.group, quests.group);
   scene.add(...spareCars.map((c) => c.group));
   scene.add(...scooters.map((c) => c.group));
+  scene.add(...bikes.map((c) => c.group));
   scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, boat.group, heli.group, jet.group, rocket, rings.group, foods.group, fleet.group, props.group, npcs.group, pet.group, particles.points);
 
   // ── Run state ────────────────────────────────────────────────────────────
@@ -461,7 +463,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     let bestD = Infinity;
     for (const v of rides) {
       if (!v.group.visible) continue;
-      const reach = v.kind === "car" ? 2.4 : v.kind === "scooter" ? 1.6 : 3.6;
+      const reach = v.kind === "car" ? 2.4 : v.kind === "scooter" || v.kind === "bike" ? 1.6 : 3.6;
       for (const p of players) {
         if (p.riding) continue;
         const d2 = v.pos.distanceToSquared(p.pos);
@@ -1514,6 +1516,12 @@ export function startGame(canvas: HTMLCanvasElement): void {
       c.shoreY = car.shoreY;
       if (at) c.place(at[0], at[1], at[2], at[3]);
     });
+    bikes.forEach((c, k) => {
+      const at = world.def.bikes?.[k];
+      c.group.visible = at !== undefined;
+      c.shoreY = car.shoreY;
+      if (at) c.place(at[0], world.groundAt(at[0], at[1], 6)?.y ?? 0, at[1], at[2]);
+    });
     scooters.forEach((c, k) => {
       const at = world.def.scooters?.[k];
       c.group.visible = at !== undefined;
@@ -2321,6 +2329,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
       audio.sfx("powerup");
       audio.sfx("splash");
       hud.showToast(onTouch() ? "⛵ Stick sails · JUMP fires the cannon at pirate ships!" : "⛵ Move keys sail · Space fires the cannon at pirate ships · E hops out");
+    } else if (seat === "driver" && near.ride.kind === "bike") {
+      audio.sfx("bell");
+      hud.showToast(onTouch() ? "🚲 Push the stick to pedal · JUMP hops · 📣 rings the bell" : "🚲 Move keys to pedal · Space hops · H rings the bell · E hops off");
     } else if (seat === "driver" && near.ride.kind === "scooter") {
       audio.sfx("whee");
       hud.showToast(onTouch() ? "🛴 Push the stick to scoot · JUMP hops · 🛴 hops off" : "🛴 Move keys to scoot · Space hops · E hops off");
@@ -2342,7 +2353,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   function honk(): void {
     const v = rides.find((r) => r.group.visible && r.driver);
     if (!sm.is("playing") || !v) return;
-    audio.sfx(v.kind === "scooter" ? "bell" : "honk"); // a scooter rings its bell
+    audio.sfx(v.kind === "scooter" || v.kind === "bike" ? "bell" : "honk"); // scooters and bikes ring a bell
     particles.burst(v.pos.x, v.pos.y + 1.4, v.pos.z, 0xffe27a, 8, 2.5, 0.5, 3);
     cheerNear(v.pos, 14);
     net?.send({ t: "hk", L: levelIdx });
@@ -3701,6 +3712,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     canMount: mountInReach()?.what ?? null,
     sights: world.photoSpots.map((o) => ({ name: o.name, x: o.at.x, y: o.at.y, z: o.at.z })),
     sightsSeen: [...sights],
+    bikes: bikes.filter((c) => c.group.visible).map((c) => ({ x: c.pos.x, y: c.pos.y, z: c.pos.z, speed: c.speed, ridden: c.driver !== null })),
     scooters: scooters.filter((c) => c.group.visible).map((c) => ({ x: c.pos.x, y: c.pos.y, z: c.pos.z, speed: c.speed, ridden: c.driver !== null })),
     questHome: quests.homeCount,
     questTargets: () => quests.debugTargets(),
