@@ -33,7 +33,7 @@ import type { TrafficLoop } from "./traffic";
 import type { HerdDef } from "./critters";
 import { buildBethlehem, type BethlehemDef } from "./bethlehem";
 import { buildCastle, mergeByMaterial, type CastleDef, type CastleInfo } from "./castle";
-import { currentSeason } from "./seasons";
+import { currentSeason, isDusk } from "./seasons";
 import { Dragon } from "./dragon";
 import { KnightRings } from "./tilt";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -104,6 +104,8 @@ export interface BuildingDef {
   style?: "glass";
   /** A church (use with `enter`): a steeple with a cross outside; pews, a lectern and a cross inside. */
   church?: boolean;
+  /** Draw it as a real lighthouse: a round striped tower with a gallery and a glass lantern room. */
+  lighthouse?: boolean;
 }
 interface RoadDef { x: number; z: number; w: number; d: number }
 
@@ -985,7 +987,7 @@ const ADVENTURE_ISLAND: LevelDef = {
     { name: "Sunny Castle", at: [-9.5, 24], look: [-27, 5.5, 22] },
     { name: "the Village Church", at: [12, -29.5], look: [12, 3.2, -37.5] },
     { name: "the view from Lookout Hill", at: [-12, -29.6], look: [12, 2, -14] },
-    { name: "the Lighthouse", at: [6, -73.6], look: [6, 6, -78] },
+    { name: "the Lighthouse", at: [6, -73.6], look: [6, 8, -78] },
     { name: "Sunset Island's pink tower", at: [59.5, 19.5], look: [64, 3.5, 16] },
     { name: "the Rocket on Pine Island", at: [-70, -34.5], look: [-70, 3.2, -40.5] },
   ],
@@ -1073,7 +1075,7 @@ const ADVENTURE_ISLAND: LevelDef = {
     { x: 23, z: -18, w: 4, d: 4, h: 4.2, color: 0x5cb8ff, enter: true },
     { x: 16, z: -27, w: 5, d: 4, h: 3.2, color: 0xffd93d, enter: true },
     { x: 23, z: -27, w: 3.5, d: 3.5, h: 5, color: 0xb197fc, enter: true },
-    { x: 6, z: -78, w: 2.6, d: 2.6, h: 9, color: 0xfdf6ec }, // the lighthouse
+    { x: 6, z: -78, w: 2.6, d: 2.6, h: 9, color: 0xfdf6ec, lighthouse: true }, // the lighthouse
     { x: -14, z: 2, w: 9, d: 7, h: 5, color: 0xfff1c9, enter: true, lock: "mansion" }, // the mansion (for sale)
     { x: 42, z: -62, w: 4, d: 3.5, h: 3.2, color: 0xffa94d, enter: true },  // the Coconut Cove snack hut
     { x: -76, z: -63, w: 4, d: 4, h: 3.2, color: 0xc98a5b, enter: true },   // the Pine Island cabin
@@ -2309,6 +2311,100 @@ export class World {
    * furnished room. The outside is one group (`shell`) so it can be hidden while a kid is inside;
    * the room's own walls face inward only, so the ones between the camera and the kid vanish.
    */
+  /**
+   * A real lighthouse: a round tower tapering upward in red and white bands, a little door and
+   * windows, a railed gallery at the top (where kids land), and a glass lantern room with a red dome.
+   * The lamp turns slowly, sweeping a soft glow round.
+   */
+  private buildLighthouse(b: BuildingDef): void {
+    const g = new THREE.Group();
+    g.position.set(b.x, 0, b.z);
+    const red = new THREE.MeshStandardMaterial({ color: 0xc8352e, roughness: 0.6 });
+    const white = new THREE.MeshStandardMaterial({ color: 0xf6f3ec, roughness: 0.6 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x2d3338, roughness: 0.5, metalness: 0.4 });
+    const r0 = Math.min(b.w, b.d) / 2 + 0.05, r1 = r0 * 0.7, H = b.h;
+    const bands = 5;
+    const rAt = (y: number) => r0 + (r1 - r0) * (y / H);
+    for (let k = 0; k < bands; k++) {
+      const y0 = (k / bands) * H, y1 = ((k + 1) / bands) * H;
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(rAt(y1), rAt(y0), y1 - y0, 32), k % 2 ? red : white);
+      m.position.y = (y0 + y1) / 2;
+      m.castShadow = m.receiveShadow = true;
+      g.add(m);
+    }
+    // a stone footing, a door with a little roof, and small windows climbing round the tower
+    const stone = new THREE.Mesh(new THREE.CylinderGeometry(r0 + 0.15, r0 + 0.25, 0.5, 32), new THREE.MeshStandardMaterial({ color: 0x8f8a82, roughness: 1 }));
+    stone.position.y = 0.25;
+    stone.receiveShadow = true;
+    g.add(stone);
+    const door = new THREE.Mesh(archGeometry(0.8, 1.7), new THREE.MeshStandardMaterial({ color: 0x2f5d7c, roughness: 0.7 }));
+    door.position.set(0, 0.45, r0 - 0.02);
+    g.add(door);
+    const glass = new THREE.MeshStandardMaterial({ color: 0xffffff, map: glassTexture(), roughness: 0.1, metalness: 0.2 });
+    for (const [y, a] of [[3.0, 0.3], [5.2, 2.4], [7.2, 0.9]] as const) {
+      const win = new THREE.Mesh(archGeometry(0.34, 0.6), glass);
+      const r = rAt(y) + 0.01;
+      win.position.set(Math.sin(a) * r, y, Math.cos(a) * r);
+      win.rotation.y = a;
+      g.add(win);
+    }
+    // the gallery: a deck wider than the tower, with a railing of posts and a top rail
+    const deck = new THREE.Mesh(new THREE.CylinderGeometry(r1 + 0.55, r1 + 0.2, 0.25, 32), dark);
+    deck.position.y = H + 0.12;
+    deck.castShadow = true;
+    g.add(deck);
+    const posts: THREE.BufferGeometry[] = [];
+    const rr = r1 + 0.5;
+    for (let k = 0; k < 20; k++) {
+      const a = (k / 20) * Math.PI * 2;
+      posts.push(new THREE.CylinderGeometry(0.025, 0.025, 0.7, 5).translate(Math.cos(a) * rr, H + 0.6, Math.sin(a) * rr));
+    }
+    posts.push(new THREE.TorusGeometry(rr, 0.035, 6, 40).rotateX(Math.PI / 2).translate(0, H + 0.95, 0));
+    posts.push(new THREE.TorusGeometry(rr, 0.02, 6, 40).rotateX(Math.PI / 2).translate(0, H + 0.6, 0));
+    const rail = new THREE.Mesh(mergeGeometries(posts.map((p) => p.index ? p.toNonIndexed() : p)), dark);
+    g.add(rail);
+    // the lantern room: glass all round, a glowing lamp inside, a red dome and a ball on top
+    const lr = r1 * 0.62;
+    const lantern = new THREE.Mesh(new THREE.CylinderGeometry(lr, lr, 1.2, 16, 1, true),
+      new THREE.MeshStandardMaterial({ color: 0xdff4ff, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
+    lantern.position.y = H + 0.85;
+    g.add(lantern);
+    const frames: THREE.BufferGeometry[] = [];
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      frames.push(new THREE.BoxGeometry(0.05, 1.2, 0.05).translate(Math.cos(a) * lr, H + 0.85, Math.sin(a) * lr));
+    }
+    g.add(new THREE.Mesh(mergeGeometries(frames.map((f) => f.toNonIndexed())), dark));
+    const lamp = new THREE.Group();
+    lamp.position.y = H + 0.85;
+    lamp.add(new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), new THREE.MeshBasicMaterial({ color: 0xfff1b0 })));
+    // the beam fades out along its length (bright at the lamp, nothing at the far end)
+    const fade = document.createElement("canvas");
+    fade.width = 4; fade.height = 64;
+    const fg = fade.getContext("2d")!;
+    const grad = fg.createLinearGradient(0, 0, 0, 64);
+    grad.addColorStop(0, "#fff");
+    grad.addColorStop(1, "#000");
+    fg.fillStyle = grad;
+    fg.fillRect(0, 0, 4, 64);
+    const beamM = new THREE.MeshBasicMaterial({ color: 0xfff3c4, transparent: true, opacity: 0.35, alphaMap: new THREE.CanvasTexture(fade), depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    for (const s of [1, -1]) {
+      const beam = new THREE.Mesh(new THREE.ConeGeometry(0.9, 9, 16, 1, true).rotateZ((s * Math.PI) / 2).translate(s * 4.6, 0, 0), beamM);
+      beam.visible = isDusk(); // a beam only shows once the light fades
+      lamp.add(beam);
+    }
+    g.add(lamp);
+    this.anim.push((t) => { lamp.rotation.y = t * 0.8; });
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(lr + 0.12, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), red);
+    dome.position.y = H + 1.45;
+    dome.castShadow = true;
+    g.add(dome);
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8), dark);
+    ball.position.y = H + 1.45 + lr + 0.2;
+    g.add(ball);
+    this.group.add(g);
+  }
+
   /** A sightseeing spot: painted footprints to stand on and a little camera sign facing the kid. */
   private buildPhotoSpot(ps: { name: string; at: [number, number]; look: [number, number, number] }): void {
     const [x, z] = ps.at;
@@ -2722,7 +2818,8 @@ export class World {
           this.buildHouse(b, bi, trimMat, doorMat, winMat);
           continue;
         }
-        this.decor.push({ t: "building", b });
+        if (b.lighthouse) this.buildLighthouse(b);
+        else this.decor.push({ t: "building", b });
         // roof is landable
         this.platforms.push({
           kind: "box", x: b.x, z: b.z, r: 0, hw: b.w / 2 + 0.15, hd: b.d / 2 + 0.15, topY: b.h + 0.25, spring: 0,

@@ -45,6 +45,13 @@ try {
     await page.evaluate(() => { window.__filmCam = undefined; });
   };
   await film("palms", [52, -27], [50, 3.2, -22], [54, 2.2, -30]);
+  await film("lighthouse", [6, -74], [13, 5, -66], [6, 6, -78]);
+  await page.goto(`http://127.0.0.1:${port}/?level=9&time=dusk`, { waitUntil: "load" });
+  await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 90000 });
+  await page.click("[data-action=play]");
+  await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 30000 });
+  await page.waitForTimeout(2500);
+  await film("lighthouse-dusk", [6, -74], [14, 6, -64], [6, 7, -78]);
   await film("church", [12, -29], [12, 2.6, -28], [12, 3.6, -37.5]);
   await film("horse", [-8, 31], [-7.5, 1.8, 32.5], [-11.5, 0.9, 28]);
   check(errors.length === 0, "no page errors", errors[0]);

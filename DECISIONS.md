@@ -3,6 +3,17 @@
 A running record of what was added to Sunny Star Adventure, and why, for the decisions made
 without stopping to ask. Newest first. Live game: https://nikkyzam.github.io/sunny-star-adventure/
 
+## 2026-11-20 (later): a real lighthouse
+
+- The lighthouse was a square grey brick block. It's now a real one:
+  - a round tower that narrows as it rises, painted in red and white bands, on a stone footing
+  - a blue arched door and small arched windows climbing round it
+  - a railed iron gallery at the top, where kids still land after the spring
+  - a glass lantern room with a glowing lamp, a red dome and a ball on top
+- **Decided:** the lamp turns all the time, but its sweeping beam only shows in the golden evening, as with a real lighthouse. It fades out softly along its length.
+- The tower's size, the spring to the top and Keeper Kai's quest are unchanged.
+- The lighthouse postcard now aims higher, so the lantern is in the picture.
+
 ## 2026-11-20: real windows, a proper village church, real harvest dressing (realism, round 2)
 
 **Windows that look like glass**
