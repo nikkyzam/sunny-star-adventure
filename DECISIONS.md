@@ -3,6 +3,20 @@
 A running record of what was added to Sunny Star Adventure, and why, for the decisions made
 without stopping to ask. Newest first. Live game: https://nikkyzam.github.io/sunny-star-adventure/
 
+## 2026-11-23: fixes from a code review of the realism work
+
+- **The lighthouse star was hidden inside the new red dome.** It now floats on the gallery, beside the lantern room.
+- **Kids could stand inside the lantern room.** The lantern is now solid. A kid landing near it is nudged out onto the gallery, and the very top of the dome is a little perch.
+- **The cargo helicopter flew through the dome.** The Sky cargo drop over the lighthouse is now above the dome.
+- **The lighthouse is round, but its collision was square.** It now uses a smaller box inside the round wall, so there's no invisible wall at the corners. The stone footing is tighter.
+- **The lighthouse door and windows floated off the curved wall.** They're now bent onto the curve and sit flush.
+- **The lighthouse beam only checked the time when the island loaded.** It now checks every couple of seconds, so it comes on at 5:30 pm even mid-game.
+- **Front windows flickered against the door frame on narrow houses.** They're now sized to fit between the door frame and the corner, and sit just above the flower box.
+- **Animals:** smoothing now keeps sharp features (eyes, hooves, ear rims) crisp and only rounds gentle curves.
+- **Palm trees:** they share one set of pieces, and level changes no longer throw those away and rebuild them (less stutter on iPads).
+- **Tidy-up:** removed an unused window material.
+- **Tests:** the nature picture test now checks that the lighthouse star is reachable, and that a kid on top lands on the gallery or the dome, never inside the lantern.
+
 ## 2026-11-20 (later): a real lighthouse
 
 - The lighthouse was a square grey brick block. It's now a real one:

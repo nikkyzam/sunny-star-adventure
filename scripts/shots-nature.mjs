@@ -46,6 +46,21 @@ try {
   };
   await film("palms", [52, -27], [50, 3.2, -22], [54, 2.2, -30]);
   await film("lighthouse", [6, -74], [13, 5, -66], [6, 6, -78]);
+  await film("lighthouse-door", [9, -74], [7.6, 1.6, -73.8], [6, 1.2, -76.6]);
+  // the lighthouse star floats on the gallery, clear of the lantern room and the dome
+  const ls = (await page.evaluate(() => window.__gameDebug().stars)).find((st) => Math.hypot(st.x - 6, st.z + 78) < 3 && st.y > 8);
+  check(!!ls && Math.hypot(ls.x - 6, ls.z + 78) > 0.9 && ls.y < 10.45, "the lighthouse star is on the gallery, not inside the dome", ls ? `${ls.x},${ls.y},${ls.z}` : "none");
+  // a kid dropped onto the middle of the top ends up on the gallery, outside the lantern room
+  await page.evaluate(() => window.__gameDebug().warp(6.05, -78.05, 10.9));
+  await page.waitForTimeout(1500);
+  const top = await page.evaluate(() => { const d = window.__gameDebug(); return { x: d.px, y: d.py, z: d.pz }; });
+  const off = Math.hypot(top.x - 6, top.z + 78);
+  await page.evaluate(() => window.__gameDebug().warp(6.45, -78.1, 9.9));
+  await page.waitForTimeout(1500);
+  const top2 = await page.evaluate(() => { const d = window.__gameDebug(); return { x: d.px, y: d.py, z: d.pz }; });
+  const off2 = Math.hypot(top2.x - 6, top2.z + 78);
+  check(off2 > 0.75 && Math.abs(top2.y - 9.25) < 0.4, "a kid landing beside the lantern is nudged out onto the gallery", `off ${off2.toFixed(2)} y ${top2.y.toFixed(2)}`);
+  check((off > 0.75 && Math.abs(top.y - 9.25) < 0.4) || top.y > 10.9, "a kid on top stands on the gallery or the dome, never inside the lantern", `off ${off.toFixed(2)} y ${top.y.toFixed(2)}`);
   await page.goto(`http://127.0.0.1:${port}/?level=9&time=dusk`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__GAME_READY__ === true, null, { timeout: 90000 });
   await page.click("[data-action=play]");

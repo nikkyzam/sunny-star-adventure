@@ -841,6 +841,24 @@ function stainedGlassTexture(round: boolean): THREE.CanvasTexture {
   return t;
 }
 
+/**
+ * The same round-topped shape as a fine grid (no long thin triangles), so it can be bent onto a
+ * curved wall and stay flush everywhere.
+ */
+function archGrid(w: number, h: number, nx = 12, ny = 16): THREE.BufferGeometry {
+  const r = w / 2, spring = h - r;
+  const geo = new THREE.PlaneGeometry(w, h, nx, ny).translate(0, h / 2, 0);
+  const pos = geo.getAttribute("position"), uv = geo.getAttribute("uv");
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    let y = pos.getY(i);
+    if (y > spring) y = spring + ((y - spring) / r) * Math.sqrt(Math.max(0, r * r - x * x));
+    pos.setY(i, y);
+    uv.setXY(i, (x + r) / w, y / h);
+  }
+  return geo;
+}
+
 /** A tall window with a round top (a church lancet), standing on its bottom edge at y = 0. */
 function archGeometry(w: number, h: number, segs = 12): THREE.BufferGeometry {
   const r = w / 2;
@@ -1105,7 +1123,7 @@ const ADVENTURE_ISLAND: LevelDef = {
     [-16, 1.6, -8], [4, 1.6, -40],                                               // the forest
     [-12, 3.0, -30.5], [-12, 9.5, -32],                                           // Lookout Hill and the sky above it
     [6, 1.3, 22],                                                                // the end of the dock
-    [-56, 1.4, -14], [54, 1.4, -30], [56, 1.4, -27], [6, 10.6, -78], [30, 1.3, 15], // by boat
+    [-56, 1.4, -14], [54, 1.4, -30], [56, 1.4, -27], [7.2, 9.9, -78], [30, 1.3, 15], // by boat (the lighthouse one floats on the gallery)
     [-38, 1.4, 36],                                                              // Shell Islet (by boat)
     [30, 1.2, -50], [46, 1.5, -66], [50, 2.1, -60], [42, 4.7, -62],              // the causeway and Coconut Cove
     [-40.6, 1.2, -44.4], [-66, 3.0, -58], [-66, 10, -60], [-78, 1.6, -54],        // Pine Island
@@ -1336,7 +1354,7 @@ const ADVENTURE_ISLAND: LevelDef = {
     },
     {
       name: "Cargo Cass", x: 10.5, y: 0, z: 7.5, outfit: 5, hat: 0, skin: 4, job: "cargo",
-      spots: [[30, 30, 0], [6, 9.2, -78], [64, 6.3, 16], [-66, 2.1, -60], [-12, 1.8, -32]],
+      spots: [[30, 30, 0], [6, 11.5, -78], [64, 6.3, 16], [-66, 2.1, -60], [-12, 1.8, -32]],
       lines: ["Parcels to fly! Can you fly a helicopter?"],
     },
     {
@@ -2317,6 +2335,19 @@ export class World {
    * The lamp turns slowly, sweeping a soft glow round.
    */
   private buildLighthouse(b: BuildingDef): void {
+    // collision: a box a little inside the round wall (so neither faces nor diagonals feel like an
+    // invisible wall), the gallery deck to land on, a solid lantern room in the middle of it, and a
+    // perch on the very top of the dome
+    const H0 = b.h, rb = (Math.min(b.w, b.d) / 2 + 0.05) * 0.8;
+    const lrC = (Math.min(b.w, b.d) / 2 + 0.05) * 0.7 * 0.62 + 0.12;
+    this.solids.push({ minX: b.x - rb, maxX: b.x + rb, minZ: b.z - rb, maxZ: b.z + rb, topY: H0 });
+    const box = (hw: number, topY: number) => this.platforms.push({
+      kind: "box", x: b.x, z: b.z, r: 0, hw, hd: hw, topY, spring: 0,
+      baseX: b.x, baseZ: b.z, dx: 0, dz: 0, mesh: new THREE.Object3D(), squashT: 0,
+    });
+    box(b.w / 2 + 0.15, H0 + 0.25);
+    this.solids.push({ minX: b.x - lrC, maxX: b.x + lrC, minZ: b.z - lrC, maxZ: b.z + lrC, topY: H0 + 2.2 });
+    box(0.3, H0 + 1.45 + lrC - 0.05);
     const g = new THREE.Group();
     g.position.set(b.x, 0, b.z);
     const red = new THREE.MeshStandardMaterial({ color: 0xc8352e, roughness: 0.6 });
@@ -2333,20 +2364,32 @@ export class World {
       g.add(m);
     }
     // a stone footing, a door with a little roof, and small windows climbing round the tower
-    const stone = new THREE.Mesh(new THREE.CylinderGeometry(r0 + 0.15, r0 + 0.25, 0.5, 32), new THREE.MeshStandardMaterial({ color: 0x8f8a82, roughness: 1 }));
+    const stone = new THREE.Mesh(new THREE.CylinderGeometry(r0 + 0.04, r0 + 0.1, 0.5, 32), new THREE.MeshStandardMaterial({ color: 0x8f8a82, roughness: 1 }));
     stone.position.y = 0.25;
     stone.receiveShadow = true;
     g.add(stone);
-    const door = new THREE.Mesh(archGeometry(0.8, 1.7), new THREE.MeshStandardMaterial({ color: 0x2f5d7c, roughness: 0.7 }));
-    door.position.set(0, 0.45, r0 - 0.02);
-    g.add(door);
+    // the door is bent onto the curving, narrowing wall so it sits flush
+    const doorGeo = archGrid(0.8, 1.7);
+    {
+      const dp = doorGeo.getAttribute("position");
+      for (let i = 0; i < dp.count; i++) {
+        const x = dp.getX(i), y = dp.getY(i), R = rAt(0.45 + y) + 0.015;
+        const a = x / R;
+        dp.setXYZ(i, Math.sin(a) * R, 0.45 + y, Math.cos(a) * R);
+      }
+      doorGeo.computeVertexNormals();
+    }
+    g.add(new THREE.Mesh(doorGeo, new THREE.MeshStandardMaterial({ color: 0x2f5d7c, roughness: 0.7 })));
     const glass = new THREE.MeshStandardMaterial({ color: 0xffffff, map: glassTexture(), roughness: 0.1, metalness: 0.2 });
     for (const [y, a] of [[3.0, 0.3], [5.2, 2.4], [7.2, 0.9]] as const) {
-      const win = new THREE.Mesh(archGeometry(0.34, 0.6), glass);
-      const r = rAt(y) + 0.01;
-      win.position.set(Math.sin(a) * r, y, Math.cos(a) * r);
-      win.rotation.y = a;
-      g.add(win);
+      const wg = archGrid(0.34, 0.6, 6, 8);
+      const wp = wg.getAttribute("position");
+      for (let i = 0; i < wp.count; i++) {
+        const R = rAt(y + wp.getY(i)) + 0.012, aa = a + wp.getX(i) / R;
+        wp.setXYZ(i, Math.sin(aa) * R, y + wp.getY(i), Math.cos(aa) * R);
+      }
+      wg.computeVertexNormals();
+      g.add(new THREE.Mesh(wg, glass));
     }
     // the gallery: a deck wider than the tower, with a railing of posts and a top rail
     const deck = new THREE.Mesh(new THREE.CylinderGeometry(r1 + 0.55, r1 + 0.2, 0.25, 32), dark);
@@ -2390,11 +2433,19 @@ export class World {
     const beamM = new THREE.MeshBasicMaterial({ color: 0xfff3c4, transparent: true, opacity: 0.35, alphaMap: new THREE.CanvasTexture(fade), depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
     for (const s of [1, -1]) {
       const beam = new THREE.Mesh(new THREE.ConeGeometry(0.9, 9, 16, 1, true).rotateZ((s * Math.PI) / 2).translate(s * 4.6, 0, 0), beamM);
-      beam.visible = isDusk(); // a beam only shows once the light fades
       lamp.add(beam);
     }
     g.add(lamp);
-    this.anim.push((t) => { lamp.rotation.y = t * 0.8; });
+    // a beam only shows once the light fades (checked every couple of seconds, so it comes on at 17:30)
+    let duskCheck = -1;
+    this.anim.push((t) => {
+      lamp.rotation.y = t * 0.8;
+      if (t - duskCheck > 2 || duskCheck < 0) {
+        duskCheck = t;
+        const on = isDusk();
+        for (const c of lamp.children) if ((c as THREE.Mesh).material === beamM) c.visible = on;
+      }
+    });
     const dome = new THREE.Mesh(new THREE.SphereGeometry(lr + 0.12, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), red);
     dome.position.y = H + 1.45;
     dome.castShadow = true;
@@ -2439,7 +2490,7 @@ export class World {
     this.photoSpots.push({ name: ps.name, at: new THREE.Vector3(x, y, z), look: new THREE.Vector3(...ps.look) });
   }
 
-  private buildHouse(b: BuildingDef, index: number, trimMat: THREE.Material, doorMat: THREE.Material, winMat: THREE.Material): void {
+  private buildHouse(b: BuildingDef, index: number, trimMat: THREE.Material, doorMat: THREE.Material): void {
     const floorY = this.groundAt(b.x, b.z, 2)?.y ?? 0;
     const hw = b.w / 2, hd = b.d / 2;
     const doorTop = floorY + 2.1;
@@ -2812,14 +2863,13 @@ export class World {
     if (def.buildings) {
       const trimMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 0.85 });
       const doorMat = new THREE.MeshStandardMaterial({ color: 0x7a4a2b, flatShading: true, roughness: 0.9 });
-      const winMat = new THREE.MeshStandardMaterial({ color: 0xfff6b8, flatShading: true, roughness: 0.4 });
       for (const [bi, b] of def.buildings.entries()) {
         if (b.enter) {
-          this.buildHouse(b, bi, trimMat, doorMat, winMat);
+          this.buildHouse(b, bi, trimMat, doorMat);
           continue;
         }
-        if (b.lighthouse) this.buildLighthouse(b);
-        else this.decor.push({ t: "building", b });
+        if (b.lighthouse) { this.buildLighthouse(b); continue; }
+        this.decor.push({ t: "building", b });
         // roof is landable
         this.platforms.push({
           kind: "box", x: b.x, z: b.z, r: 0, hw: b.w / 2 + 0.15, hd: b.d / 2 + 0.15, topY: b.h + 0.25, spring: 0,
@@ -3273,7 +3323,8 @@ export class World {
       if (side > 0.9) for (const sx of [-1, 1]) {
         const fx = sx * (DOORWAY / 2 + side / 2);
         if (b.church) windowAt(fx, floorY + 1.95, hd, 0);
-        else windowAt(fx, floorY + 1.45, hd, 0, Math.min(0.8, side - 0.3) / 0.9);
+        // sized to clear the door frame and the corner board, and high enough to clear the flower box
+        else windowAt(fx, floorY + 1.6, hd, 0, Math.min(0.8 / 0.9, (side - 0.45) / 1.3));
       }
     }
     if (b.church) {
@@ -3671,7 +3722,7 @@ export class World {
     const free = (o: THREE.Object3D) => {
       // instanced model parts share geometry and materials with the loaded models: keep those
       if (o instanceof THREE.InstancedMesh) { o.dispose(); return; }
-      if (o instanceof THREE.Mesh) {
+      if (o instanceof THREE.Mesh && !o.userData.shared) {
         o.geometry.dispose();
         const m = o.material;
         if (Array.isArray(m)) m.forEach((mm) => mm.dispose()); else m.dispose();
@@ -4254,7 +4305,7 @@ export class World {
       if (o instanceof THREE.Sprite) {
         o.material.map?.dispose();
         o.material.dispose();
-      } else if (o instanceof THREE.Mesh || o instanceof THREE.Points) {
+      } else if ((o instanceof THREE.Mesh || o instanceof THREE.Points) && !o.userData.shared) {
         o.geometry.dispose();
         const m = o.material;
         if (Array.isArray(m)) m.forEach((mm) => mm.dispose());
@@ -4385,7 +4436,7 @@ function cartoonBuilding(b: BuildingDef): THREE.Group {
  * trunk), 2 = palm (curved trunk, drooping fronds, coconuts).
  */
 /** Shared palm-tree pieces: built once, used by every palm. */
-let palmCache: { trunk: THREE.BufferGeometry; frond: THREE.BufferGeometry; top: THREE.Vector3; bark: THREE.Material; leaf: THREE.Material; nut: THREE.Material } | null = null;
+let palmCache: { trunk: THREE.BufferGeometry; frond: THREE.BufferGeometry; coconut: THREE.BufferGeometry; top: THREE.Vector3; bark: THREE.Material; leaf: THREE.Material; nut: THREE.Material } | null = null;
 function palmParts() {
   if (palmCache) return palmCache;
   // trunk: 11 short flared rings following a gentle curve (like a real coconut palm's ringed bark)
@@ -4430,7 +4481,7 @@ function palmParts() {
   }
   frond.computeVertexNormals();
   palmCache = {
-    trunk, frond, top: at(1),
+    trunk, frond, coconut: new THREE.SphereGeometry(0.1, 10, 8), top: at(1),
     bark: new THREE.MeshStandardMaterial({ color: 0x8b6d4f, roughness: 0.95 }),
     leaf: new THREE.MeshStandardMaterial({ color: 0x4f8f3a, roughness: 0.8, side: THREE.DoubleSide }),
     nut: new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.9 }),
@@ -4460,6 +4511,7 @@ function makeTree(trunkMat: THREE.Material, foliageMat: THREE.Material, s: numbe
     // palm: a gently curving trunk of stacked bark rings, a crown of drooping feathery fronds, coconuts
     const pm = palmParts();
     const trunk = new THREE.Mesh(pm.trunk, pm.bark);
+    trunk.userData.shared = true; // the cached palm pieces outlive any one level: never dispose them
     trunk.scale.setScalar(s);
     trunk.castShadow = true;
     g.add(trunk);
@@ -4467,13 +4519,18 @@ function makeTree(trunkMat: THREE.Material, foliageMat: THREE.Material, s: numbe
     for (let k = 0; k < 8; k++) {
       const a = (k / 8) * Math.PI * 2 + (k % 2) * 0.2;
       const frond = new THREE.Mesh(pm.frond, pm.leaf);
+      frond.userData.shared = true;
       frond.position.copy(top);
       frond.scale.setScalar(s * (k % 2 ? 0.85 : 1));
       frond.rotation.set(0, -a, (k % 2 ? 0.15 : 0.35), "YXZ");
       frond.castShadow = true;
       g.add(frond);
     }
-    for (const a of [0.5, 2.6, 4.4]) add(new THREE.SphereGeometry(0.1 * s, 10, 8), pm.nut, top.x + Math.cos(a) * 0.13 * s, top.y - 0.14 * s, top.z + Math.sin(a) * 0.13 * s);
+    for (const a of [0.5, 2.6, 4.4]) {
+      const nut = add(pm.coconut, pm.nut, top.x + Math.cos(a) * 0.13 * s, top.y - 0.14 * s, top.z + Math.sin(a) * 0.13 * s);
+      nut.scale.setScalar(s);
+      nut.userData.shared = true;
+    }
   } else {
     add(new THREE.CylinderGeometry(0.12 * s, 0.16 * s, 0.8 * s, 8), trunkMat, 0, 0.4 * s, 0);
     add(new THREE.ConeGeometry(0.78 * s, 1.0 * s, 10), foliageMat, 0, 1.1 * s, 0);

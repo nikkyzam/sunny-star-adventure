@@ -71,28 +71,34 @@ function footSpeed(scene: THREE.Object3D, clip: THREE.AnimationClip | undefined)
 const kits = new Map<AnimalKind, Promise<AnimalKit | null>>();
 
 /**
- * Give a faceted mesh soft normals: every copy of a corner (same position) gets the average of their
- * normals. The vertices themselves are left alone, so skinning and colours are untouched.
+ * Give a faceted mesh soft normals: each copy of a corner (same position) takes the average of the
+ * copies whose faces meet it at a gentle angle (under 60°), so rounded coats go smooth while sharp
+ * features (eyes, hooves, ear rims) keep their edges. The vertices themselves are left alone, so
+ * skinning and colours are untouched.
  */
-function smoothNormals(geo: THREE.BufferGeometry): void {
+function smoothNormals(geo: THREE.BufferGeometry, creaseCos = 0.5): void {
   const pos = geo.getAttribute("position"), nrm = geo.getAttribute("normal");
   if (!pos || !nrm) return;
   const key = (i: number) => `${Math.round(pos.getX(i) * 1e4)},${Math.round(pos.getY(i) * 1e4)},${Math.round(pos.getZ(i) * 1e4)}`;
-  const sum = new Map<string, THREE.Vector3>();
-  const v = new THREE.Vector3();
+  const groups = new Map<string, number[]>();
   for (let i = 0; i < pos.count; i++) {
     const k = key(i);
-    v.set(nrm.getX(i), nrm.getY(i), nrm.getZ(i));
-    const s = sum.get(k);
-    if (s) s.add(v); else sum.set(k, v.clone());
+    const g = groups.get(k);
+    if (g) g.push(i); else groups.set(k, [i]);
   }
+  const n = (i: number) => new THREE.Vector3(nrm.getX(i), nrm.getY(i), nrm.getZ(i)).normalize();
   const out = new Float32Array(pos.count * 3);
-  for (let i = 0; i < pos.count; i++) {
-    const s = sum.get(key(i))!;
-    v.copy(s);
-    if (v.lengthSq() < 1e-8) v.set(nrm.getX(i), nrm.getY(i), nrm.getZ(i));
-    v.normalize();
-    out[i * 3] = v.x; out[i * 3 + 1] = v.y; out[i * 3 + 2] = v.z;
+  const sum = new THREE.Vector3();
+  for (const idx of groups.values()) {
+    const ns = idx.map(n);
+    for (let a = 0; a < idx.length; a++) {
+      sum.set(0, 0, 0);
+      for (let b = 0; b < idx.length; b++) if (ns[a].dot(ns[b]) >= creaseCos) sum.add(ns[b]);
+      if (sum.lengthSq() < 1e-8) sum.copy(ns[a]);
+      sum.normalize();
+      const i = idx[a];
+      out[i * 3] = sum.x; out[i * 3 + 1] = sum.y; out[i * 3 + 2] = sum.z;
+    }
   }
   geo.setAttribute("normal", new THREE.BufferAttribute(out, 3));
 }
