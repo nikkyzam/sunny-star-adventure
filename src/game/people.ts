@@ -15,7 +15,7 @@ import { skinSkirt, skirtMesh } from "./skirt";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
-import { BoneGuard, type Move } from "./humans";
+import { BoneGuard, solveLeg, type Move } from "./humans";
 
 export const ADULT_FILES = [
   "male_casual", "male_longsleeve", "male_shirt", "male_suit",
@@ -98,6 +98,8 @@ export class Adult {
   private lookYaw = 0;
   private readonly guard = new BoneGuard();
   private lookPitch = 0;
+  private legs: (THREE.Object3D | null)[][] = [];
+  private arm: (THREE.Object3D | null)[] = [];
 
   constructor(private readonly kit: PersonKit, look: AdultLook) {
     this.root = new THREE.Group();
@@ -138,6 +140,9 @@ export class Adult {
     });
 
     this.neck = body.getObjectByName("Neck") ?? null;
+    const bn = (n: string) => body.getObjectByName(n) ?? null;
+    this.legs = [[bn("UpperLegL"), bn("LowerLegL"), bn("FootL")], [bn("UpperLegR"), bn("LowerLegR"), bn("FootR")]];
+    this.arm = [bn("UpperArmR"), bn("LowerArmR"), bn("PalmR")];
     this.head = body.getObjectByName("Head") ?? null;
     if (this.head) {
       // hats: map the cartoon head (eyes at (0, 1.53, 0.243)) onto this head
@@ -268,14 +273,43 @@ export class Adult {
     }
   }
 
-  /** Lean into turns and turn the head toward `look` (grown-ups stand on flat ground: no foot IK). */
-  pose(dt: number, o: { turnRate: number; accel: number; grounded: boolean; look?: THREE.Vector3 | null; ground?: unknown; baseY?: number }): void {
+  /**
+   * Lean into turns, bend the knees to soak up a landing (`squat`, metres), reach out with the right
+   * hand (`reach`) and turn the head toward `look`. Grown-ups stand on flat ground: no foot IK.
+   */
+  pose(dt: number, o: {
+    turnRate: number; accel: number; grounded: boolean; look?: THREE.Vector3 | null; ground?: unknown; baseY?: number;
+    squat?: number; reach?: { at: THREE.Vector3; w: number } | null;
+  }): void {
     if (!this.fresh) return;
     const k = Math.min(1, dt * 8);
     const roll = o.grounded ? THREE.MathUtils.clamp(-o.turnRate * 0.05, -0.15, 0.15) : 0;
+    const squat = o.grounded ? o.squat ?? 0 : 0;
     this.root.rotation.z += (roll - this.root.rotation.z) * k;
-    this.root.updateMatrixWorld(true);
+    this.root.rotation.x += (squat * 0.7 - this.root.rotation.x) * k;
     this.guard.restore();
+    // the hips sink and both knees bend so the feet stay where they are
+    const parentScale = this.root.parent ? this.root.parent.getWorldScale(V2).y : 1;
+    this.root.position.y = -squat / parentScale;
+    this.root.updateMatrixWorld(true);
+    if (squat > 0.004) {
+      for (const [th, ca, fo] of this.legs) {
+        if (!th || !ca || !fo) continue;
+        const target = fo.getWorldPosition(new THREE.Vector3()).add(V1.set(0, squat, 0));
+        this.guard.mark(th);
+        this.guard.mark(ca);
+        this.guard.mark(fo);
+        solveLeg(th, ca, fo, target);
+      }
+    }
+    if (o.reach && o.reach.w > 0.01 && this.arm[0] && this.arm[1] && this.arm[2]) {
+      const [up, low, hand] = this.arm;
+      const t = hand.getWorldPosition(new THREE.Vector3()).lerp(o.reach.at, THREE.MathUtils.clamp(o.reach.w, 0, 1));
+      this.guard.mark(up);
+      this.guard.mark(low);
+      this.guard.mark(hand);
+      solveLeg(up, low, hand, t);
+    }
     this.turnHead(dt, o.look ?? null);
     this.guard.commit();
   }
@@ -284,12 +318,17 @@ export class Adult {
     return [];
   }
 
-  /** How far the head is turned from the body (radians, for tests). */
-  /** Grown-ups don't reach out yet (for tests). */
-  handPos(): THREE.Vector3 | null {
-    return null;
+  /** Where the head is (world space): eating brings the hand up to it. */
+  headPos(): THREE.Vector3 | null {
+    return this.head ? this.head.getWorldPosition(new THREE.Vector3()) : null;
   }
 
+  /** Where the right hand is (world space, for tests). */
+  handPos(): THREE.Vector3 | null {
+    return this.arm[2] ? this.arm[2].getWorldPosition(new THREE.Vector3()) : null;
+  }
+
+  /** How far the head is turned from the body (radians, for tests). */
   headYaw(): number {
     const h = this.head;
     if (!h) return 0;

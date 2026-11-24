@@ -3,6 +3,15 @@
 A running record of what was added to Sunny Star Adventure, and why, for the decisions made
 without stopping to ask. Newest first. Live game: https://nikkyzam.github.io/sunny-star-adventure/
 
+## 2026-11-23 (night): eating and patting look real (the user chose "More real movement")
+
+- **Eating:** when a kid eats a snack or the warm bread, the right hand comes up just under the chin for two bites, then goes back down. The head stops looking around while they eat.
+  - **Decided:** the gesture plays while the kid keeps running, so eating a snack never stops play.
+- **Patting:** "Pat the cow / sheep / puppy", "Pat the peacock" and building the sandcastle now reach out and give three soft pats, a hand's height up and down, instead of a single reach.
+  - **Decided:** the hand never goes lower than knee height, so patting a small animal looks like a crouching pat rather than an arm stretched through the ground.
+- **Grown-ups:** the grown-up body (used by the villagers) can now do the landing knee bend and the reach, eat and pat gestures too, using its own bones. Players are always kids today, so this is ready for when villagers jump or use things, rather than something you'll see straight away.
+- **Tests:** the movement test now also checks that eating brings the hand up to the mouth and that E next to a cow pats it. It takes pictures of both (99-moves-eating.png, 99-moves-patting.png).
+
 ## 2026-11-23 (later): kids move more like real children (the user asked: "make everything they do more real")
 
 - **Landing:** knees bend to soak it up. A small hop barely dips; a big jump or drop crouches right down, tips forward a little, then stands back up in about a third of a second.

@@ -22,7 +22,7 @@ import { Input } from "./input";
 import { AudioSystem, type SongId } from "./audio";
 import { GameStateMachine } from "./state";
 import { World, LEVELS } from "./world";
-import { Player } from "./player";
+import { Player, type Gesture } from "./player";
 import { Stars } from "./stars";
 import { Slimes } from "./slimes";
 import { Birds } from "./birds";
@@ -673,7 +673,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   /** Something a walking kid can do right here with E: a quest thing, an animal to pat, a tree, rock or flower. */
-  function useInReach(): { kid: Player; icon: string; label: string; go: () => void } | null {
+  function useInReach(): { kid: Player; icon: string; label: string; go: () => void; gesture?: Gesture; at?: THREE.Vector3 } | null {
     for (const p of players) {
       if (p.riding) continue;
       const q = quests.actionNear(p.pos);
@@ -774,7 +774,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
         } };
       }
       const sc = world.sandcastles.find((o) => Math.hypot(p.pos.x - o.pos.x, p.pos.z - o.pos.z) < 1.4 && Math.abs(p.pos.y - o.pos.y) < 1);
-      if (sc && !sc.washing() && sc.stage() < 4) return { kid: p, icon: "🏖️", label: "Build the sandcastle", go: () => {
+      if (sc && !sc.washing() && sc.stage() < 4) return { kid: p, icon: "🏖️", label: "Build the sandcastle", gesture: "pat", at: sc.pos.clone().add(new THREE.Vector3(0, 0.45, 0)), go: () => {
         const n = sc.build();
         if (n < 0) return;
         audio.sfx("dig");
@@ -790,7 +790,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
         hud.showToast(`🌱 Splish-splash! Watch it grow… (${[...gd.buds.keys()].filter((k) => gd.watered(k)).length} of ${gd.buds.length} watered)`);
       } };
       const ov = world.ovens.find((o) => Math.hypot(p.pos.x - o.pos.x, p.pos.z - o.pos.z) < 1.5 && Math.abs(p.pos.y - o.pos.y) < 1.2);
-      if (ov) return { kid: p, icon: ov.ready() ? "🍞" : "🔥", label: ov.ready() ? "Eat the bread" : ov.baking() ? "Baking…" : "Bake bread", go: () => {
+      if (ov) return { kid: p, icon: ov.ready() ? "🍞" : "🔥", label: ov.ready() ? "Eat the bread" : ov.baking() ? "Baking…" : "Bake bread", gesture: ov.ready() ? "eat" : "reach", go: () => {
         if (ov.ready()) {
           ov.take();
           sticker("bread");
@@ -814,7 +814,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
         audio.sfx("whee");
       } };
       const pi = (world.peacocks[0]?.pos ?? []).findIndex((q) => Math.hypot(p.pos.x - q.x, p.pos.z - q.z) < 1.8);
-      if (pi >= 0) return { kid: p, icon: "🦚", label: "Pat the peacock", go: () => {
+      if (pi >= 0) return { kid: p, icon: "🦚", label: "Pat the peacock", gesture: "pat", at: world.peacocks[0].pos[pi].clone().add(new THREE.Vector3(0, 0.7, 0)), go: () => {
         const q = world.peacocks[0].pos[pi];
         world.peacocks[0].show(pi);
         sticker("peacock");
@@ -832,7 +832,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       const kind = herds.count ? herds.nearestKind(p.pos, 1.2) : null;
       if (kind) {
         const name = kind.replace("_white", "").replace("shibainu", "puppy").replace("husky", "puppy");
-        return { kid: p, icon: "🤚", label: `Pat the ${name}`, go: () => {
+        return { kid: p, icon: "🤚", label: `Pat the ${name}`, gesture: "pat", go: () => {
           herds.pet(p.pos, 1.2);
           audio.sfx("pet");
           particles.burst(p.pos.x, p.pos.y + 1.4, p.pos.z, 0xff6b9d, 8, 2, 0.6, 3);
@@ -2318,7 +2318,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (!near) {
       const u = useInReach();
       const m = mountInReach();
-      if (u && !(m && m.what !== "ferris")) { u.kid.reach(u.kid.lookTarget); u.go(); }
+      if (u && !(m && m.what !== "ferris")) { u.kid.reach(u.at ?? u.kid.lookTarget, u.gesture); u.go(); }
       else if (m) mountUp(m);
       else if (nearRocket()) boardRocket();
       return;
@@ -3418,6 +3418,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
       if (world.thrones.some((t) => Math.hypot(f.base.x - t.seat.x, f.base.z - t.seat.z) < 12)) sticker("feast");
       score += 15;
       hud.setScore(score);
+      p.eat();
       audio.sfx("munch");
       particles.burst(f.base.x, f.base.y, f.base.z, 0xfff1a8, 12, 3, 0.6, 5);
       if (pet.active) pet.cheer();
@@ -3713,6 +3714,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     heli: heli.group.visible ? { x: heli.pos.x, y: heli.pos.y, z: heli.pos.z, occupied: heli.occupied } : null,
     rings: rings.passed,
     food: foods.items.filter((f) => !f.taken).length,
+    foodAt: foods.items.filter((f) => !f.taken).map((f) => [+f.base.x.toFixed(2), +f.base.y.toFixed(2), +f.base.z.toFixed(2)]),
     verse: gateVerse(),
     lesson: { refs: lessonVerses().map((v) => v.ref), done: [...doneNow], room: roomPicks !== null, host: classHost, on: plan.on, link: linkPlan !== null },
     board: boardRows(),
@@ -3773,6 +3775,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
     move: players[0].debugMove(),
     feet: players[0].debugFeet(),
     handOut: players[0].debugHandOut(),
+    gesture: players[0].debugGesture(),
+    handHead: players[0].debugHandHead(),
     dust: dust.active(),
     setBank: (n: number) => {
       bank = n;

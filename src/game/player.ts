@@ -15,8 +15,10 @@ import type { World, Platform } from "./world";
 import { makeHuman, type Human, type Move } from "./humans";
 
 /** How long reaching out to use something takes (s). */
-const REACH_TIME = 0.75;
 const REACH_V = new THREE.Vector3();
+/** What the right hand does when the kid uses something: reach out, pat (a few soft pats), or eat (hand to mouth). */
+export type Gesture = "reach" | "pat" | "eat";
+const GESTURE_TIME: Record<Gesture, number> = { reach: 0.75, pat: 1.25, eat: 1.3 };
 import { makeAdult, type Adult, type AdultKind, type RobeLook } from "./people";
 
 const SPEED = 7;
@@ -239,6 +241,7 @@ export class Player {
   /** Reaching out to use something: where, and how far through the reach (s). */
   private reachAt: THREE.Vector3 | null = null;
   private reachT = 9;
+  private gesture: Gesture = "reach";
   /** Ground height under a point, so feet can stand on steps and edges (set by update). */
   groundFn: ((x: number, z: number) => number | null) | null = null;
   private lastFacing = 0;
@@ -690,9 +693,22 @@ export class Player {
    * Reach out with the right hand to use something: toward `at` if given (and close), else toward
    * a spot just in front at tummy height.
    */
-  reach(at?: THREE.Vector3 | null): void {
+  reach(at?: THREE.Vector3 | null, gesture: Gesture = "reach"): void {
     this.reachT = 0;
-    this.reachAt = at && at.distanceTo(this.pos) < 2.2 ? at.clone() : null;
+    this.gesture = gesture;
+    this.reachAt = gesture !== "eat" && at && at.distanceTo(this.pos) < 2.2 ? at.clone() : null;
+    // the hand can't pat lower than a crouch reaches: keep it above the knees
+    if (this.reachAt) this.reachAt.y = Math.max(this.reachAt.y, this.pos.y + 0.4 * this.group.scale.y);
+  }
+
+  /** Hand up to the mouth for a couple of bites. */
+  eat(): void {
+    this.reach(null, "eat");
+  }
+
+  /** The gesture going on now (for tests): "" when the hand is resting. */
+  debugGesture(): string {
+    return this.reachT < GESTURE_TIME[this.gesture] ? this.gesture : "";
   }
 
   /** Inside a ride (the ride moves the kid): keep the seated, steering animation going. */
@@ -711,6 +727,12 @@ export class Player {
     const h = this.human?.handPos();
     if (!h) return NaN;
     return +((h.x - this.pos.x) * Math.sin(this.facing) + (h.z - this.pos.z) * Math.cos(this.facing)).toFixed(3);
+  }
+
+  /** How far the right hand is from the head (m, for tests): small while eating. */
+  debugHandHead(): number {
+    const h = this.human?.handPos(), hd = this.human?.headPos();
+    return h && hd ? +h.distanceTo(hd).toFixed(3) : NaN;
   }
 
   /** What the human model shows right now (for tests). */
@@ -732,15 +754,38 @@ export class Player {
     return this.squatDepth * env * env * (3 - 2 * env);
   }
 
-  /** The reach right now: out and back over REACH_TIME, holding a moment at full stretch. */
+  /**
+   * The right hand right now. A reach goes out and back over 0.75 s, holding a moment at full
+   * stretch; a pat holds out there and bobs down three times; eating brings the hand up just under
+   * the chin and back twice, a bite each time.
+   */
   private reachNow(dt: number): { at: THREE.Vector3; w: number } | null {
-    if (this.reachT >= REACH_TIME) return null;
+    const T = GESTURE_TIME[this.gesture];
+    if (this.reachT >= T) return null;
     this.reachT += dt;
-    const t = Math.min(1, this.reachT / REACH_TIME);
-    const w = t < 0.35 ? t / 0.35 : t < 0.6 ? 1 : Math.max(0, 1 - (t - 0.6) / 0.4);
+    const t = Math.min(1, this.reachT / T);
+    const s = this.group.scale.y;
+    const sf = Math.sin(this.facing), cf = Math.cos(this.facing);
+    if (this.gesture === "eat") {
+      const head = this.human?.headPos();
+      const w = t < 0.2 ? t / 0.2 : t < 0.8 ? 1 : Math.max(0, 1 - (t - 0.8) / 0.2);
+      // two bites: in to the mouth, out a little, in again
+      const bite = 0.5 - 0.5 * Math.cos(Math.min(1, Math.max(0, (t - 0.2) / 0.6)) * Math.PI * 4);
+      const out = (0.1 + bite * 0.1) * s;
+      if (head) REACH_V.set(head.x + sf * out - cf * 0.03 * s, head.y - 0.12 * s, head.z + cf * out + sf * 0.03 * s);
+      else REACH_V.set(sf * out, 1.0 * s, cf * out).add(this.pos);
+      return { at: REACH_V, w: w * w * (3 - 2 * w) * 0.95 };
+    }
+    const hold = this.gesture === "pat" ? [0.22, 0.82] : [0.35, 0.6];
+    const w = t < hold[0] ? t / hold[0] : t < hold[1] ? 1 : Math.max(0, 1 - (t - hold[1]) / (1 - hold[1]));
     const at = this.reachAt
       ? REACH_V.copy(this.reachAt)
-      : REACH_V.set(Math.sin(this.facing) * 0.5 - Math.cos(this.facing) * 0.18, 0.85, Math.cos(this.facing) * 0.5 + Math.sin(this.facing) * 0.18).add(this.pos);
+      : REACH_V.set(sf * 0.5 - cf * 0.18, 0.85 * s, cf * 0.5 + sf * 0.18).add(this.pos);
+    if (this.gesture === "pat" && t > hold[0] && t < hold[1]) {
+      // three soft pats: lift a hand's height and come down again
+      const u = (t - hold[0]) / (hold[1] - hold[0]);
+      at.y += 0.09 * s * (0.5 - 0.5 * Math.cos(u * Math.PI * 6));
+    }
     return { at, w: w * w * (3 - 2 * w) * 0.85 };
   }
 
@@ -777,7 +822,7 @@ export class Player {
       const grounded = this.onGround && !this.riding && this.danceT <= 0;
       h.pose(dt, {
         turnRate: grounded ? this.turnRate : 0, accel: grounded ? this.accelRate : 0, grounded,
-        ground: this.groundFn, baseY: this.pos.y, look: this.riding ? null : this.reachT < REACH_TIME ? (this.reachAt ?? this.lookTarget) : this.lookTarget,
+        ground: this.groundFn, baseY: this.pos.y, look: this.riding ? null : this.reachT < GESTURE_TIME[this.gesture] ? (this.gesture === "eat" ? null : this.reachAt ?? this.lookTarget) : this.lookTarget,
         saddle: this.riding ? this.saddle : null,
         squat: grounded ? this.squatNow(dt) : 0,
         reach: this.riding ? null : this.reachNow(dt),

@@ -1,7 +1,7 @@
 /**
  * shots-real-moves.mjs — the kids move more like real children: knees bend to soak up a landing
  * (deeper after a big drop), sand puffs up round the feet, running on sand kicks up little puffs
- * (none on grass), and the hand reaches out when using something. Pictures: 99-moves-*.png.
+ * (none on grass), the hand reaches out when using something, comes up to the mouth when eating, and pats animals. Pictures: 99-moves-*.png.
  * DIST=dist-x to test another build.
  */
 import { chromium } from "playwright";
@@ -97,6 +97,45 @@ try {
   for (let k = 0; k < 12; k++) { reachOut = Math.max(reachOut, (await dbg()).handOut); await page.waitForTimeout(40); }
   check(Number.isFinite(before) && reachOut - before > 0.1, "the hand reaches out to use something", `${before} → ${reachOut} m in front`);
   await page.waitForTimeout(3500);
+
+  // 5) eating a snack: the hand comes up to the mouth
+  // (the photo spot opened a postcard: close it to play on)
+  if ((await dbg()).state !== "playing") await page.click("[data-photo=close]").catch(() => {});
+  await page.waitForFunction(() => window.__gameDebug().state === "playing", null, { timeout: 15000 }).catch(() => {});
+  const food = (await dbg()).foodAt?.[0];
+  check(!!food, "there's a snack to eat on Palm Cay");
+  if (food) {
+    const restHead = (await dbg()).handHead;
+    await page.evaluate(([x, y, z]) => window.__gameDebug().warp(x, z, y + 1), food);
+    let eating = false, closest = 9;
+    for (let k = 0; k < 40; k++) {
+      const d = await dbg();
+      if (d.gesture === "eat") eating = true;
+      if (eating && d.handHead < closest) { closest = d.handHead; if (closest < 0.33) await page.screenshot({ path: shot("eating") }); }
+      if (eating && k > 25) break;
+      await page.waitForTimeout(30);
+    }
+    check(eating, "eating a snack starts the eating gesture", `state ${(await dbg()).state}, food left ${(await dbg()).food}`);
+    check(closest < 0.4 && closest < restHead - 0.12, "the hand comes up to the mouth", `${restHead} → ${closest} m from the head`);
+    await page.waitForTimeout(800);
+    await page.evaluate(() => document.querySelectorAll(".toast, #hud-toast").forEach((t) => (t.style.display = "none")));
+  }
+
+  // 6) patting an animal: the hand goes out and pats (a cow: E next to a donkey or horse means a ride)
+  const herd = (await dbg()).herds?.find((h) => h.kind === "cow" && h.mode === "eat") ?? (await dbg()).herds?.find((h) => h.kind === "cow");
+  if (herd) {
+    await page.evaluate(({ x, z }) => window.__gameDebug().warp(x + 0.9, z, 2), herd);
+    await page.waitForTimeout(400);
+    const pre = await dbg();
+    await page.keyboard.press("KeyE");
+    let patting = false;
+    for (let k = 0; k < 30; k++) {
+      const d = await dbg();
+      if (d.gesture === "pat") { if (!patting) setTimeout(() => page.screenshot({ path: shot("patting") }).catch(() => {}), 450); patting = true; }
+      await page.waitForTimeout(30);
+    }
+    check(patting, "E next to an animal pats it", `${herd.kind}; offered "${pre.use}", riding ${(await dbg()).riding}`);
+  } else console.log("(no animals on Palm Cay: pat check skipped)");
   check(errors.length === 0, "no page errors", errors[0]);
 } finally {
   await browser.close();

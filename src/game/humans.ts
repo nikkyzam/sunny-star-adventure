@@ -377,7 +377,7 @@ function turnBoneWorld(bone: THREE.Object3D, q: THREE.Quaternion): void {
 }
 
 /** Bend the knee and swing the thigh so the foot lands on `target`; the foot keeps its angle. */
-function solveLeg(thigh: THREE.Bone, calf: THREE.Bone, foot: THREE.Bone, target: THREE.Vector3): void {
+export function solveLeg(thigh: THREE.Object3D, calf: THREE.Object3D, foot: THREE.Object3D, target: THREE.Vector3): void {
   const footQ = foot.getWorldQuaternion(new THREE.Quaternion());
   const H = thigh.getWorldPosition(V5), K = calf.getWorldPosition(V6), A = foot.getWorldPosition(V7);
   const a = H.distanceTo(K), b = K.distanceTo(A);
@@ -881,6 +881,11 @@ export class Human {
       turnBoneWorld(bone, Q3);
       bone.updateWorldMatrix(false, true);
     }
+  }
+
+  /** Where the head is (world space): eating brings the hand up to it. */
+  headPos(): THREE.Vector3 | null {
+    return this.bone.Head ? this.bone.Head.getWorldPosition(new THREE.Vector3()) : null;
   }
 
   /** Where the right hand is (world space, for tests). */
