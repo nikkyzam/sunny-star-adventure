@@ -3,6 +3,61 @@
 A running record of what was added to Sunny Star Adventure, and why, for the decisions made
 without stopping to ask. Newest first. Live game: https://nikkyzam.github.io/sunny-star-adventure/
 
+## 2026-11-23 (night): the game is now called "Shine Like Stars" (the user asked for "a catchy Christian name for the app")
+
+- **The name:** "Shine Like Stars", from Philippians 2:15 (God's children "shine like stars in the world"). It fits the game itself: children already collect stars, and they're the ones meant to shine. It's short, easy for a 5-year-old to say, and it reads as Christian to parents without being preachy.
+  - **Checked:** a web search found no kids' app with this exact name. The nearest are "SHINE - Journey of Light" and "Shining Stars", which have different names and are different kinds of app.
+- **Where it shows:**
+  - the browser tab: "Shine Like Stars · A Bible Adventure for Kids"
+  - the title screen, with a small line under it: ✨ "Shine like stars in the world" · Philippians 2:15
+  - photo postcards, certificates, the parents page, the privacy page, README and MONETIZATION
+- **Added:** a description for search results and the name used when saved to a phone's home screen.
+- **Kept:** the web address (…/sunny-star-adventure/), so every link already shared still works. "Sunny Castle" and other place names inside the game stay too.
+
+## 2026-11-23 (night): kite flying on the beach (more fun things for kids)
+
+- **What's there:** a kite stall on the east beach of Adventure Island, with a striped awning and four diamond kites with bow tails hanging along the front.
+- **Flying:**
+  - E takes a kite. It flies on a string from the kid's raised right hand, out on the sea breeze over the island.
+  - Running makes it climb higher (from about 3.8 m to about 6.7 m above the kid), and it swoops gently from side to side.
+  - A jump makes it do a loop-the-loop. The kid's head looks up at it.
+  - E at the stall gives it back.
+- **Decided:**
+  - **Wind:** the breeze blows inland from the sea, so the kite flies out in front of a kid on the beach, where the camera can see it. If it flew behind the kid, it would be behind the camera and kids would never see their kite.
+  - **Height:** it stays below about 40° up. Real kites go higher, but then it would leave the top of the screen.
+  - **Going back by itself:** the kite returns to the stall if the kid gets in a car, boat or ride, or wanders more than 75 m away, so nobody is stuck holding a string that trails through the sky.
+  - **Online friends:** they don't see each other's kites yet.
+  - **Verse:** John 3:8, "The wind blows wherever it pleases".
+- **Tests:** shots-kites checks that:
+  - the stall offers a kite and E takes one
+  - it flies above the kid even when they stand still, and running makes it climb
+  - jumping keeps it flying
+  - E gives it back
+  - Pictures: 99-kites-*.png.
+
+## 2026-11-23 (night): a hot-air balloon ride on Adventure Island (the user asked for "more fun things for kids")
+
+- **What's there:** a striped hot-air balloon waits on the meadow just north of where the game starts.
+  - Twelve rainbow panels with a band of stars round the middle, a woven wicker basket, ropes, and a burner with a flickering flame.
+  - Sandbags sit on a launch mat. While waiting it sways at its ropes and puffs the burner now and then.
+- **The ride:** E (or the 🎈 button) climbs into the basket, and the burner roars.
+  - It rises slowly to about 20–28 m and drifts in a big quiet loop over the whole island: the farm, the lighthouse, the woods and the castle.
+  - It turns slowly as real balloons do, the burner bursts now and then, and it sinks gently back onto its field.
+  - The kid climbs out beside it. E on the way up means "let's go down": it floats home faster.
+  - Landing says: "What a view! 'The heavens declare the glory of God.' (Psalm 19:1)".
+- **Decided:**
+  - The kid stands in the basket (not seated) so they can look over the side.
+  - It's slow (about 4 m/s) on purpose. It's the calm ride, next to the fast dragon.
+  - No sticker for it, because the 20-sticker book belongs to Sunny Castle.
+  - Mayor Maple now mentions it.
+- **Sound:** a new "burner" sound, a soft roar of gas and flame, made in code like the others.
+- **Tests:** shots-balloon checks that:
+  - it waits on its field and E climbs in
+  - it rises over 18 m with the kid staying in the basket
+  - E brings it down onto the field, and the kid climbs out beside it
+  - you can go up again
+  - Pictures: 99-balloon-*.png.
+
 ## 2026-11-23 (night): eating and patting look real (the user chose "More real movement")
 
 - **Eating:** when a kid eats a snack or the warm bread, the right hand comes up just under the chin for two bites, then goes back down. The head stops looking around while they eat.

@@ -1,5 +1,5 @@
 /**
- * boot.ts — Sunny Star Adventure: orchestrates scene, world, players, systems and game flow.
+ * boot.ts — Shine Like Stars: orchestrates scene, world, players, systems and game flow.
  *
  * Contract with the React shell (src/pages/Home.tsx):
  *   startGame(canvas)  mounts renderer + loop onto an existing <canvas>
@@ -33,6 +33,7 @@ import { Buddies, BUDDY_NAMES } from "./buddies";
 import { Car, makeRocket, type RideKind } from "./car";
 import { Rings } from "./rings";
 import { Foods } from "./food";
+import { Kites } from "./kites";
 import { Fleet } from "./ships";
 import { verseFor, grade, LIBRARY, type Verse } from "./verses";
 import { loadPlan, savePlan, planVerses, safePicks, cleanOwn, loadMemorized, saveMemorized, makeGate, ownHash, encodePlan, planFromLink, MAX_PICKS, MAX_OWN, CLASS_MAX_KIDS, VERSE_PAY } from "./lesson";
@@ -276,6 +277,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
   let launchT = -1; // seconds since blast-off began (-1 = on the pad)
   const rings = new Rings();
   const foods = new Foods();
+  const kites = new Kites();
+  const KITE_HAND = new THREE.Vector3();
   const fleet = new Fleet();
   const props = new Props();
   const npcs = new Npcs();
@@ -328,7 +331,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   scene.add(...spareCars.map((c) => c.group));
   scene.add(...scooters.map((c) => c.group));
   scene.add(...bikes.map((c) => c.group));
-  scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, boat.group, heli.group, jet.group, rocket, rings.group, foods.group, fleet.group, props.group, npcs.group, pet.group, particles.points, dust.group);
+  scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, boat.group, heli.group, jet.group, rocket, rings.group, foods.group, kites.group, fleet.group, props.group, npcs.group, pet.group, particles.points, dust.group);
 
   // ── Run state ────────────────────────────────────────────────────────────
   let levelIdx = 0;
@@ -479,7 +482,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   // ── Animal and Ferris-wheel rides ────────────────────────────────────────
   /** Kids on an animal's back or in a Ferris-wheel gondola (the Car rides keep their own seats). */
-  const mounts = new Map<Player, "animal" | "dragon" | "throne" | "slide" | "swing" | { cab: number; turned: number; down: boolean }>();
+  const mounts = new Map<Player, "animal" | "dragon" | "balloon" | "throne" | "slide" | "swing" | { cab: number; turned: number; down: boolean }>();
   /** Kids wearing the throne's crown: the hat they had before (it comes back when they leave the castle). */
   const crowned = new Map<Player, { hat: number; x: number; z: number }>();
   /** Kids whooshing down a helter-skelter: how far along (metres) and how fast. */
@@ -523,13 +526,14 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   /** What a walking kid could climb on right now: an animal or the Ferris wheel. */
-  function mountInReach(): { kid: Player; what: "animal" | "ferris" | "dragon" | "throne" | "slide" | "swing"; icon: string } | null {
+  function mountInReach(): { kid: Player; what: "animal" | "ferris" | "dragon" | "balloon" | "throne" | "slide" | "swing"; icon: string } | null {
     const gate = world.ferrisGate;
     for (const p of players) {
       if (p.riding) continue;
       const kind = herds.count ? herds.mountable(p.pos, 2.3) : null;
       if (kind) return { kid: p, what: "animal", icon: RIDE_EMOJI[kind] ?? "🐴" };
       if (world.dragon?.canBoard(p.pos) && ![...mounts.values()].includes("dragon")) return { kid: p, what: "dragon", icon: "🐉" };
+      if (world.balloon?.canBoard(p.pos) && ![...mounts.values()].includes("balloon")) return { kid: p, what: "balloon", icon: "🎈" };
       if (throneNear(p) && ![...mounts.values()].includes("throne")) return { kid: p, what: "throne", icon: "👑" };
       if (slideNear(p)) return { kid: p, what: "slide", icon: "🛝" };
       if (swingNear(p) && ![...swinging.values()].some((v) => v.sw === swingNear(p))) return { kid: p, what: "swing", icon: "🌳" };
@@ -564,7 +568,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     return world.slides.find((sl) => Math.hypot(p.pos.x - sl.board.x, p.pos.z - sl.board.z) < 1.6 && Math.abs(p.pos.y - sl.board.y - 0.15) < 1) ?? null;
   }
 
-  function mountUp(m: { kid: Player; what: "animal" | "ferris" | "dragon" | "throne" | "slide" | "swing" }): void {
+  function mountUp(m: { kid: Player; what: "animal" | "ferris" | "dragon" | "balloon" | "throne" | "slide" | "swing" }): void {
     const p = m.kid;
     p.invuln = 0;
     p.group.visible = true;
@@ -615,6 +619,20 @@ export function startGame(canvas: HTMLCanvasElement): void {
       hud.showToast("👑 Hooray for the king or queen of Sunny Castle! Jesus is the King of kings! (Revelation 19:16)");
       return;
     }
+    if (m.what === "balloon") {
+      const b = world.balloon;
+      if (!b) return;
+      b.startFlight();
+      p.riding = true;
+      p.standRide = true;
+      p.saddle = null;
+      mounts.set(p, "balloon");
+      audio.sfx("burner");
+      hud.showToast(onTouch()
+        ? "🎈 Up, up and away! Look down at the whole island · tap 🎈 to float back down"
+        : "🎈 Up, up and away! Look down at the whole island · E to float back down");
+      return;
+    }
     if (m.what === "dragon") {
       const d = world.dragon;
       if (!d) return;
@@ -655,6 +673,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
     if (m === "slide") return true; // no getting off halfway down!
     if (m === "swing") { swingOff(p); return true; }
+    if (m === "balloon") {
+      world.balloon?.hurry();
+      hud.showToast("🎈 Letting a little air out… down we float.");
+      return true;
+    }
     if (m === "dragon") {
       world.dragon?.hurry();
       hud.showToast("🐉 Sparky heads for home…");
@@ -782,6 +805,21 @@ export function startGame(canvas: HTMLCanvasElement): void {
         hud.showToast(["🏖️ Pat, pat, pat. A good big mound!", "🏖️ A tall tower in the middle!", "🏖️ Four little towers round it!", "🏰 A flag and shells. What a sandcastle! But wait… here comes a wave!"][n - 1]);
         if (n === 4) { scWashAt = timer + 2.5; sticker("sandcastle"); }
       } };
+      if (kites.near(p.pos)) {
+        if (kites.has(p)) return { kid: p, icon: "🪁", label: "Give the kite back", go: () => {
+          kites.giveBack(p);
+          p.holdAt = null;
+          audio.sfx("ui");
+          hud.showToast("🪁 Thank you! Come back for a kite any time.");
+        } };
+        return { kid: p, icon: "🪁", label: "Fly a kite", go: () => {
+          kites.take(p, p.pos);
+          audio.sfx("whee");
+          hud.showToast(onTouch()
+            ? "🪁 Run to make it fly higher! Jump for a loop-the-loop! \"The wind blows wherever it pleases.\" (John 3:8)"
+            : "🪁 Run to make it fly higher! Space for a loop-the-loop! \"The wind blows wherever it pleases.\" (John 3:8)");
+        } };
+      }
       const gd = world.gardens[0];
       const bi = gd ? gd.buds.findIndex((b, k) => !gd.watered(k) && Math.hypot(p.pos.x - b.x, p.pos.z - b.z) < 1.5 && Math.abs(p.pos.y - b.y) < 1.2) : -1;
       if (gd && bi >= 0) return { kid: p, icon: "🚿", label: "Water the flower", go: () => {
@@ -1279,6 +1317,24 @@ export function startGame(canvas: HTMLCanvasElement): void {
         if (Math.hypot(a.wishX, a.wishZ) > 0.3) standUp(p);
         continue;
       }
+      if (m === "balloon") {
+        const b = world.balloon;
+        if (!b || b.state !== "flight") {
+          // back on the field: climb out beside the basket
+          if (b) b.dropOff(p.pos);
+          p.vel.set(0, 0, 0);
+          p.riding = false;
+          p.standRide = false;
+          mounts.delete(p);
+          audio.sfx("checkpoint");
+          hud.showToast("🎈 What a view! \"The heavens declare the glory of God.\" (Psalm 19:1)");
+          continue;
+        }
+        if (b.roared) audio.sfx("burner");
+        b.seat(p.pos);
+        p.vel.set(0, 0, 0);
+        continue;
+      }
       if (m === "dragon") {
         const d = world.dragon;
         if (!d || d.state !== "tour") {
@@ -1555,6 +1611,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
     rings.build(world.def.rings ?? []);
     foods.build(world.def.food ?? []);
+    for (const p of players) p.holdAt = null;
+    kites.build(world.def.kites ? [world.def.kites[0], world.groundAt(world.def.kites[0], world.def.kites[1], 6)?.y ?? 0.3, world.def.kites[1], world.def.kites[2]] : undefined);
     fleet.build(world.def.pirates ?? [], world.def.sea ?? 0);
 
     if (humansPending) swapInHumans();
@@ -3338,7 +3396,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (launchT >= 0) hud.setCarUi(null);
     else if (ride) hud.setCarUi(inRide ? "out" : "in", RIDE_ICON[ride.kind]);
     else if (mounted === "slide") hud.setCarUi(null);
-    else if (mounted) hud.setCarUi("out", mounted === "animal" ? "🐴" : mounted === "dragon" ? "🐉" : mounted === "throne" ? "👑" : mounted === "swing" ? "🌳" : "🎡");
+    else if (mounted) hud.setCarUi("out", mounted === "animal" ? "🐴" : mounted === "dragon" ? "🐉" : mounted === "balloon" ? "🎈" : mounted === "throne" ? "👑" : mounted === "swing" ? "🌳" : "🎡");
     else if (canMount && canMount.what !== "ferris") hud.setCarUi("in", canMount.icon);
     else if (useNow) hud.setCarUi("in", useNow.icon, useNow.label);
     else if (canMount) hud.setCarUi("in", canMount.icon);
@@ -3407,6 +3465,23 @@ export function startGame(canvas: HTMLCanvasElement): void {
       } else if (!memorized.has(verse.ref)) {
         hud.showToast(`📖 Type it from memory in your verse book for ${VERSE_PAY} coins!`);
       }
+    }
+
+    // kites: fly on their strings from the kid's hand; back to the stall if they get in something or wander off
+    for (const p of players) {
+      if (!kites.has(p)) continue;
+      if (p.riding || (kites.stall && Math.hypot(p.pos.x - kites.stall.x, p.pos.z - kites.stall.z) > 75)) {
+        kites.giveBack(p);
+        p.holdAt = null;
+        if (p === players[0]) hud.showToast("🪁 The kite went back to the kite stall. Come and fly it again!");
+        continue;
+      }
+      const hand = p.handWorld() ?? KITE_HAND.set(p.pos.x, p.pos.y + 1, p.pos.z);
+      kites.fly(p, hand, Math.hypot(p.vel.x, p.vel.z), dt);
+      if (!p.onGround && p.vel.y > 4) kites.trick(p);
+      const kp = kites.kitePos(p);
+      p.holdAt = kp;
+      if (kp) p.lookTarget = kp;
     }
 
     // snacks: eat one for a few seconds of something silly
@@ -3776,6 +3851,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
     feet: players[0].debugFeet(),
     handOut: players[0].debugHandOut(),
     gesture: players[0].debugGesture(),
+    kite: kites.height(players[0], players[0].pos),
+    balloon: world.balloon ? { state: world.balloon.state, p: +world.balloon.progress().toFixed(3), x: world.balloon.base.x, z: world.balloon.base.z } : null,
+    mounted: mounts.get(players[0]) ?? null,
     handHead: players[0].debugHandHead(),
     dust: dust.active(),
     setBank: (n: number) => {

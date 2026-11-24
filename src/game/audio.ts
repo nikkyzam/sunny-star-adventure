@@ -12,7 +12,7 @@
 export type SfxId =
   | "jump" | "doublejump" | "land" | "boing" | "stomp" | "star" | "hurt"
   | "portal" | "checkpoint" | "ui" | "win" | "lose" | "unlock" | "fall"
-  | "coin" | "chest" | "buddy" | "powerup" | "honk" | "splash" | "talk" | "pet" | "munch" | "baa" | "rustle" | "meow" | "coo" | "dig" | "bell" | "roar" | "whee" | "fireworks";
+  | "coin" | "chest" | "buddy" | "powerup" | "honk" | "splash" | "talk" | "pet" | "munch" | "baa" | "rustle" | "meow" | "coo" | "dig" | "bell" | "roar" | "whee" | "fireworks" | "burner";
 
 export type TrackId = "meadow" | "island" | "city" | "snow";
 
@@ -476,6 +476,11 @@ export class AudioSystem {
         break;
       case "dig":
         for (let i = 0; i < 3; i++) this.blip("square", 260 - i * 30, 110, t + i * 0.1, 0.06, 0.08);
+        break;
+      case "burner":
+        // a balloon's burner: a deep, soft roar of gas and flame for a second or so
+        this.hiss("lowpass", 900, 300, t, 1.3, 0.16);
+        this.hiss("bandpass", 1800, 700, t, 0.9, 0.05);
         break;
       case "rustle":
         for (let i = 0; i < 5; i++) this.blip("square", 1800 + Math.random() * 1400, 900, t + i * 0.045, 0.03, 0.05);

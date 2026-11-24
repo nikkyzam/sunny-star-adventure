@@ -242,6 +242,8 @@ export class Player {
   private reachAt: THREE.Vector3 | null = null;
   private reachT = 9;
   private gesture: Gesture = "reach";
+  /** Something the right hand holds up toward (a kite's string), when not busy with a gesture. */
+  holdAt: THREE.Vector3 | null = null;
   /** Ground height under a point, so feet can stand on steps and edges (set by update). */
   groundFn: ((x: number, z: number) => number | null) | null = null;
   private lastFacing = 0;
@@ -706,6 +708,11 @@ export class Player {
     this.reach(null, "eat");
   }
 
+  /** Where the right hand is in the world (the kite string ties on here); null before the model loads. */
+  handWorld(): THREE.Vector3 | null {
+    return this.human?.handPos() ?? null;
+  }
+
   /** The gesture going on now (for tests): "" when the hand is resting. */
   debugGesture(): string {
     return this.reachT < GESTURE_TIME[this.gesture] ? this.gesture : "";
@@ -825,7 +832,7 @@ export class Player {
         ground: this.groundFn, baseY: this.pos.y, look: this.riding ? null : this.reachT < GESTURE_TIME[this.gesture] ? (this.gesture === "eat" ? null : this.reachAt ?? this.lookTarget) : this.lookTarget,
         saddle: this.riding ? this.saddle : null,
         squat: grounded ? this.squatNow(dt) : 0,
-        reach: this.riding ? null : this.reachNow(dt),
+        reach: this.riding ? null : this.reachNow(dt) ?? (this.holdAt ? { at: this.holdAt, w: 0.75 } : null),
       });
     }
 

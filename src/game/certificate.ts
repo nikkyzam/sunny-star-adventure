@@ -58,6 +58,6 @@ export function royalCertificate(icons: string[], when = new Date()): HTMLCanvas
   g.fillText("“Well done, good and faithful servant.” (Matthew 25:21)", W / 2, 715);
   g.fillStyle = "#9a7a3a";
   g.font = `24px ${font}`;
-  g.fillText(`${when.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })} · Sunny Star Adventure ⭐`, W / 2, 770);
+  g.fillText(`${when.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })} · Shine Like Stars ⭐`, W / 2, 770);
   return c;
 }

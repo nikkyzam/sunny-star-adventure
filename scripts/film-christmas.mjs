@@ -213,7 +213,7 @@ try {
       g.shadowColor = "rgba(0,0,0,0.6)";
       g.shadowBlur = 12;
       g.fillStyle = "#ffd257";
-      if (shot !== "end") g.fillText("☀️ Sunny Star Adventure", 44, 96);
+      if (shot !== "end") g.fillText("⭐ Shine Like Stars", 44, 96);
       g.restore();
 
       const CAP = 1360; // captions sit above the buttons the apps put at the bottom
@@ -265,7 +265,7 @@ try {
         g.fillRect(0, 0, W, H);
         words("⭐ Christmas in Bethlehem ⭐", 820, 60, "#ffd257", a);
         words("a free Christmas world in", 950, 46, "#ffffff", fade(T, 32.2, 99, 0.6));
-        words("☀️ Sunny Star Adventure", 1020, 66, "#ffffff", fade(T, 32.2, 99, 0.6));
+        words("⭐ Shine Like Stars", 1020, 66, "#ffffff", fade(T, 32.2, 99, 0.6));
         words("Bible stories · quests · no sign-up · no chat", 1140, 38, "#cfe0ff", fade(T, 32.8, 99, 0.6));
         pill("Play free in your browser", 1290, 50, { bg: "#ff8c1a", alpha: fade(T, 33.3, 99, 0.6) });
         words("nikkyzam.github.io/sunny-star-adventure", 1410, 38, "#ffffff", fade(T, 33.3, 99, 0.6));

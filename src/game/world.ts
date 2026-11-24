@@ -35,6 +35,7 @@ import { buildBethlehem, type BethlehemDef } from "./bethlehem";
 import { buildCastle, mergeByMaterial, type CastleDef, type CastleInfo } from "./castle";
 import { currentSeason, isDusk } from "./seasons";
 import { Dragon } from "./dragon";
+import { Balloon } from "./balloon";
 import { KnightRings } from "./tilt";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
@@ -153,6 +154,10 @@ export interface LevelDef {
   jetSpawn?: [number, number, number, number];
   /** A rocket to board: it flies to the Moon (or back to the island from a space level). */
   rocket?: [number, number, number];
+  /** A hot-air balloon on a launch field at (x, z), and the loop it drifts round ((x, y, z) points, high up). */
+  balloon?: { at: [number, number]; route: [number, number, number][] };
+  /** A kite stall on the beach at (x, z), facing `ry`. */
+  kites?: [number, number, number];
   /** Golden hoops in the sky: x, y, z, heading. */
   rings?: [number, number, number, number][];
   /** A knight's ring course for riders: x, z, heading (y comes from the ground). */
@@ -1012,6 +1017,10 @@ const ADVENTURE_ISLAND: LevelDef = {
   heliSpawn: [13, 0, 10, Math.PI],
   jetSpawn: [-31, 0, -12, Math.PI],
   rocket: [-70, 0, -40.5],
+  // the kite stall, on the beach looking back up at the island
+  kites: [23, 3, -2.356],
+  // the hot-air balloon: on the meadow by the start, a slow loop over the whole island
+  balloon: { at: [-3, -6], route: [[12, 20, -22], [38, 24, -42], [30, 27, -76], [-8, 28, -84], [-48, 26, -58], [-58, 23, -18], [-34, 21, 12], [-14, 16, 4]] },
   rings: [
     [0, 10, -20, 0], [20, 14, -40, 0.8], [46, 18, -66, 0], [6, 16, -72, 0], [-30, 20, -50, 0.8],
     [-66, 17, -60, 0], [-56, 9, -14, 1.57], [62, 14, 22, 0], [0, 24, 22, 1.57], [22, 31, 0, 1.57],
@@ -1188,6 +1197,7 @@ const ADVENTURE_ISLAND: LevelDef = {
         "Want to earn coins? Villagers with a 💼 by their name have jobs for you!",
         "Golden scrolls are hidden around the islands. Each one has a Bible verse on it!",
         "Twenty-three friends live on these islands. Can you say hello to all of us?",
+        "See the big striped balloon in the meadow? Climb in the basket and float up high over the whole island!",
       ],
     },
     {
@@ -2203,6 +2213,8 @@ export class World {
   private ferris: { wheel: THREE.Group; cabins: THREE.Object3D[]; gate: THREE.Vector3; facing: number } | null = null;
   /** Sparky, if this level's castle has a dragon. */
   dragon: Dragon | null = null;
+  /** The hot-air balloon, if this level has one. */
+  balloon: Balloon | null = null;
   /** Castle bells a kid can ring. */
   bells: { pos: THREE.Vector3; ring: () => void }[] = [];
   /** Sightseeing photo spots on this level. */
@@ -2737,6 +2749,7 @@ export class World {
     this.anim = [];
     this.decor = [];
     this.dragon = null;
+    this.balloon = null;
     this.bells = [];
     this.thrones = [];
     this.slides = [];
@@ -2925,6 +2938,13 @@ export class World {
         this.anim.push((t, dt) => d.update(t, dt));
         this.dragon = d;
       }
+    }
+    if (def.balloon) {
+      const [bx, bz] = def.balloon.at;
+      const b = new Balloon(new THREE.Vector3(bx, this.groundAt(bx, bz, 6)?.y ?? 0.3, bz), def.balloon.route.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
+      this.group.add(b.group);
+      this.anim.push((t, dt) => b.update(t, dt));
+      this.balloon = b;
     }
     if (def.knightRings?.length) {
       const k = new KnightRings();

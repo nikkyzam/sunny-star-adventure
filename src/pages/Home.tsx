@@ -81,7 +81,8 @@ export default function Home() {
         {/* title screen */}
         <div id="ov-title" className="overlay">
           <div className="panel title-panel">
-            <h1 className="game-title">Sunny Star Adventure</h1>
+            <h1 className="game-title">Shine Like Stars</h1>
+            <p className="title-verse">✨ "Shine like stars in the world" · Philippians 2:15</p>
             <p className="tagline">Start on Adventure Island. Walk into a 🧭 travel gate and say a Bible verse from memory to open the way to new places: the city, the Moon, the resort and Bible stories!</p>
             <div className="kid-setup">
               <div className="name-row">

@@ -1,4 +1,4 @@
-# Selling Sunny Star Adventure and showing ads
+# Selling Shine Like Stars and showing ads
 
 The game is ready for kid-safe ads, but they are **switched off** until you connect an ad account.
 Nothing changes for players until you do.
@@ -68,7 +68,7 @@ Then upload the `dist` folder through their developer dashboard. Use their test 
   - Code libraries: three.js, PeerJS and React, all MIT.
   - Bible verses: King James Version. It's public domain in most countries. In the UK it's under
     Crown patent, which in practice permits quoting it in a game.
-- [ ] **Pick the game's name.** Search for trademarks on "Sunny Star Adventure" before you spend money on
+- [ ] **Pick the game's name.** Search for trademarks on "Shine Like Stars" before you spend money on
       branding.
 
 ## Churches, schools and homeschool groups

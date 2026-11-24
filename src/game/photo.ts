@@ -211,7 +211,7 @@ export class PhotoMode {
       const file = new File([blob], name, { type: "image/jpeg" });
       const touch = document.body.classList.contains("touch");
       if (touch && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: "Sunny Star Adventure" });
+        await navigator.share({ files: [file], title: "Shine Like Stars" });
         this.status.textContent = "Shared! 💛";
         return;
       }
@@ -302,7 +302,7 @@ export function postcard(frame: HTMLCanvasElement, place: string, verse: Verse):
   g.font = `bold 28px ${font}`;
   g.textAlign = "left";
   g.fillStyle = "#ff8c1a";
-  g.fillText("☀️ Sunny Star Adventure", BORDER, fy);
+  g.fillText("⭐ Shine Like Stars", BORDER, fy);
   g.textAlign = "right";
   g.fillStyle = "#3d7bd9";
   g.font = `24px ${font}`;

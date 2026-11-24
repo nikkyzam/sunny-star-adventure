@@ -1,4 +1,4 @@
-# Sunny Star Adventure ⭐🪂
+# Shine Like Stars ⭐🪂
 
 A cheerful 3D platformer for kids, playable in the browser. Guide a little adventurer across
 floating sky islands, a big Toy City, snowy Frosty Mountain and sunny Bubbly Beach — collect

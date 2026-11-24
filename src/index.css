@@ -697,3 +697,4 @@ body.touch.playing .stick-base { display: flex; }
 .teach-progress-list { margin: 8px 0 4px; padding-left: 20px; text-align: left; line-height: 1.5; color: #4a3b6b; font-weight: 600; }
 .teach-progress-list li span { color: #7a6a98; font-weight: 500; }
 .sticker-cert { grid-column: 1 / -1; margin-top: 6px; }
+.title-verse { margin: 0 0 4px; font-size: 13px; font-weight: 700; color: #b27a00; letter-spacing: 0.2px; }
