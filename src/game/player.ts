@@ -832,7 +832,7 @@ export class Player {
         ground: this.groundFn, baseY: this.pos.y, look: this.riding ? null : this.reachT < GESTURE_TIME[this.gesture] ? (this.gesture === "eat" ? null : this.reachAt ?? this.lookTarget) : this.lookTarget,
         saddle: this.riding ? this.saddle : null,
         squat: grounded ? this.squatNow(dt) : 0,
-        reach: this.riding ? null : this.reachNow(dt) ?? (this.holdAt ? { at: this.holdAt, w: 0.75 } : null),
+        reach: this.riding && !this.standRide ? null : this.reachNow(dt) ?? (this.holdAt ? { at: this.holdAt, w: 0.75 } : null),
       });
     }
 

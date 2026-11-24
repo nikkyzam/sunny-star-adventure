@@ -37,6 +37,10 @@ import { currentSeason, isDusk } from "./seasons";
 import { Dragon } from "./dragon";
 import { Balloon } from "./balloon";
 import { KnightRings } from "./tilt";
+/** A playground roundabout. `ride` is set while a kid is on it; it then speeds up to `spin`. */
+export interface Roundabout { centre: THREE.Vector3; r: number; angle: number; spin: number; ride: boolean; handle(i: number, out: THREE.Vector3): THREE.Vector3 }
+/** A playground seesaw: `tilt` > 0 lifts the teddy's end; `ride` stops it settling back. */
+export interface Seesaw { pivot: THREE.Vector3; seat: THREE.Vector3; tilt: number; ride: boolean; seatAt(out: THREE.Vector3): THREE.Vector3; facing: number }
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 /** Something decorative to draw: by the code-built shapes, or by the models in env.ts once loaded. */
@@ -2222,7 +2226,7 @@ export class World {
   /** Castle thrones a kid can sit on. */
   thrones: { seat: THREE.Vector3; facing: number }[] = [];
   /** Castle helter-skelters: where to get on, and the path down. */
-  slides: { board: THREE.Vector3; path: THREE.CatmullRomCurve3 }[] = [];
+  slides: { board: THREE.Vector3; path: THREE.CatmullRomCurve3; play?: boolean }[] = [];
   /** Castle fireworks crates. */
   fireworks: { pos: THREE.Vector3; launch: () => boolean }[] = [];
   /** Castle armour stands (the helmet to try on). */
@@ -2244,7 +2248,13 @@ export class World {
   /** Castle flower gardens. */
   gardens: CastleInfo["garden"][] = [];
   /** Castle rope swings. */
-  swings: CastleInfo["swing"][] = [];
+  swings: (CastleInfo["swing"] & { play?: boolean })[] = [];
+  /** Playground roundabouts: the middle (on top of the disc), its turn (radians) and speed, and where each handle is. */
+  roundabouts: Roundabout[] = [];
+  /** Playground seesaws: a teddy sits on one end, a kid can sit on the other. */
+  seesaws: Seesaw[] = [];
+  /** Playground bubble tubs (a kid blows bubbles here). */
+  bubbleTubs: THREE.Vector3[] = [];
   /** Castle fishing jetties. */
   fishings: CastleInfo["fishing"][] = [];
   /** Castle beach sandcastles. */
@@ -2764,6 +2774,9 @@ export class World {
     this.theatres = [];
     this.gardens = [];
     this.swings = [];
+    this.roundabouts = [];
+    this.seesaws = [];
+    this.bubbleTubs = [];
     this.fishings = [];
     this.sandcastles = [];
     this.seasonals = [];
@@ -3473,6 +3486,16 @@ export class World {
       const rail = put(new THREE.BoxGeometry(4.4, 0.22, 0.06), yellow, sx + 2.85, DECK - 1.05, sz + s * 0.53);
       rail.rotation.z = -0.47;
     }
+    // ride it: sit at the top of the chute and whoosh down to the soft mat
+    {
+      const chuteY = (px: number) => DECK - 0.3 - (px - (sx + 1.2)) * 0.515;
+      const pts = [[sx + 0.35, DECK + 0.02], [sx + 0.9, chuteY(sx + 0.9) + 0.02], [sx + 2.6, chuteY(sx + 2.6)], [sx + 4.2, chuteY(sx + 4.2)], [sx + 4.85, 0.16], [sx + 5.3, 0.12]];
+      this.slides.push({
+        board: new THREE.Vector3(x + sx, y + DECK, z + sz),
+        path: new THREE.CatmullRomCurve3(pts.map(([px, py]) => new THREE.Vector3(x + px, y + py, z + sz)), false, "centripetal"),
+        play: true,
+      });
+    }
 
     // swings: an A-frame with two seats that swing back and forth
     const wx = 2.6, wz = -2.2, TOP = 2.7;
@@ -3490,6 +3513,16 @@ export class World {
       g.add(sw);
       swings.push(sw);
     }
+    // each swing seat can be sat on: it swings toward −z (rotation.x > 0 moves the seat that way)
+    const swingHeld = [0, 0], swingAng = [0, 0];
+    swings.forEach((sw, i) => this.swings.push({
+      pivot: new THREE.Vector3(x + sw.position.x, y + TOP, z + sw.position.z),
+      rope: 2.0,
+      dir: new THREE.Vector3(0, 0, -1),
+      facing: Math.PI,
+      set: (a: number) => { swingAng[i] = a; sw.rotation.x = a; swingHeld[i] = 0.4; },
+      play: true,
+    }));
     // roundabout: a spinning disc with handles (stand on it)
     const rx = 2.8, rz = 2.2;
     const spin = new THREE.Group();
@@ -3503,6 +3536,15 @@ export class World {
     put(new THREE.CylinderGeometry(0.1, 0.1, 0.9, 8), steel, 0, 0.6, 0, spin);
     g.add(spin);
     this.platforms.push({ kind: "disc", x: x + rx, z: z + rz, r: 1.4, hw: 0, hd: 0, topY: y + 0.35, spring: 0, baseX: x + rx, baseZ: z + rz, dx: 0, dz: 0, mesh: spin, squashT: 0 });
+    const rb: Roundabout = {
+      centre: new THREE.Vector3(x + rx, y + 0.35, z + rz), r: 1.4, angle: 0, spin: 0, ride: false,
+      // handle i stands at local angle i·90°; the disc turns by rotation.y = angle
+      handle: (i, out) => {
+        const a = (i / 4) * Math.PI * 2 - rb.angle;
+        return out.set(x + rx + Math.cos(a) * 1.1, y + 1.05, z + rz + Math.sin(a) * 1.1);
+      },
+    };
+    this.roundabouts.push(rb);
     // seesaw
     const ex = -2.6, ez = 2.4;
     put(new THREE.CylinderGeometry(0.3, 0.4, 0.55, 8), steel, ex, 0.28, ez);
@@ -3513,7 +3555,36 @@ export class World {
       put(new THREE.BoxGeometry(0.36, 0.06, 0.36), yellow, s * 1.45, 0.07, 0, plank);
       put(new THREE.TorusGeometry(0.13, 0.025, 6, 10, Math.PI), steel, s * 1.1, 0.06, 0, plank).rotation.y = Math.PI / 2;
     }
+    // a teddy bear sits on the far end, always ready to play
+    {
+      const fur = m(0xa8743f, { roughness: 1 }), muzzle = m(0xe8c9a0, { roughness: 1 }), dark = m(0x2a1a10, { roughness: 0.4 });
+      const ted = new THREE.Group();
+      ted.position.set(1.45, 0.1, 0);
+      ted.rotation.y = -Math.PI / 2;
+      put(new THREE.SphereGeometry(0.2, 12, 10).scale(1, 1.15, 0.9), fur, 0, 0.22, -0.02, ted);
+      put(new THREE.SphereGeometry(0.15, 12, 10), fur, 0, 0.53, 0, ted);
+      put(new THREE.SphereGeometry(0.065, 8, 6).scale(1, 0.8, 0.8), muzzle, 0, 0.5, 0.13, ted);
+      put(new THREE.SphereGeometry(0.025, 6, 4), dark, 0, 0.52, 0.19, ted);
+      for (const e of [-1, 1]) {
+        put(new THREE.SphereGeometry(0.06, 8, 6), fur, e * 0.11, 0.66, -0.01, ted);
+        put(new THREE.SphereGeometry(0.02, 6, 4), dark, e * 0.055, 0.57, 0.13, ted);
+        put(new THREE.SphereGeometry(0.06, 8, 6).scale(1, 1, 1.6), fur, e * 0.1, 0.07, 0.16, ted); // legs out front
+        put(new THREE.SphereGeometry(0.055, 8, 6).scale(1, 1.6, 1), fur, e * 0.2, 0.3, 0.06, ted);  // arms holding on
+      }
+      put(new THREE.TorusGeometry(0.07, 0.025, 6, 12), red, 0, 0.41, 0.06, ted).rotation.x = Math.PI / 2 - 0.3; // a bow
+      plank.add(ted);
+    }
     g.add(plank);
+    const SEAT_X = -1.45, REST = 0.33;
+    const ssPivot = new THREE.Vector3(x + ex, y + 0.6, z + ez);
+    const ss: Seesaw = {
+      pivot: ssPivot,
+      seat: new THREE.Vector3(x + ex + SEAT_X * Math.cos(REST), y + 0.6 + SEAT_X * Math.sin(REST) + 0.12, z + ez),
+      tilt: REST, ride: false, facing: Math.PI / 2,
+      // the kid's seat (−x end) in the world, for the current tilt
+      seatAt: (out) => out.set(ssPivot.x + SEAT_X * Math.cos(ss.tilt) - 0.12 * Math.sin(ss.tilt), ssPivot.y + SEAT_X * Math.sin(ss.tilt) + 0.12 * Math.cos(ss.tilt), ssPivot.z),
+    };
+    this.seesaws.push(ss);
     // sandbox with a bucket
     const bx = 0.2, bz = 0.4;
     put(new THREE.BoxGeometry(2.2, 0.1, 2.2), m(SAND, { roughness: 1 }), bx, 0.1, bz).castShadow = false;
@@ -3524,14 +3595,33 @@ export class World {
     put(new THREE.BoxGeometry(1.8, 0.08, 0.45), wood, 0, 0.5, 3.9);
     put(new THREE.BoxGeometry(1.8, 0.5, 0.08), wood, 0, 0.85, 4.15);
     for (const s of [-0.75, 0.75]) put(new THREE.BoxGeometry(0.08, 0.5, 0.4), steel, s, 0.25, 3.9);
+    // a tub of bubble mixture on the bench, with its wand
+    {
+      const tx = 0.5, tz = 3.85;
+      put(new THREE.CylinderGeometry(0.13, 0.11, 0.2, 14), m(0xff6bb5, { roughness: 0.35 }), tx, 0.64, tz);
+      put(new THREE.CylinderGeometry(0.115, 0.115, 0.01, 14), m(0xd8f4ff, { roughness: 0.05, transparent: true, opacity: 0.8 }), tx, 0.72, tz).castShadow = false;
+      const wand = put(new THREE.CylinderGeometry(0.012, 0.012, 0.32, 6), m(0x8a5cf6), tx + 0.03, 0.82, tz, g);
+      wand.rotation.z = -0.25;
+      put(new THREE.TorusGeometry(0.06, 0.012, 6, 16), m(0x8a5cf6), tx + 0.07, 1.0, tz).rotation.y = 0.4;
+      this.bubbleTubs.push(new THREE.Vector3(x + tx, y + 0.5, z + tz));
+    }
 
     g.position.set(x, y, z);
     this.group.add(g);
-    this.anim.push((t) => {
-      swings[0].rotation.x = Math.sin(t * 1.9) * 0.5;
-      swings[1].rotation.x = Math.sin(t * 1.7 + 1.3) * 0.38;
-      spin.rotation.y = t * 0.7;
-      plank.rotation.z = Math.sin(t * 1.3) * 0.2;
+    this.anim.push((t, dt) => {
+      // empty swings only stir in the breeze, and settle after a kid hops off
+      swings.forEach((sw, i) => {
+        if (swingHeld[i] > 0) { swingHeld[i] -= dt; return; }
+        swingAng[i] += (Math.sin(t * 1.6 + i * 1.3) * 0.04 - swingAng[i]) * Math.min(1, dt * 1.5);
+        sw.rotation.x = swingAng[i];
+      });
+      // the roundabout coasts to a stop when nobody's on it
+      if (!rb.ride) rb.spin *= Math.exp(-0.5 * dt);
+      rb.angle += rb.spin * dt;
+      spin.rotation.y = rb.angle;
+      // the seesaw sinks back down on the kid's end when nobody's on it
+      if (!ss.ride) ss.tilt += (REST - ss.tilt) * Math.min(1, dt * 2);
+      plank.rotation.z = ss.tilt;
     });
   }
 

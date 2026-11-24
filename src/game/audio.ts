@@ -12,7 +12,7 @@
 export type SfxId =
   | "jump" | "doublejump" | "land" | "boing" | "stomp" | "star" | "hurt"
   | "portal" | "checkpoint" | "ui" | "win" | "lose" | "unlock" | "fall"
-  | "coin" | "chest" | "buddy" | "powerup" | "honk" | "splash" | "talk" | "pet" | "munch" | "baa" | "rustle" | "meow" | "coo" | "dig" | "bell" | "roar" | "whee" | "fireworks" | "burner";
+  | "coin" | "chest" | "buddy" | "powerup" | "honk" | "splash" | "talk" | "pet" | "munch" | "baa" | "rustle" | "meow" | "coo" | "dig" | "bell" | "roar" | "whee" | "fireworks" | "burner" | "pop";
 
 export type TrackId = "meadow" | "island" | "city" | "snow";
 
@@ -384,6 +384,7 @@ export class AudioSystem {
     const t = ctx.currentTime;
     switch (id) {
       case "jump": this.blip("triangle", 300, 620, t, 0.14, 0.22); break;
+      case "pop": this.blip("sine", 900 + Math.random() * 500, 2400, t, 0.05, 0.16); break;
       case "doublejump": this.blip("triangle", 420, 900, t, 0.14, 0.2); break;
       case "land": this.blip("sine", 180, 120, t, 0.08, 0.12); break;
       case "boing": this.blip("sine", 180, 900, t, 0.28, 0.3); this.blip("triangle", 90, 450, t, 0.28, 0.18); break;

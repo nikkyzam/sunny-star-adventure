@@ -3,6 +3,28 @@
 A running record of what was added to Sunny Star Adventure, and why, for the decisions made
 without stopping to ask. Newest first. Live game: https://nikkyzam.github.io/sunny-star-adventure/
 
+## 2026-11-24: the playground can be played on, and bubbles (the user chose "More fun things")
+
+- **Why the playground:** Adventure Island's playground, near where the game starts, used to be scenery: its swings, roundabout and seesaw moved by themselves. Real kids go straight for a playground, so every piece can now be played on.
+- **Swings:** E (or the 😄 button) sits on a swing, which goes higher and higher like the castle's rope swing. Pushing the stick or a move key hops off. Empty swings now only stir in the breeze instead of swinging by themselves, which looked spooky.
+- **Slide:** climb the steps, and E on the top deck whooshes down the chute onto the soft mat, landing on your feet.
+- **Roundabout:** E holds the nearest handle. It speeds up gently to a calm top speed and the kid's hand grips the handle. After three turns it says Psalm 136:1. A push hops off over the edge, with a small stagger outward. When empty it slows to a stop instead of spinning by itself.
+- **Seesaw:** a teddy bear with a red bow now sits on the far end, so one child can seesaw alone. Each bump at the bottom goes "boing" with a puff of dust, and after a few it says Proverbs 17:17, "A friend loves at all times". When empty it rests on the kid's end, ready to climb on.
+- **Bubbles:** a pink tub of bubble mixture with a wand sits on the playground bench. E blows a stream of ten rainbow bubbles, which wobble, drift up on the breeze and pop when a kid runs or jumps into them, for +2 points each. Popping ten says Philippians 4:4 ("Rejoice in the Lord always"). Bubbles nobody catches pop by themselves after 9–14 s.
+- **Decided:**
+  - No castle stickers here: the 20-sticker book belongs to Sunny Castle. The castle's sparkle guide still points only at the castle's own swing and slide.
+  - A playground tip shows at most once every 20 s, so a kid going round and round isn't nagged.
+  - Speeds stay gentle: the roundabout tops out at about a quarter turn a second.
+  - Two local kids can use the two swings at once. The seesaw takes one kid, with Teddy on the other end.
+- **Not done:** online friends don't see each other on the playground rides or see each other's bubbles yet, and none of it has been tried on a real iPad.
+- **Tests:** shots-playground checks that the playground has all its pieces, and that:
+  - the swing swings the kid more than 1 m and they can hop off
+  - the slide takes them from the deck to the bottom, landing on their feet
+  - the roundabout spins up, a lap is counted, the kid stays on the disc and steps off the edge
+  - the seesaw lifts the kid more than 0.6 m and counts bumps
+  - the tub blows at least 8 bubbles, and walking into one pops it
+  - Pictures: 99-play-*.png.
+
 ## 2026-11-23 (night): the game is now called "Shine Like Stars" (the user asked for "a catchy Christian name for the app")
 
 - **The name:** "Shine Like Stars", from Philippians 2:15 (God's children "shine like stars in the world"). It fits the game itself: children already collect stars, and they're the ones meant to shine. It's short, easy for a 5-year-old to say, and it reads as Christian to parents without being preachy.
