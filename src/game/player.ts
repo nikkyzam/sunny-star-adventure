@@ -13,6 +13,10 @@
 import * as THREE from "three";
 import type { World, Platform } from "./world";
 import { makeHuman, type Human, type Move } from "./humans";
+
+/** How long reaching out to use something takes (s). */
+const REACH_TIME = 0.75;
+const REACH_V = new THREE.Vector3();
 import { makeAdult, type Adult, type AdultKind, type RobeLook } from "./people";
 
 const SPEED = 7;
@@ -227,6 +231,14 @@ export class Player {
   near = true;
   /** Something nearby worth a look (a villager, an animal, a friend): the head turns to it. */
   lookTarget: THREE.Vector3 | null = null;
+  /** How hard the last landing was (0–1, for dust), set on the frame the kid lands. */
+  landPower = 0;
+  /** Landing squat: how deep (m) and how far through it (s). */
+  private squatDepth = 0;
+  private squatT = 9;
+  /** Reaching out to use something: where, and how far through the reach (s). */
+  private reachAt: THREE.Vector3 | null = null;
+  private reachT = 9;
   /** Ground height under a point, so feet can stand on steps and edges (set by update). */
   groundFn: ((x: number, z: number) => number | null) | null = null;
   private lastFacing = 0;
@@ -601,6 +613,10 @@ export class Player {
         if (!this.onGround && this.wasAirborne) {
           e.landed = true;
           this.squashT = 1;
+          // soak it up in the knees: a hop barely dips, a big drop crouches right down
+          const impact = THREE.MathUtils.clamp((-this.vel.y - 5) / 13, 0, 1);
+          this.landPower = impact;
+          if (impact > 0.02) { this.squatDepth = 0.05 + impact * 0.2; this.squatT = 0; }
         }
         this.onGround = true;
         this.vel.y = 0;
@@ -670,6 +686,15 @@ export class Player {
     this.animate(dt);
   }
 
+  /**
+   * Reach out with the right hand to use something: toward `at` if given (and close), else toward
+   * a spot just in front at tummy height.
+   */
+  reach(at?: THREE.Vector3 | null): void {
+    this.reachT = 0;
+    this.reachAt = at && at.distanceTo(this.pos) < 2.2 ? at.clone() : null;
+  }
+
   /** Inside a ride (the ride moves the kid): keep the seated, steering animation going. */
   rideTick(dt: number): void {
     this.vel.set(0, 0, 0);
@@ -681,6 +706,13 @@ export class Player {
     return this.human?.headYaw() ?? 0;
   }
 
+  /** The right hand's distance in front of the kid (m, for tests): bigger while reaching out. */
+  debugHandOut(): number {
+    const h = this.human?.handPos();
+    if (!h) return NaN;
+    return +((h.x - this.pos.x) * Math.sin(this.facing) + (h.z - this.pos.z) * Math.cos(this.facing)).toFixed(3);
+  }
+
   /** What the human model shows right now (for tests). */
   debugMove(): string {
     return this.human?.move ?? "";
@@ -689,6 +721,27 @@ export class Player {
   /** Ankle heights above the ground under each foot (for tests). */
   debugFeet(): number[] {
     return this.human && this.groundFn ? this.human.debugFeet(this.groundFn) : [];
+  }
+
+  /** The landing squat right now: down fast (0.07 s), then back up over a third of a second. */
+  private squatNow(dt: number): number {
+    if (this.squatT > 1) return 0;
+    this.squatT += dt;
+    const t = this.squatT;
+    const env = t < 0.07 ? t / 0.07 : Math.max(0, 1 - (t - 0.07) / 0.33);
+    return this.squatDepth * env * env * (3 - 2 * env);
+  }
+
+  /** The reach right now: out and back over REACH_TIME, holding a moment at full stretch. */
+  private reachNow(dt: number): { at: THREE.Vector3; w: number } | null {
+    if (this.reachT >= REACH_TIME) return null;
+    this.reachT += dt;
+    const t = Math.min(1, this.reachT / REACH_TIME);
+    const w = t < 0.35 ? t / 0.35 : t < 0.6 ? 1 : Math.max(0, 1 - (t - 0.6) / 0.4);
+    const at = this.reachAt
+      ? REACH_V.copy(this.reachAt)
+      : REACH_V.set(Math.sin(this.facing) * 0.5 - Math.cos(this.facing) * 0.18, 0.85, Math.cos(this.facing) * 0.5 + Math.sin(this.facing) * 0.18).add(this.pos);
+    return { at, w: w * w * (3 - 2 * w) * 0.85 };
   }
 
   /** Pick the human's animation from what the kid is doing. */
@@ -724,8 +777,10 @@ export class Player {
       const grounded = this.onGround && !this.riding && this.danceT <= 0;
       h.pose(dt, {
         turnRate: grounded ? this.turnRate : 0, accel: grounded ? this.accelRate : 0, grounded,
-        ground: this.groundFn, baseY: this.pos.y, look: this.riding ? null : this.lookTarget,
+        ground: this.groundFn, baseY: this.pos.y, look: this.riding ? null : this.reachT < REACH_TIME ? (this.reachAt ?? this.lookTarget) : this.lookTarget,
         saddle: this.riding ? this.saddle : null,
+        squat: grounded ? this.squatNow(dt) : 0,
+        reach: this.riding ? null : this.reachNow(dt),
       });
     }
 

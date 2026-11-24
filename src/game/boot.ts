@@ -47,6 +47,7 @@ import { loadPeopleKit } from "./people";
 import { loadEnvKit } from "./env";
 import { Props } from "./props";
 import { Particles } from "./particles";
+import { Dust } from "./dust";
 import { Hud, type HudAction } from "./hud";
 import { storage, highScore } from "./storage";
 import { StickerBook, CASTLE_STICKERS, type StickerId } from "./stickers";
@@ -284,6 +285,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const scrollsFound = new Set<string>(storage.get<string[]>("scrolls", []));
   const pet = new Pet();
   const particles = new Particles();
+  const dust = new Dust();
+  /** Per kid: metres walked since the last footstep puff, and which foot is next. */
+  const stepGap = new Map<Player, { d: number; left: boolean }>();
   const jobs = new Jobs(particles);
   const hud = new Hud();
   const audio = new AudioSystem();
@@ -324,7 +328,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   scene.add(...spareCars.map((c) => c.group));
   scene.add(...scooters.map((c) => c.group));
   scene.add(...bikes.map((c) => c.group));
-  scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, boat.group, heli.group, jet.group, rocket, rings.group, foods.group, fleet.group, props.group, npcs.group, pet.group, particles.points);
+  scene.add(stars.group, slimes.group, birds.group, hedgehogs.group, pickups.group, chests.group, buddies.group, car.group, boat.group, heli.group, jet.group, rocket, rings.group, foods.group, fleet.group, props.group, npcs.group, pet.group, particles.points, dust.group);
 
   // ── Run state ────────────────────────────────────────────────────────────
   let levelIdx = 0;
@@ -2314,7 +2318,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     if (!near) {
       const u = useInReach();
       const m = mountInReach();
-      if (u && !(m && m.what !== "ferris")) u.go();
+      if (u && !(m && m.what !== "ferris")) { u.kid.reach(u.kid.lookTarget); u.go(); }
       else if (m) mountUp(m);
       else if (nearRocket()) boardRocket();
       return;
@@ -2900,6 +2904,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     pickups.update(elapsed, dt);
     chests.update(dt);
     particles.update(dt);
+    dust.update(dt);
     buddies.update(dt, elapsed, players[0].pos, players[0].facing);
     for (const b of bubbles) b.update(dt);
     updateRemotes(dt);
@@ -3070,7 +3075,27 @@ export function startGame(canvas: HTMLCanvasElement): void {
       }
       if (ev.landed) {
         audio.sfx("land");
-        particles.burst(p.pos.x, p.pos.y + 0.05, p.pos.z, 0xfff3d6, 8, 2, 0.4, 7);
+        // sand or dust puffs out round the feet (more after a big drop); elsewhere a little sparkle
+        const dc = world.dustAt(p.pos.x, p.pos.y, p.pos.z);
+        if (dc !== null) dust.land(p.pos.x, p.pos.y, p.pos.z, dc, p.landPower);
+        else particles.burst(p.pos.x, p.pos.y + 0.05, p.pos.z, 0xfff3d6, 8, 2, 0.4, 7);
+      }
+      // footsteps on sand kick up little puffs, one foot then the other
+      const hs = Math.hypot(p.vel.x, p.vel.z);
+      if (p.onGround && !wading && hs > 2.2) {
+        const sg = stepGap.get(p) ?? { d: 0, left: false };
+        sg.d += hs * dt;
+        const stride = 0.55 + hs * 0.08;
+        if (sg.d > stride) {
+          sg.d = 0;
+          sg.left = !sg.left;
+          const dc = world.dustAt(p.pos.x, p.pos.y, p.pos.z);
+          if (dc !== null) {
+            const side = sg.left ? 0.12 : -0.12;
+            dust.step(p.pos.x + Math.cos(p.facing) * side, p.pos.y, p.pos.z - Math.sin(p.facing) * side, dc, p.vel.x / hs, p.vel.z / hs);
+          }
+        }
+        stepGap.set(p, sg);
       }
       if (ev.sprung > 0) springFx(p);
     }
@@ -3747,6 +3772,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
     heads: () => [...players.map((p) => ['kid', p.debugHeadYaw()] as const), ...npcs.items.map((n) => [n.def.name, n.p.debugHeadYaw()] as const)],
     move: players[0].debugMove(),
     feet: players[0].debugFeet(),
+    handOut: players[0].debugHandOut(),
+    dust: dust.active(),
     setBank: (n: number) => {
       bank = n;
       storage.set("bank", bank);

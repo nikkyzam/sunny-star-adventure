@@ -3,6 +3,17 @@
 A running record of what was added to Sunny Star Adventure, and why, for the decisions made
 without stopping to ask. Newest first. Live game: https://nikkyzam.github.io/sunny-star-adventure/
 
+## 2026-11-23 (later): kids move more like real children (the user asked: "make everything they do more real")
+
+- **Landing:** knees bend to soak it up. A small hop barely dips; a big jump or drop crouches right down, tips forward a little, then stands back up in about a third of a second.
+  - **Decided:** the crouch is only in the legs and body. Steering isn't slowed, because a pause after every landing would frustrate young players.
+- **Sand:** a soft puff of sand rises round the feet on landing, bigger after a big drop.
+- **Running on sand:** each step kicks up a little puff, drifting back from the way the kid runs, one foot then the other. None on grass, floors or stone; wading still splashes.
+  - **Decided:** the puffs are ordinary see-through dust, not the glowing sparkles used for magic and coins, so they read as real sand.
+- **Using things:** pressing E (a photo spot, the oven, a scroll, the fireworks…) makes the kid reach out with their right hand toward it, hold a moment, then bring the arm back. Their head turns to look at it too.
+- Grown-up player characters use a simpler body and don't do these yet.
+- New test `shots-real-moves`: checks that landing bends the knees and stands back up, that sand puffs out on a landing and when running on sand, that there are none on grass, and that the hand reaches out to use something.
+
 ## 2026-11-23: fixes from a code review of the realism work
 
 - **The lighthouse star was hidden inside the new red dome.** It now floats on the gallery, beside the lantern room.

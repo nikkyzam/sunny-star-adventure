@@ -628,20 +628,26 @@ export class Human {
     ground?: ((x: number, z: number) => number | null) | null; baseY: number;
     look?: THREE.Vector3 | null;
     saddle?: Saddle | null;
+    /** Knees bend this far (metres) to soak up a landing. */
+    squat?: number;
+    /** The right hand reaches toward `at`, `w` of the way (0–1), as when pressing or picking something. */
+    reach?: { at: THREE.Vector3; w: number } | null;
   }): void {
     if (!this.fresh) return;
     this.guard.restore();
     const speed = this.shownSpeed;
     // lean: into the turn (more when fast), forward when speeding up, back when stopping
     const roll = o.grounded ? THREE.MathUtils.clamp(-o.turnRate * speed * 0.035, -0.2, 0.2) : 0;
-    const pitch = o.grounded ? THREE.MathUtils.clamp(o.accel * 0.012, -0.1, 0.12) : 0;
+    // (a landing squat tips the body forward a little too, the way real knees-and-hips landings do)
+    const pitch = o.grounded ? THREE.MathUtils.clamp(o.accel * 0.012, -0.1, 0.12) + (o.squat ?? 0) * 0.9 : 0;
     const k = Math.min(1, dt * 8);
     this.root.rotation.z += (roll - this.root.rotation.z) * k;
     this.root.rotation.x += (pitch - this.root.rotation.x) * k;
     this.root.updateMatrixWorld(true);
 
-    if (o.ground) this.plantFeet(dt, o.ground, o.baseY, o.grounded);
+    if (o.ground) this.plantFeet(dt, o.ground, o.baseY, o.grounded, o.squat ?? 0);
     if (o.saddle) this.holdReins(dt, o.saddle);
+    if (o.reach && o.reach.w > 0.01) this.reachOut(o.reach.at, o.reach.w);
     this.turnHead(dt, o.look ?? null);
     this.guard.commit();
   }
@@ -764,7 +770,7 @@ export class Human {
   }
 
   /** Two-bone leg IK: lower the hips to the lower foot's ground, bend the other knee to reach its own. */
-  private plantFeet(dt: number, ground: (x: number, z: number) => number | null, baseY: number, grounded: boolean): void {
+  private plantFeet(dt: number, ground: (x: number, z: number) => number | null, baseY: number, grounded: boolean, squat = 0): void {
     const legs = [["thigh_l", "calf_l", "foot_l"], ["thigh_r", "calf_r", "foot_r"]] as const;
     const k = Math.min(1, dt * 14);
     for (let i = 0; i < 2; i++) {
@@ -777,7 +783,8 @@ export class Human {
       }
       this.footOff[i] += (off - this.footOff[i]) * k;
     }
-    const drop = Math.max(0, -Math.min(this.footOff[0], this.footOff[1]));
+    // the hips sink to the lower foot's ground, plus any landing squat (the knees bend to make up for it)
+    const drop = Math.max(0, -Math.min(this.footOff[0], this.footOff[1])) + (grounded ? squat : 0);
     this.drop = drop;
     const parentScale = this.root.parent ? this.root.parent.getWorldScale(V2).y : 1;
     this.root.position.y = -drop / parentScale;
@@ -833,6 +840,19 @@ export class Human {
     }
   }
 
+  /** The right arm reaches out toward `at` (world space), blended `w` of the way from where it is. */
+  private reachOut(at: THREE.Vector3, w: number): void {
+    const up = this.bone.upperarm_r, low = this.bone.lowerarm_r, hand = this.bone.hand_r;
+    if (!up || !low || !hand) return;
+    this.root.updateMatrixWorld(true);
+    const from = hand.getWorldPosition(V1);
+    const t = V5.copy(from).lerp(at, THREE.MathUtils.clamp(w, 0, 1));
+    this.guard.mark(up);
+    this.guard.mark(low);
+    this.guard.mark(hand);
+    solveLeg(up, low, hand, t.clone());
+  }
+
   /** Turn the neck and head (a share each) toward `look`, if it's in front; back to straight if not. */
   private turnHead(dt: number, look: THREE.Vector3 | null): void {
     const head = this.bone.Head, neck = this.bone.neck_01;
@@ -861,6 +881,11 @@ export class Human {
       turnBoneWorld(bone, Q3);
       bone.updateWorldMatrix(false, true);
     }
+  }
+
+  /** Where the right hand is (world space, for tests). */
+  handPos(): THREE.Vector3 | null {
+    return this.bone.hand_r ? this.bone.hand_r.getWorldPosition(new THREE.Vector3()) : null;
   }
 
   /** How far the head is turned from the body (radians, for tests). */

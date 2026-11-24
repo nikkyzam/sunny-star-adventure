@@ -285,6 +285,11 @@ export class Adult {
   }
 
   /** How far the head is turned from the body (radians, for tests). */
+  /** Grown-ups don't reach out yet (for tests). */
+  handPos(): THREE.Vector3 | null {
+    return null;
+  }
+
   headYaw(): number {
     const h = this.head;
     if (!h) return 0;

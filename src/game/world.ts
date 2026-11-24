@@ -2276,6 +2276,18 @@ export class World {
     return best;
   }
 
+  /** The colour of dust feet kick up at (x, y, z): sand on beaches, or null on grass, stone and floors. */
+  dustAt(x: number, y: number, z: number): number | null {
+    if (this.def.snow) return null;
+    let best: { y: number; sand: boolean } | null = null;
+    for (const d of this.def.discs) {
+      if (Math.hypot(x - d.x, z - d.z) > d.r || Math.abs(y - d.y) > 0.35) continue;
+      // (a later disc at the same height is laid over the earlier one, e.g. a meadow on the beach)
+      if (!best || d.y >= best.y) best = { y: d.y, sand: d.color === SAND };
+    }
+    return best?.sand ? 0xbfa274 : null;
+  }
+
   /** Pull a third-person camera in so no building stands between it and the kid (cam is changed). */
   clipCamera(target: THREE.Vector3, cam: THREE.Vector3): void {
     const steps = 24;
