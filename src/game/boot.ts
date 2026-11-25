@@ -485,7 +485,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
 
   // ── Animal and Ferris-wheel rides ────────────────────────────────────────
   /** Kids on an animal's back or in a Ferris-wheel gondola (the Car rides keep their own seats). */
-  const mounts = new Map<Player, "animal" | "dragon" | "balloon" | "throne" | "slide" | "swing" | "roundabout" | "seesaw" | { cab: number; turned: number; down: boolean }>();
+  const mounts = new Map<Player, "animal" | "dragon" | "balloon" | "throne" | "slide" | "swing" | "roundabout" | "seesaw" | "zip" | { cab: number; turned: number; down: boolean }>();
   /** Kids wearing the throne's crown: the hat they had before (it comes back when they leave the castle). */
   const crowned = new Map<Player, { hat: number; x: number; z: number }>();
   /** Kids whooshing down a helter-skelter: how far along (metres) and how fast. */
@@ -495,6 +495,9 @@ export function startGame(canvas: HTMLCanvasElement): void {
   const spinning = new Map<Player, { rb: World["roundabouts"][number]; h: number; t: number; laps: number; was: number }>();
   const seesawing = new Map<Player, { ss: World["seesaws"][number]; t: number; ups: number; low: boolean }>();
   let playToast = 0;
+  /** Kids whizzing down a zip line: how far along (metres) and how fast. */
+  const zipping = new Map<Player, { zl: World["ziplines"][number]; s: number; v: number }>();
+  let zipFirst = false, wetAt = 0, wetHits = 0, splashFirst = false;
 
   function endMounts(): void {
     for (const p of mounts.keys()) { p.riding = false; p.saddle = null; p.seated = false; }
@@ -528,6 +531,11 @@ export function startGame(canvas: HTMLCanvasElement): void {
     for (const p of [...spinning.keys(), ...seesawing.keys()]) { p.riding = false; p.seated = false; p.standRide = false; p.holdAt = null; }
     spinning.clear();
     seesawing.clear();
+    for (const p of zipping.keys()) { p.riding = false; p.standRide = false; p.holdAt = null; }
+    zipping.clear();
+    zipFirst = false;
+    wetHits = 0;
+    splashFirst = false;
     playToast = 0;
     for (const tr of world.treasures) tr.reset();
     songAt = 0;
@@ -537,7 +545,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   }
 
   /** What a walking kid could climb on right now: an animal or the Ferris wheel. */
-  function mountInReach(): { kid: Player; what: "animal" | "ferris" | "dragon" | "balloon" | "throne" | "slide" | "swing" | "roundabout" | "seesaw"; icon: string } | null {
+  function mountInReach(): { kid: Player; what: "animal" | "ferris" | "dragon" | "balloon" | "throne" | "slide" | "swing" | "roundabout" | "seesaw" | "zip"; icon: string } | null {
     const gate = world.ferrisGate;
     for (const p of players) {
       if (p.riding) continue;
@@ -549,6 +557,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
       if (slideNear(p)) return { kid: p, what: "slide", icon: "🛝" };
       const swN = swingNear(p);
       if (swN && ![...swinging.values()].some((v) => v.sw === swN)) return { kid: p, what: "swing", icon: swN.play ? "😄" : "🌳" };
+      const zl = world.ziplines.find((z) => z.ready() && Math.hypot(p.pos.x - z.board.x, p.pos.z - z.board.z) < 1.3 && Math.abs(p.pos.y - z.board.y) < 0.8);
+      if (zl) return { kid: p, what: "zip", icon: "🧗" };
       const rbN = roundaboutNear(p);
       if (rbN && ![...spinning.values()].some((v) => v.rb === rbN)) return { kid: p, what: "roundabout", icon: "🎠" };
       const ssN = seesawNear(p);
@@ -625,7 +635,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     return world.slides.find((sl) => Math.hypot(p.pos.x - sl.board.x, p.pos.z - sl.board.z) < 1.6 && Math.abs(p.pos.y - sl.board.y - 0.15) < 1) ?? null;
   }
 
-  function mountUp(m: { kid: Player; what: "animal" | "ferris" | "dragon" | "balloon" | "throne" | "slide" | "swing" | "roundabout" | "seesaw" }): void {
+  function mountUp(m: { kid: Player; what: "animal" | "ferris" | "dragon" | "balloon" | "throne" | "slide" | "swing" | "roundabout" | "seesaw" | "zip" }): void {
     const p = m.kid;
     p.invuln = 0;
     p.group.visible = true;
@@ -654,6 +664,23 @@ export function startGame(canvas: HTMLCanvasElement): void {
       if (!swungYet) {
         swungYet = true;
         hud.showToast("🌳 Up, up, up! \"This is the day the Lord has made; let us rejoice and be glad in it!\" (Psalm 118:24)");
+      }
+      return;
+    }
+    if (m.what === "zip") {
+      const zl = world.ziplines.find((z) => z.ready() && Math.hypot(p.pos.x - z.board.x, p.pos.z - z.board.z) < 1.3);
+      if (!zl) return;
+      p.riding = true;
+      p.standRide = true;
+      p.saddle = null;
+      p.vel.set(0, 0, 0);
+      mounts.set(p, "zip");
+      zipping.set(p, { zl, s: 0, v: 1.2 });
+      zl.ride(0);
+      audio.sfx("whee");
+      if (!zipFirst) {
+        zipFirst = true;
+        hud.showToast("🧗 Hold on tight… WHEEE! \"They will soar on wings like eagles.\" (Isaiah 40:31)");
       }
       return;
     }
@@ -766,6 +793,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     }
     if (m === "slide") return true; // no getting off halfway down!
     if (m === "swing") { swingOff(p); return true; }
+    if (m === "zip") return true; // hold on till the end!
     if (m === "roundabout") { roundaboutOff(p); return true; }
     if (m === "seesaw") { seesawOff(p); return true; }
     if (m === "balloon") {
@@ -899,6 +927,13 @@ export function startGame(canvas: HTMLCanvasElement): void {
         particles.burst(sc.pos.x, sc.pos.y + 0.6, sc.pos.z, 0xf2d48f, 10, 2, 0.5, 4);
         hud.showToast(["🏖️ Pat, pat, pat. A good big mound!", "🏖️ A tall tower in the middle!", "🏖️ Four little towers round it!", "🏰 A flag and shells. What a sandcastle! But wait… here comes a wave!"][n - 1]);
         if (n === 4) { scWashAt = timer + 2.5; sticker("sandcastle"); }
+      } };
+      const spB = world.splashPads.find((sp) => Math.hypot(p.pos.x - sp.button.x, p.pos.z - sp.button.z) < 1.3 && Math.abs(p.pos.y - sp.button.y) < 1.2);
+      if (spB) return { kid: p, icon: "🔴", label: "Press the big button", gesture: "pat", at: new THREE.Vector3(spB.button.x, spB.button.y + 0.85, spB.button.z), go: () => {
+        if (!spB.press()) return;
+        audio.sfx("splash");
+        audio.sfx("whee");
+        hud.showToast("💦 WHOOSH! All the fountains at once! \"The water I give will become a spring of water welling up.\" (John 4:14)");
       } };
       const tub = world.bubbleTubs.find((b) => Math.hypot(p.pos.x - b.x, p.pos.z - b.z) < 1.4 && Math.abs(p.pos.y - b.y) < 1.4);
       if (tub) {
@@ -1428,6 +1463,40 @@ export function startGame(canvas: HTMLCanvasElement): void {
         p.pos.set(st.sw.pivot.x + st.sw.dir.x * Math.sin(ang) * L, st.sw.pivot.y - Math.cos(ang) * L - 0.45, st.sw.pivot.z + st.sw.dir.z * Math.sin(ang) * L);
         p.vel.set(0, 0, 0);
         p.facing = st.sw.facing;
+        p.group.rotation.y = p.facing;
+        continue;
+      }
+      if (m === "zip") {
+        const st = zipping.get(p);
+        if (!st) { p.riding = false; p.standRide = false; mounts.delete(p); continue; }
+        const zl = st.zl;
+        const u = Math.min(1, st.s / zl.len);
+        const tan = zl.path.getTangentAt(u, SLIDE_T);
+        // gravity down the cable, a little rub and air; the brake near the end slows it gently
+        st.v = Math.min(8, Math.max(1.2, st.v + (-tan.y * 9.8 - 0.25 - 0.03 * st.v * st.v) * dt));
+        const left = zl.len - st.s;
+        if (left < 5) st.v = Math.min(st.v, 1.0 + left * 1.2);
+        st.s += st.v * dt;
+        if (st.s >= zl.len) {
+          // let go at the bumper and drop onto the mat
+          zipping.delete(p);
+          mounts.delete(p);
+          zl.release();
+          p.riding = false;
+          p.standRide = false;
+          p.holdAt = null;
+          p.vel.set(1.2, 0, 0);
+          audio.sfx("land");
+          particles.burst(p.pos.x, p.pos.y + 0.2, p.pos.z, 0x3fbf6b, 10, 2, 0.5, 5);
+          hud.showToast("🧗 What a ride! The steps up the tower are round the back for another go.");
+          continue;
+        }
+        zl.ride(st.s / zl.len);
+        const h = zl.handle(p.holdAt ?? new THREE.Vector3());
+        p.holdAt = h;
+        p.pos.set(h.x - 0.12, h.y - zl.hang + 0.45, h.z);
+        p.vel.set(0, 0, 0);
+        p.facing = zl.facing;
         p.group.rotation.y = p.facing;
         continue;
       }
@@ -3570,7 +3639,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
     const useNow = !ride && !mounted ? useInReach() : null;
     if (launchT >= 0) hud.setCarUi(null);
     else if (ride) hud.setCarUi(inRide ? "out" : "in", RIDE_ICON[ride.kind]);
-    else if (mounted === "slide") hud.setCarUi(null);
+    else if (mounted === "slide" || mounted === "zip") hud.setCarUi(null);
     else if (mounted) hud.setCarUi("out", mounted === "animal" ? "🐴" : mounted === "dragon" ? "🐉" : mounted === "balloon" ? "🎈" : mounted === "throne" ? "👑" : mounted === "swing" ? (swinging.get(players[0])?.sw.play ? "😄" : "🌳") : mounted === "roundabout" ? "🎠" : mounted === "seesaw" ? "🧸" : "🎡");
     else if (canMount && canMount.what !== "ferris") hud.setCarUi("in", canMount.icon);
     else if (useNow) hud.setCarUi("in", useNow.icon, useNow.label);
@@ -3657,6 +3726,24 @@ export function startGame(canvas: HTMLCanvasElement): void {
       const kp = kites.kitePos(p);
       p.holdAt = kp;
       if (kp) p.lookTarget = kp;
+    }
+
+    // the splash pad: run through the jets and get splashed
+    for (const sp of world.splashPads) {
+      for (const p of players) {
+        if (p.riding || Math.hypot(p.pos.x - sp.centre.x, p.pos.z - sp.centre.z) > sp.r + 0.3) continue;
+        const hit = sp.jets.find((j) => j.h > 0.35 && Math.hypot(p.pos.x - j.x, p.pos.z - j.z) < 0.5 && p.pos.y < sp.centre.y + j.h);
+        if (!hit || elapsed - wetAt < 0.6) continue;
+        wetAt = elapsed;
+        wetHits++;
+        audio.sfx("splash");
+        particles.burst(p.pos.x, p.pos.y + 1.2, p.pos.z, 0x9fdcff, 16, 3, 0.6, 5);
+        if (p === players[0] && pet.active && wetHits % 4 === 1) pet.cheer();
+        if (!splashFirst) {
+          splashFirst = true;
+          hud.showToast("💦 Splish splash! \"With joy you will draw water from the wells of salvation.\" (Isaiah 12:3)");
+        }
+      }
     }
 
     // bubbles: run or jump into them to pop them
@@ -4050,6 +4137,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
         seesaws: world.seesaws.map((x) => ({ seat: x.seat.toArray(), tilt: x.tilt })),
         laps: spinning.get(players[0])?.laps ?? 0,
         ups: seesawing.get(players[0])?.ups ?? 0,
+        zip: { ziplines: world.ziplines.map((z) => ({ board: z.board.toArray(), end: z.path.getPointAt(1).toArray(), ready: z.ready() })), riding: zipping.has(players[0]) ? zipping.get(players[0])!.s / zipping.get(players[0])!.zl.len : null },
+        splash: { pads: world.splashPads.map((sp) => ({ centre: sp.centre.toArray(), button: sp.button.toArray(), jets: sp.jets.map((j) => [j.x, j.z, j.h]), boosted: sp.boosted() })), wet: wetHits },
         bubbles: { tubs: world.bubbleTubs.map((b) => b.toArray()), floating: soap.count, popped: soap.popped, at: soap.positions() },
         sliding: sliding.has(players[0]),
         kid: { riding: players[0].riding, seated: players[0].seated, stand: players[0].standRide },

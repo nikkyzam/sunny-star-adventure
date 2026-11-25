@@ -3,6 +3,33 @@
 A running record of what was added to Sunny Star Adventure, and why, for the decisions made
 without stopping to ask. Newest first. Live game: https://nikkyzam.github.io/sunny-star-adventure/
 
+## 2026-11-25: a zip line and a splash pad on Adventure Island (the user chose "More fun things")
+
+- **Zip line:** a wooden lookout tower with a red roof and a blue flag stands by Lookout Hill.
+  - 14 easy steps climb up the back, with hand rails; no jumping needed.
+  - On the deck, E (or the 🧗 button) grabs the T-handle. The kid hangs below the trolley, hand on the handle, and whizzes about 26 m east across the meadow at up to 8 m/s, slowing gently near the end.
+  - They let go at the red bumper and drop onto a soft green mat. The trolley then rolls itself back up the cable, so it's ready in about 4 s.
+  - The first ride says Isaiah 40:31, "They will soar on wings like eagles".
+- **Splash pad:** a round blue pad on the open meadow between the balloon and the zip line.
+  - Eight jets in a ring take turns shooting up, chasing round, and a big middle fountain pulses every few seconds. Drops spray off the top of each.
+  - Running into a jet splashes the kid, with a splash sound and a burst of droplets. The first splash says Isaiah 12:3.
+  - A big red mushroom button at the edge (E, with a pat) sends every jet up high together for 4 seconds, with John 4:14.
+- **Decided:**
+  - **No getting off halfway down the zip line:** like the slides, it always finishes the ride, so nobody drops from 4 m.
+  - **One rider at a time:** the next kid waits for the trolley to come back.
+  - **The splash pad isn't real water:** kids don't get "wet" or slowed down. It's just the fun of running through the jets.
+  - **Placement:** the splash pad was first by the playground, but it was squeezed against a house, so it moved to the open meadow.
+- **Not done:**
+  - Online friends don't see each other on the zip line yet.
+  - A few meadow plants poke through the splash pad's edge.
+  - Not tried on a real iPad.
+- **Tests:** shots-zipline checks that:
+  - the steps climb evenly to the deck, a kid can stand there, and E grabs the handle
+  - the ride only moves forward, and the kid hangs clear of the ground all the way and lands on the mat
+  - the trolley stays down, then rolls back and is ready again
+  - standing in the middle fountain splashes the kid, the jets shoot water, and the button sends all nine up high
+  - Pictures: 99-zip-*.png.
+
 ## 2026-11-24: the playground can be played on, and bubbles (the user chose "More fun things")
 
 - **Why the playground:** Adventure Island's playground, near where the game starts, used to be scenery: its swings, roundabout and seesaw moved by themselves. Real kids go straight for a playground, so every piece can now be played on.

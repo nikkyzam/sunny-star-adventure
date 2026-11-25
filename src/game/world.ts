@@ -36,6 +36,7 @@ import { buildCastle, mergeByMaterial, type CastleDef, type CastleInfo } from ".
 import { currentSeason, isDusk } from "./seasons";
 import { Dragon } from "./dragon";
 import { Balloon } from "./balloon";
+import { buildZipLine, buildSplashPad, type ZipLine, type SplashPad } from "./waterplay";
 import { KnightRings } from "./tilt";
 /** A playground roundabout. `ride` is set while a kid is on it; it then speeds up to `spin`. */
 export interface Roundabout { centre: THREE.Vector3; r: number; angle: number; spin: number; ride: boolean; handle(i: number, out: THREE.Vector3): THREE.Vector3 }
@@ -210,6 +211,10 @@ export interface LevelDef {
   photoSpots?: { name: string; at: [number, number]; look: [number, number, number] }[];
   /** A playground (slide, swings, roundabout, seesaw, sandbox): x, z of its middle. */
   playground?: [number, number];
+  /** A zip line along +x: the tower at (x0, z), the landing at (x1, z). */
+  zipline?: [number, number, number];
+  /** A splash pad with water jets: x, z of its middle. */
+  splashPad?: [number, number];
   /** Beach umbrellas, each with a sun lounger: x, y, z, color. */
   umbrellas?: [number, number, number, number][];
   /** Camp tents: x, y, z, color. */
@@ -1003,6 +1008,10 @@ const ADVENTURE_ISLAND: LevelDef = {
   // the knight's ring course on Castle Isle, in front of the castle's south side
   knightRings: [[-35, 36, Math.PI / 2], [-31, 36, Math.PI / 2], [-27, 36, Math.PI / 2], [-23, 36, Math.PI / 2], [-19, 36, Math.PI / 2]],
   playground: [8, -1],
+  // the zip line: a tower by Lookout Hill, whizzing east across the meadow
+  zipline: [-21, 5, -22],
+  // the splash pad, on the open meadow between the balloon and the zip line
+  splashPad: [-8, -13],
   station: [-2.8, 16.4],
   extraCars: [[38, 0, -62, 0]],
   // kick scooters: by the spawn, by the castle gate, at Coconut Cove and in the village
@@ -2255,6 +2264,9 @@ export class World {
   seesaws: Seesaw[] = [];
   /** Playground bubble tubs (a kid blows bubbles here). */
   bubbleTubs: THREE.Vector3[] = [];
+  /** Zip lines and splash pads (waterplay.ts). */
+  ziplines: ZipLine[] = [];
+  splashPads: SplashPad[] = [];
   /** Castle fishing jetties. */
   fishings: CastleInfo["fishing"][] = [];
   /** Castle beach sandcastles. */
@@ -2777,6 +2789,8 @@ export class World {
     this.roundabouts = [];
     this.seesaws = [];
     this.bubbleTubs = [];
+    this.ziplines = [];
+    this.splashPads = [];
     this.fishings = [];
     this.sandcastles = [];
     this.seasonals = [];
@@ -3245,6 +3259,15 @@ export class World {
 
     if (def.space) this.buildSpaceDetail(rng);
     if (def.playground) this.buildPlayground(def.playground[0], def.playground[1]);
+    {
+      const cw = { group: this.group, platforms: this.platforms, solids: this.solids, anim: this.anim };
+      const gy = (x: number, z: number) => this.groundAt(x, z, 3)?.y ?? 0.3;
+      if (def.zipline) {
+        const [x0, x1, z] = def.zipline;
+        this.ziplines.push(buildZipLine(cw, x0, x1, z, gy(x0, z), gy(x1, z)));
+      }
+      if (def.splashPad) this.splashPads.push(buildSplashPad(cw, def.splashPad[0], def.splashPad[1], gy(def.splashPad[0], def.splashPad[1])));
+    }
     this.stationPos = null;
     if (def.station) this.buildStation(def.station[0], def.station[1]);
     this.photoSpots = [];
