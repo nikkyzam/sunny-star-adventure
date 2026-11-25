@@ -36,6 +36,7 @@ import { buildCastle, mergeByMaterial, type CastleDef, type CastleInfo } from ".
 import { currentSeason, isDusk } from "./seasons";
 import { Dragon } from "./dragon";
 import { Balloon } from "./balloon";
+import { buildHedgeMaze, buildDuckPond, type HedgeMaze, type DuckPond } from "./gardenfun";
 import { buildZipLine, buildSplashPad, type ZipLine, type SplashPad } from "./waterplay";
 import { KnightRings } from "./tilt";
 /** A playground roundabout. `ride` is set while a kid is on it; it then speeds up to `spin`. */
@@ -215,6 +216,10 @@ export interface LevelDef {
   zipline?: [number, number, number];
   /** A splash pad with water jets: x, z of its middle. */
   splashPad?: [number, number];
+  /** A hedge maze (5×5 cells, the way in on its +z side): x, z of its middle. */
+  maze?: [number, number];
+  /** A duck pond: x, z of its middle. */
+  duckPond?: [number, number];
   /** Beach umbrellas, each with a sun lounger: x, y, z, color. */
   umbrellas?: [number, number, number, number][];
   /** Camp tents: x, y, z, color. */
@@ -1009,15 +1014,19 @@ const ADVENTURE_ISLAND: LevelDef = {
   knightRings: [[-35, 36, Math.PI / 2], [-31, 36, Math.PI / 2], [-27, 36, Math.PI / 2], [-23, 36, Math.PI / 2], [-19, 36, Math.PI / 2]],
   playground: [8, -1],
   // the zip line: a tower by Lookout Hill, whizzing east across the meadow
-  zipline: [-21, 5, -22],
+  zipline: [-21, 5, -20],
   // the splash pad, on the open meadow between the balloon and the zip line
   splashPad: [-8, -13],
+  // a hedge maze in the open middle of the island, its way in facing the meadow
+  maze: [4.4, -28.6],
+  // a duck pond on the open grass east of the zip line's landing (clear of the donkeys' patch)
+  duckPond: [8.5, -16],
   station: [-2.8, 16.4],
   extraCars: [[38, 0, -62, 0]],
   // kick scooters: by the spawn, by the castle gate, at Coconut Cove and in the village
   scooters: [[3, 13, Math.PI / 2], [-15, 33, 0], [46, -57.5, 0], [12, -15, Math.PI]],
   // bicycles: by the start, by the church and at the Pine Island cabin
-  bikes: [[4.5, 11.2, Math.PI / 2], [9, -31, 0], [-72, -59, 0]],
+  bikes: [[4.5, 11.2, Math.PI / 2], [11.4, -23.8, 0], [-72, -59, 0]],
   // sightseeing: stand on the footprints and take a photo with the sight behind you
   photoSpots: [
     { name: "Sunny Castle", at: [-9.5, 24], look: [-27, 5.5, 22] },
@@ -1362,7 +1371,7 @@ const ADVENTURE_ISLAND: LevelDef = {
       lines: ["Letters, letters everywhere! Want to help me deliver them?"],
     },
     {
-      name: "Chief Blaze", x: 8, y: 0.3, z: -27, outfit: 0, hat: 3, skin: 3, job: "fire",
+      name: "Chief Blaze", x: 10.8, y: 0.3, z: -26, outfit: 0, hat: 3, skin: 3, job: "fire",
       lines: ["I'm the fire chief. Brave helpers wanted!"],
     },
     {
@@ -2267,6 +2276,9 @@ export class World {
   /** Zip lines and splash pads (waterplay.ts). */
   ziplines: ZipLine[] = [];
   splashPads: SplashPad[] = [];
+  /** Hedge mazes and duck ponds (gardenfun.ts). */
+  mazes: HedgeMaze[] = [];
+  ponds: DuckPond[] = [];
   /** Castle fishing jetties. */
   fishings: CastleInfo["fishing"][] = [];
   /** Castle beach sandcastles. */
@@ -2791,6 +2803,8 @@ export class World {
     this.bubbleTubs = [];
     this.ziplines = [];
     this.splashPads = [];
+    this.mazes = [];
+    this.ponds = [];
     this.fishings = [];
     this.sandcastles = [];
     this.seasonals = [];
@@ -3266,6 +3280,8 @@ export class World {
         const [x0, x1, z] = def.zipline;
         this.ziplines.push(buildZipLine(cw, x0, x1, z, gy(x0, z), gy(x1, z)));
       }
+      if (def.maze) this.mazes.push(buildHedgeMaze(cw, def.maze[0], def.maze[1], gy(def.maze[0], def.maze[1])));
+      if (def.duckPond) this.ponds.push(buildDuckPond(cw, def.duckPond[0], def.duckPond[1], gy(def.duckPond[0], def.duckPond[1])));
       if (def.splashPad) this.splashPads.push(buildSplashPad(cw, def.splashPad[0], def.splashPad[1], gy(def.splashPad[0], def.splashPad[1])));
     }
     this.stationPos = null;

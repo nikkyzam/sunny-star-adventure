@@ -143,6 +143,7 @@ declare global {
       /** Test hook: park the car somewhere else. */
       placeCar: (x: number, z: number, heading: number) => void;
       groundAt: (x: number, z: number) => number | null;
+      solidAt: (x: number, z: number) => number | null;
     };
   }
 }
@@ -498,6 +499,7 @@ export function startGame(canvas: HTMLCanvasElement): void {
   /** Kids whizzing down a zip line: how far along (metres) and how fast. */
   const zipping = new Map<Player, { zl: World["ziplines"][number]; s: number; v: number }>();
   let zipFirst = false, wetAt = 0, wetHits = 0, splashFirst = false;
+  let mazeDone = false, duckFeeds = 0, quackAt = 0;
 
   function endMounts(): void {
     for (const p of mounts.keys()) { p.riding = false; p.saddle = null; p.seated = false; }
@@ -536,6 +538,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
     zipFirst = false;
     wetHits = 0;
     splashFirst = false;
+    mazeDone = false;
+    duckFeeds = 0;
     playToast = 0;
     for (const tr of world.treasures) tr.reset();
     songAt = 0;
@@ -928,6 +932,21 @@ export function startGame(canvas: HTMLCanvasElement): void {
         hud.showToast(["🏖️ Pat, pat, pat. A good big mound!", "🏖️ A tall tower in the middle!", "🏖️ Four little towers round it!", "🏰 A flag and shells. What a sandcastle! But wait… here comes a wave!"][n - 1]);
         if (n === 4) { scWashAt = timer + 2.5; sticker("sandcastle"); }
       } };
+      const pd = world.ponds.find((o) => { const d = Math.hypot(p.pos.x - o.centre.x, p.pos.z - o.centre.z); return d > o.r - 0.6 && d < o.r + 1.4 && Math.abs(p.pos.y - o.centre.y) < 1.2; });
+      if (pd) {
+        const toward = new THREE.Vector3(pd.centre.x - p.pos.x, 0, pd.centre.z - p.pos.z).normalize();
+        const at = new THREE.Vector3(p.pos.x + toward.x * 1.4, pd.centre.y + 0.1, p.pos.z + toward.z * 1.4);
+        return { kid: p, icon: "🦆", label: "Feed the ducks", gesture: "reach", at: new THREE.Vector3(p.pos.x + toward.x * 0.6, p.pos.y + 0.9, p.pos.z + toward.z * 0.6), go: () => {
+          p.facing = Math.atan2(toward.x, toward.z);
+          p.group.rotation.y = p.facing;
+          pd.feed(at);
+          duckFeeds++;
+          audio.sfx("quack");
+          quackAt = elapsed;
+          particles.burst(at.x, at.y + 0.3, at.z, 0xd9b26f, 10, 1.5, 0.4, 4);
+          if (duckFeeds === 1) hud.showToast("🦆 Quack quack! Here they come! \"Look at the birds of the air… your heavenly Father feeds them.\" (Matthew 6:26)");
+        } };
+      }
       const spB = world.splashPads.find((sp) => Math.hypot(p.pos.x - sp.button.x, p.pos.z - sp.button.z) < 1.3 && Math.abs(p.pos.y - sp.button.y) < 1.2);
       if (spB) return { kid: p, icon: "🔴", label: "Press the big button", gesture: "pat", at: new THREE.Vector3(spB.button.x, spB.button.y + 0.85, spB.button.z), go: () => {
         if (!spB.press()) return;
@@ -3746,6 +3765,24 @@ export function startGame(canvas: HTMLCanvasElement): void {
       }
     }
 
+    // the hedge maze: reach the bell in the middle
+    for (const mz of world.mazes) {
+      const p = players.find((k) => !k.riding && mz.inGoal(k.pos.x, k.pos.z));
+      if (!p || mazeDone) continue;
+      mazeDone = true;
+      mz.ring();
+      audio.sfx("bell");
+      audio.sfx("win");
+      particles.burst(mz.goal.x, mz.goal.y + 2, mz.goal.z, 0xffd93d, 30, 4, 1.2, 5);
+      particles.burst(mz.goal.x, mz.goal.y + 2, mz.goal.z, 0xff6b9d, 20, 3.5, 1.2, 5);
+      earn(15);
+      hud.setCoins(bank);
+      if (pet.active) pet.cheer();
+      hud.showToast("🔔 You found the way! +15 coins \"Trust in the Lord… and he will make your paths straight.\" (Proverbs 3:5-6)");
+    }
+    // the duck pond: ducks quack as they hurry over to crumbs
+    for (const pd of world.ponds) if (pd.eating() && elapsed - quackAt > 0.9 + Math.random() * 0.8) { quackAt = elapsed; audio.sfx("quack"); }
+
     // bubbles: run or jump into them to pop them
     soap.update(dt, elapsed, players.filter((p) => !p.riding).map((p) => p.pos), (at, byKid) => {
       particles.burst(at.x, at.y, at.z, byKid ? 0xe8f7ff : 0xffffff, byKid ? 8 : 4, byKid ? 1.6 : 0.8, 0.35, 3);
@@ -4139,6 +4176,8 @@ export function startGame(canvas: HTMLCanvasElement): void {
         ups: seesawing.get(players[0])?.ups ?? 0,
         zip: { ziplines: world.ziplines.map((z) => ({ board: z.board.toArray(), end: z.path.getPointAt(1).toArray(), ready: z.ready() })), riding: zipping.has(players[0]) ? zipping.get(players[0])!.s / zipping.get(players[0])!.zl.len : null },
         splash: { pads: world.splashPads.map((sp) => ({ centre: sp.centre.toArray(), button: sp.button.toArray(), jets: sp.jets.map((j) => [j.x, j.z, j.h]), boosted: sp.boosted() })), wet: wetHits },
+        maze: world.mazes.map((m) => ({ entrance: m.entrance.toArray(), goal: m.goal.toArray(), route: m.route.map((v) => [v.x, v.z]), done: mazeDone })),
+        pond: world.ponds.map((o) => ({ centre: o.centre.toArray(), r: o.r, ducks: o.ducks().map((v) => [v.x, v.z]), eating: o.eating(), feeds: duckFeeds })),
         bubbles: { tubs: world.bubbleTubs.map((b) => b.toArray()), floating: soap.count, popped: soap.popped, at: soap.positions() },
         sliding: sliding.has(players[0]),
         kid: { riding: players[0].riding, seated: players[0].seated, stand: players[0].standRide },
@@ -4242,6 +4281,12 @@ export function startGame(canvas: HTMLCanvasElement): void {
       car.heading = heading;
       car.speed = 0;
       camYaw = heading + Math.PI;
+    },
+    /** The tallest wall, fence or building at (x, z), or null if it's open (for placing things). */
+    solidAt: (x: number, z: number) => {
+      let top: number | null = null;
+      for (const s of world.solids) if (x >= s.minX && x <= s.maxX && z >= s.minZ && z <= s.maxZ) top = Math.max(top ?? -99, s.topY);
+      return top;
     },
     groundAt: (x: number, z: number) => {
       const g = world.groundAt(x, z, players[0].pos.y + 0.4);

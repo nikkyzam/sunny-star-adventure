@@ -122,7 +122,10 @@ try {
   }
 
   // 6) patting an animal: the hand goes out and pats (a cow: E next to a donkey or horse means a ride)
-  const herd = (await dbg()).herds?.find((h) => h.kind === "cow" && h.mode === "eat") ?? (await dbg()).herds?.find((h) => h.kind === "cow");
+  // a cow with no horse or bull close by (E next to those means something else)
+  const all = (await dbg()).herds ?? [];
+  const alone = (h) => all.every((o) => o === h || o.kind === "cow" || Math.hypot(o.x - h.x, o.z - h.z) > 3.5);
+  const herd = all.find((h) => h.kind === "cow" && h.mode === "eat" && alone(h)) ?? all.find((h) => h.kind === "cow" && alone(h)) ?? all.find((h) => h.kind === "cow");
   if (herd) {
     await page.evaluate(({ x, z }) => window.__gameDebug().warp(x + 0.9, z, 2), herd);
     await page.waitForTimeout(400);

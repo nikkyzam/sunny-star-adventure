@@ -3,6 +3,38 @@
 A running record of what was added to Sunny Star Adventure, and why, for the decisions made
 without stopping to ask. Newest first. Live game: https://nikkyzam.github.io/sunny-star-adventure/
 
+## 2026-11-25 (later): a hedge maze and a duck pond (the user chose "More fun things" again)
+
+- **Hedge maze:** a leafy hedge maze stands in the open middle of Adventure Island, south of the village church.
+  - It's 5×5 with wide gravel paths, one way in, and flower pots and a "MAZE · find the bell 🔔" sign at the way in.
+  - The winding path to the middle crosses 19 squares of the maze. Reaching the middle rings a golden bell under a white arch, with confetti, +15 coins and Proverbs 3:5-6 ("he will make your paths straight"). It rings once per visit to the island.
+  - **The hedges are low (1.1 m) on purpose:** a small child can just peep over and the camera can see in, so nobody gets lost or scared. An invisible fence above them stops kids hopping over to cheat.
+  - **Same maze every time:** it's built from a fixed seed, chosen so the path properly winds (the first try gave a straight run to the middle).
+  - **Why 5×5, not 7×7:** that's what fits between Lookout Hill and the church house. Wide paths also suit little ones and the camera.
+- **Duck pond:** a round pond with a stone edge, lily pads with pink flowers, and reeds and bulrushes, east of the zip line's landing.
+  - Mother Duck (white, with a green head) leads two yellow ducklings round in a line.
+  - At the edge, E ("Feed the ducks") throws crumbs onto the water. All three paddle over quacking and dabble for the crumbs, then go back to their circle.
+  - The first feed shows Matthew 6:26, "Look at the birds of the air… your heavenly Father feeds them".
+  - There's a new "quack" sound, made in code.
+  - **No wall round the pond:** the stone edge is low and kids can paddle in the shallow water. Nobody gets stuck, and it's what kids do.
+- **Things moved to make room:**
+  - The zip line moved 2 m south to clear the maze's way in.
+  - The pond moved off the donkeys' grazing patch, after a donkey walked into the middle of it.
+  - Chief Blaze now stands just outside the maze instead of in it.
+  - The church bicycle moved to the maze's corner by the zip line. Its first new spot was on the church's photo-spot footprints, where E offered the bike instead of the photo; the tests caught that.
+  - One test sometimes failed by chance when a horse wandered next to the cow it pats. It now picks a cow with no horse close by.
+  - A check confirmed no stars, food, quest spots or rides are left inside the maze or pond.
+- **Not done:**
+  - Villagers and animals don't know about the hedges, so one could still wander through.
+  - A few grass tufts grow on the maze paths.
+  - Not tried on a real iPad.
+- **Tests:** shots-maze checks that:
+  - every step of the way to the bell is open, the path winds through at least 7 squares, and hedges block the straight line
+  - the bell doesn't ring early, and reaching the middle gives +15 coins
+  - at the pond, E feeds the ducks and all three paddle within 1 m of the crumbs
+  - Pictures: 99-maze-*.png.
+- **Debug:** `__gameDebug().solidAt(x, z)` reports any wall or building at a spot, for placing new things.
+
 ## 2026-11-25: a zip line and a splash pad on Adventure Island (the user chose "More fun things")
 
 - **Zip line:** a wooden lookout tower with a red roof and a blue flag stands by Lookout Hill.
